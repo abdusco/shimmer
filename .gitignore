@@ -1,0 +1,28 @@
+# built application files
+*.apk
+
+# files for the dex VM
+*.dex
+
+# Java class files
+*.class
+
+# generated files
+bin/
+gen/
+out/
+build/
+.gradle/
+.ART
+# Project files
+*.iml
+.idea
+# .idea/workspace.xml
+.vscode
+
+# Local configuration file (sdk path, etc)
+local.properties
+keystore.properties
+
+# Windows thumbnail db
+.DS_Store

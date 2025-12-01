@@ -1,0 +1,61 @@
+package dev.abdus.apps.buzei
+
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
+import kotlin.math.max
+
+/**
+ * Owns the scheduled task that advances images on a fixed cadence. This keeps
+ * the wallpaper engine focused on rendering concerns.
+ */
+class ImageTransitionScheduler(
+    private val executor: ScheduledExecutorService,
+    private val onAdvanceRequest: () -> Unit
+) {
+
+    private var future: ScheduledFuture<*>? = null
+    private var transitionIntervalMillis = WallpaperPreferences.DEFAULT_TRANSITION_INTERVAL_MILLIS
+    private var transitionEnabled = true
+
+    fun updateInterval(intervalMillis: Long, hasFolders: Boolean) {
+        transitionIntervalMillis = intervalMillis
+        restartIfNecessary(hasFolders)
+    }
+
+    fun updateEnabled(enabled: Boolean, hasFolders: Boolean) {
+        transitionEnabled = enabled
+        restartIfNecessary(hasFolders)
+    }
+
+    fun start(hasFolders: Boolean) {
+        restartIfNecessary(hasFolders)
+    }
+
+    fun cancel() {
+        future?.cancel(false)
+        future = null
+    }
+
+    fun restartAfterManualAdvance(hasFolders: Boolean) {
+        if (!transitionEnabled) {
+            return
+        }
+        restartIfNecessary(hasFolders)
+    }
+
+    private fun restartIfNecessary(hasFolders: Boolean) {
+        future?.cancel(false)
+        if (!transitionEnabled || !hasFolders) {
+            future = null
+            return
+        }
+        val delayMillis = max(transitionIntervalMillis, 1_000L)
+        future = executor.scheduleWithFixedDelay(
+            { onAdvanceRequest() },
+            delayMillis,
+            delayMillis,
+            TimeUnit.MILLISECONDS
+        )
+    }
+}

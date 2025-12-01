@@ -1,0 +1,9 @@
+pluginManagement {
+    repositories {
+        google()
+        gradlePluginPortal()
+    }
+}
+
+include ':gl-wallpaper'
+include ':buzei'
