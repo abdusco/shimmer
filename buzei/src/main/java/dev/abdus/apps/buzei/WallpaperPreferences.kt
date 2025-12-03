@@ -3,7 +3,19 @@ package dev.abdus.apps.buzei
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import org.json.JSONArray
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+@Serializable
+data class DuotoneSettings(
+    val enabled: Boolean,
+    val alwaysOn: Boolean,
+    val lightColor: Int,
+    val darkColor: Int,
+    val presetIndex: Int
+)
 
 object WallpaperPreferences {
 
@@ -11,11 +23,7 @@ object WallpaperPreferences {
 
     const val KEY_BLUR_AMOUNT = "wallpaper_blur_amount"
     const val KEY_DIM_AMOUNT = "wallpaper_dim_amount"
-    const val KEY_DUOTONE_ENABLED = "wallpaper_duotone_enabled"
-    const val KEY_DUOTONE_LIGHT = "wallpaper_duotone_light"
-    const val KEY_DUOTONE_DARK = "wallpaper_duotone_dark"
-    const val KEY_DUOTONE_ALWAYS_ON = "wallpaper_duotone_always_on"
-    const val KEY_DUOTONE_PRESET_INDEX = "wallpaper_duotone_preset_index"
+    const val KEY_DUOTONE_SETTINGS = "wallpaper_duotone_settings"
     const val KEY_IMAGE_FOLDER_URIS = "wallpaper_image_folder_uris"
     const val KEY_TRANSITION_INTERVAL = "wallpaper_transition_interval"
     const val KEY_TRANSITION_ENABLED = "wallpaper_transition_enabled"
@@ -49,49 +57,102 @@ object WallpaperPreferences {
         }
     }
 
+    /**
+     * Get duotone settings as a single object.
+     */
+    fun getDuotoneSettings(prefs: SharedPreferences): DuotoneSettings {
+        val json = prefs.getString(KEY_DUOTONE_SETTINGS, null)
+        return if (json != null) {
+            try {
+                Json.decodeFromString<DuotoneSettings>(json)
+            } catch (e: Exception) {
+                getDefaultDuotoneSettings()
+            }
+        } else {
+            getDefaultDuotoneSettings()
+        }
+    }
+
+    /**
+     * Set duotone settings as a single atomic operation.
+     * This triggers only ONE SharedPreferences change notification.
+     */
+    fun setDuotoneSettings(prefs: SharedPreferences, settings: DuotoneSettings) {
+        val json = Json.encodeToString(settings)
+        prefs.edit {
+            putString(KEY_DUOTONE_SETTINGS, json)
+        }
+    }
+
+    private fun getDefaultDuotoneSettings() = DuotoneSettings(
+        enabled = DEFAULT_DUOTONE_ENABLED,
+        alwaysOn = DEFAULT_DUOTONE_ALWAYS_ON,
+        lightColor = DEFAULT_DUOTONE_LIGHT,
+        darkColor = DEFAULT_DUOTONE_DARK,
+        presetIndex = -1
+    )
+
+    // Convenience methods for backward compatibility
     fun isDuotoneEnabled(prefs: SharedPreferences): Boolean =
-        prefs.getBoolean(KEY_DUOTONE_ENABLED, DEFAULT_DUOTONE_ENABLED)
+        getDuotoneSettings(prefs).enabled
 
     fun setDuotoneEnabled(prefs: SharedPreferences, enabled: Boolean) {
-        prefs.edit {
-            putBoolean(KEY_DUOTONE_ENABLED, enabled)
-        }
-    }
-
-    fun getDuotoneLightColor(prefs: SharedPreferences): Int =
-        prefs.getInt(KEY_DUOTONE_LIGHT, DEFAULT_DUOTONE_LIGHT)
-
-    fun setDuotoneLightColor(prefs: SharedPreferences, color: Int) {
-        prefs.edit {
-            putInt(KEY_DUOTONE_LIGHT, color)
-        }
-    }
-
-    fun getDuotoneDarkColor(prefs: SharedPreferences): Int =
-        prefs.getInt(KEY_DUOTONE_DARK, DEFAULT_DUOTONE_DARK)
-
-    fun setDuotoneDarkColor(prefs: SharedPreferences, color: Int) {
-        prefs.edit {
-            putInt(KEY_DUOTONE_DARK, color)
-        }
+        val current = getDuotoneSettings(prefs)
+        setDuotoneSettings(prefs, current.copy(enabled = enabled))
     }
 
     fun isDuotoneAlwaysOn(prefs: SharedPreferences): Boolean =
-        prefs.getBoolean(KEY_DUOTONE_ALWAYS_ON, DEFAULT_DUOTONE_ALWAYS_ON)
+        getDuotoneSettings(prefs).alwaysOn
 
-    fun setDuotoneAlwaysOn(prefs: SharedPreferences, enabled: Boolean) {
-        prefs.edit {
-            putBoolean(KEY_DUOTONE_ALWAYS_ON, enabled)
-        }
+    fun setDuotoneAlwaysOn(prefs: SharedPreferences, alwaysOn: Boolean) {
+        val current = getDuotoneSettings(prefs)
+        setDuotoneSettings(prefs, current.copy(alwaysOn = alwaysOn))
+    }
+
+    fun getDuotoneLightColor(prefs: SharedPreferences): Int =
+        getDuotoneSettings(prefs).lightColor
+
+    fun setDuotoneLightColor(prefs: SharedPreferences, color: Int) {
+        val current = getDuotoneSettings(prefs)
+        setDuotoneSettings(prefs, current.copy(lightColor = color))
+    }
+
+    fun getDuotoneDarkColor(prefs: SharedPreferences): Int =
+        getDuotoneSettings(prefs).darkColor
+
+    fun setDuotoneDarkColor(prefs: SharedPreferences, color: Int) {
+        val current = getDuotoneSettings(prefs)
+        setDuotoneSettings(prefs, current.copy(darkColor = color))
     }
 
     fun getDuotonePresetIndex(prefs: SharedPreferences): Int =
-        prefs.getInt(KEY_DUOTONE_PRESET_INDEX, -1)
+        getDuotoneSettings(prefs).presetIndex
 
     fun setDuotonePresetIndex(prefs: SharedPreferences, index: Int) {
-        prefs.edit {
-            putInt(KEY_DUOTONE_PRESET_INDEX, index)
-        }
+        val current = getDuotoneSettings(prefs)
+        setDuotoneSettings(prefs, current.copy(presetIndex = index))
+    }
+
+    /**
+     * Atomically apply a complete duotone preset.
+     */
+    fun applyDuotonePreset(
+        prefs: SharedPreferences,
+        lightColor: Int,
+        darkColor: Int,
+        enabled: Boolean = true,
+        presetIndex: Int = -1
+    ) {
+        val current = getDuotoneSettings(prefs)
+        setDuotoneSettings(
+            prefs,
+            current.copy(
+                enabled = enabled,
+                lightColor = lightColor,
+                darkColor = darkColor,
+                presetIndex = presetIndex
+            )
+        )
     }
 
     fun getImageFolderUris(prefs: SharedPreferences): List<String> {
@@ -100,21 +161,18 @@ object WallpaperPreferences {
             return emptyList()
         }
         return try {
-            val array = JSONArray(serialized)
-            (0 until array.length())
-                .mapNotNull { array.optString(it).takeIf { it.isNotBlank() } }
-        } catch (ignored: Exception) {
+            Json.decodeFromString<List<String>>(serialized)
+                .filter { it.isNotBlank() }
+        } catch (e: SerializationException) {
             emptyList()
         }
     }
 
     fun setImageFolderUris(prefs: SharedPreferences, uris: List<String>) {
-        val cleaned = uris.mapNotNull { it.takeIf { it.isNotBlank() } }.distinct()
-        val array = JSONArray()
-        cleaned.forEach { array.put(it) }
+        val cleaned = uris.filter { it.isNotBlank() }.distinct()
         prefs.edit {
             if (cleaned.isNotEmpty()) {
-                putString(KEY_IMAGE_FOLDER_URIS, array.toString())
+                putString(KEY_IMAGE_FOLDER_URIS, Json.encodeToString(cleaned))
             } else {
                 remove(KEY_IMAGE_FOLDER_URIS)
             }

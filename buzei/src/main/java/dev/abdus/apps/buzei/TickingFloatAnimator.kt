@@ -1,10 +1,20 @@
 package dev.abdus.apps.buzei
 
 import android.animation.TimeInterpolator
-import android.view.animation.DecelerateInterpolator
 import android.os.SystemClock
+import android.view.animation.DecelerateInterpolator
 import kotlin.math.min
 
+/**
+ * Manual tick-based animator for OpenGL rendering.
+ *
+ * Unlike Android's ValueAnimator which requires a Looper thread (main thread),
+ * this animator works on any thread including the GL thread. It's manually
+ * ticked in onDrawFrame() for smooth, synchronized animations.
+ *
+ * This is the right approach for OpenGL rendering where animations need to be
+ * frame-synchronized rather than time-synchronized.
+ */
 class TickingFloatAnimator(
     private val duration: Int,
     private val interpolator: TimeInterpolator = DecelerateInterpolator()

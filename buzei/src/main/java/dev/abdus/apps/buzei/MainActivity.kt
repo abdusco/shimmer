@@ -149,22 +149,14 @@ private fun BuzeiWallpaperPrompt(
                 WallpaperPreferences.KEY_DIM_AMOUNT -> dimAmount =
                     WallpaperPreferences.getDimAmount(prefs)
 
-                WallpaperPreferences.KEY_DUOTONE_ENABLED -> duotoneEnabled =
-                    WallpaperPreferences.isDuotoneEnabled(prefs)
-
-                WallpaperPreferences.KEY_DUOTONE_ALWAYS_ON -> duotoneAlwaysOn =
-                    WallpaperPreferences.isDuotoneAlwaysOn(prefs)
-
-                WallpaperPreferences.KEY_DUOTONE_LIGHT -> {
-                    val stored = WallpaperPreferences.getDuotoneLightColor(prefs)
-                    lightColor = stored
-                    lightColorText = colorIntToHex(stored)
-                }
-
-                WallpaperPreferences.KEY_DUOTONE_DARK -> {
-                    val stored = WallpaperPreferences.getDuotoneDarkColor(prefs)
-                    darkColor = stored
-                    darkColorText = colorIntToHex(stored)
+                WallpaperPreferences.KEY_DUOTONE_SETTINGS -> {
+                    val settings = WallpaperPreferences.getDuotoneSettings(prefs)
+                    duotoneEnabled = settings.enabled
+                    duotoneAlwaysOn = settings.alwaysOn
+                    lightColor = settings.lightColor
+                    lightColorText = colorIntToHex(settings.lightColor)
+                    darkColor = settings.darkColor
+                    darkColorText = colorIntToHex(settings.darkColor)
                 }
 
                 WallpaperPreferences.KEY_IMAGE_FOLDER_URIS -> {

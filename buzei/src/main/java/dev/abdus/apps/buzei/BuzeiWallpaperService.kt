@@ -43,16 +43,23 @@ class BuzeiWallpaperService : GLWallpaperService() {
         private val transitionScheduler =
             ImageTransitionScheduler(folderScheduler) { handleScheduledAdvance() }
 
+        // Track current image for reprocessing when settings change
+        private var currentImageUri: Uri? = null
+        private var currentImageBitmap: Bitmap? = null
+        private var duotoneInitialized = false
+
         private val tapGestureDetector = TapGestureDetector(this@BuzeiWallpaperService)
         private val prefs: SharedPreferences =
             WallpaperPreferences.prefs(this@BuzeiWallpaperService)
+
+        // Debounce handler to coalesce rapid preference updates
+        private val reprocessDebouncer = android.os.Handler(android.os.Looper.getMainLooper())
+        private var reprocessPending = false
+
         private val preferenceHandlers: Map<String, () -> Unit> = mapOf(
             WallpaperPreferences.KEY_BLUR_AMOUNT to ::applyBlurPreference,
             WallpaperPreferences.KEY_DIM_AMOUNT to ::applyDimPreference,
-            WallpaperPreferences.KEY_DUOTONE_ENABLED to ::applyDuotoneEnabledPreference,
-            WallpaperPreferences.KEY_DUOTONE_ALWAYS_ON to ::applyDuotoneAlwaysOnPreference,
-            WallpaperPreferences.KEY_DUOTONE_LIGHT to ::applyDuotoneColorsPreference,
-            WallpaperPreferences.KEY_DUOTONE_DARK to ::applyDuotoneColorsPreference,
+            WallpaperPreferences.KEY_DUOTONE_SETTINGS to ::applyDuotoneSettingsPreference,
             WallpaperPreferences.KEY_IMAGE_FOLDER_URIS to ::applyImageFolderPreference,
             WallpaperPreferences.KEY_TRANSITION_ENABLED to ::applyTransitionEnabledPreference,
             WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference
@@ -68,7 +75,7 @@ class BuzeiWallpaperService : GLWallpaperService() {
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
-            renderer = BuzeiRenderer(this@BuzeiWallpaperService, this)
+            renderer = BuzeiRenderer(this)
             setEGLContextClientVersion(2)
             setEGLConfigChooser(8, 8, 8, 0, 0, 0)
             setRenderer(renderer)
@@ -106,6 +113,7 @@ class BuzeiWallpaperService : GLWallpaperService() {
 
         override fun onDestroy() {
             prefs.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+            reprocessDebouncer.removeCallbacksAndMessages(null)
             transitionScheduler.cancel()
             folderScheduler.shutdownNow()
             if (activeEngineRef?.get() == this) {
@@ -160,7 +168,16 @@ class BuzeiWallpaperService : GLWallpaperService() {
                     val bitmap = BitmapFactory.decodeStream(inputStream, null, options)
                     inputStream.close()
                     bitmap?.let {
-                        queueRendererEvent(allowWhenSurfaceUnavailable = true) { renderer.setImage(it) }
+                        currentImageUri = null
+                        currentImageBitmap = it
+                        val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+                        val processed = processImageForRenderer(it, blurAmount)
+                        val payload = RendererImagePayload(
+                            original = it,
+                            blurred = processed.blurred,
+                            sourceUri = null
+                        )
+                        queueRendererEvent(allowWhenSurfaceUnavailable = true) { renderer.setImage(payload) }
                     }
                 } catch (e: IOException) {
                     e.printStackTrace()
@@ -178,8 +195,7 @@ class BuzeiWallpaperService : GLWallpaperService() {
         }
 
         private fun applyBlurPreference() {
-            val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-            queueRendererEvent { renderer.setBlurRadiusFraction(blurAmount) }
+            debouncedReprocessCurrentImage()
         }
 
         private fun applyDimPreference() {
@@ -187,20 +203,27 @@ class BuzeiWallpaperService : GLWallpaperService() {
             queueRendererEvent { renderer.setUserDimAmount(dimAmount) }
         }
 
-        private fun applyDuotoneEnabledPreference() {
-            val enabled = WallpaperPreferences.isDuotoneEnabled(prefs)
-            queueRendererEvent { renderer.setDuotoneEnabled(enabled) }
+        private fun applyDuotoneSettingsPreference() {
+            val settings = WallpaperPreferences.getDuotoneSettings(prefs)
+            val animate = duotoneInitialized // Only animate after first initialization
+            duotoneInitialized = true
+            queueRendererEvent {
+                renderer.setDuotoneSettings(settings.enabled, settings.lightColor, settings.darkColor, animate = animate)
+            }
         }
 
-        private fun applyDuotoneAlwaysOnPreference() {
-            val enabled = WallpaperPreferences.isDuotoneAlwaysOn(prefs)
-            queueRendererEvent { renderer.setDuotoneAlwaysOn(enabled) }
-        }
-
-        private fun applyDuotoneColorsPreference() {
-            val light = WallpaperPreferences.getDuotoneLightColor(prefs)
-            val dark = WallpaperPreferences.getDuotoneDarkColor(prefs)
-            queueRendererEvent { renderer.setDuotoneColors(light, dark) }
+        /**
+         * Debounces image reprocessing to coalesce rapid preference updates.
+         * Useful when multiple related preferences change in quick succession
+         * (e.g., applying a duotone preset updates 3-4 preferences at once).
+         */
+        private fun debouncedReprocessCurrentImage() {
+            if (reprocessPending) return
+            reprocessPending = true
+            reprocessDebouncer.postDelayed({
+                reprocessPending = false
+                reprocessCurrentImage()
+            }, 50) // 50ms debounce is enough to coalesce batch updates
         }
 
         private fun applyImageFolderPreference() {
@@ -257,11 +280,14 @@ class BuzeiWallpaperService : GLWallpaperService() {
             val nextIndex = (lastIndex + 1) % DUOTONE_PRESETS.size
             val nextPreset = DUOTONE_PRESETS[nextIndex]
 
-            // Apply the next preset
-            WallpaperPreferences.setDuotoneLightColor(prefs, nextPreset.lightColor)
-            WallpaperPreferences.setDuotoneDarkColor(prefs, nextPreset.darkColor)
-            WallpaperPreferences.setDuotoneEnabled(prefs, true)
-            WallpaperPreferences.setDuotonePresetIndex(prefs, nextIndex)
+            // Apply preset atomically - single transaction triggers only one listener notification
+            WallpaperPreferences.applyDuotonePreset(
+                prefs = prefs,
+                lightColor = nextPreset.lightColor,
+                darkColor = nextPreset.darkColor,
+                enabled = true,
+                presetIndex = nextIndex
+            )
 
             Toast.makeText(this@BuzeiWallpaperService, "Duotone Preset: ${nextPreset.name}", Toast.LENGTH_SHORT).show()
         }
@@ -292,6 +318,9 @@ class BuzeiWallpaperService : GLWallpaperService() {
             queueRendererEvent(allowWhenSurfaceUnavailable = true) {
                 renderer.setImage(payload)
             }
+            // Track current image for reprocessing
+            currentImageUri = payload.sourceUri
+            currentImageBitmap = payload.original
             return true
         }
 
@@ -302,29 +331,14 @@ class BuzeiWallpaperService : GLWallpaperService() {
 
         private fun prepareRendererImage(uri: Uri): RendererImagePayload? {
             val bitmap = decodeBitmapFromUri(uri) ?: return null
-            val settings = captureRendererSettings()
-            val processed = processImageForRenderer(
-                bitmap,
-                settings.blurAmount,
-                settings
-            )
+            val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+            val processed = processImageForRenderer(bitmap, blurAmount)
             return RendererImagePayload(
                 original = bitmap,
                 blurred = processed.blurred,
-                tintedOriginal = processed.tintedOriginal,
-                settingsSnapshot = settings,
                 sourceUri = uri
             )
         }
-
-        private fun captureRendererSettings(): RendererImageSettings =
-            RendererImageSettings(
-                blurAmount = WallpaperPreferences.getBlurAmount(prefs),
-                duotoneEnabled = WallpaperPreferences.isDuotoneEnabled(prefs),
-                duotoneAlwaysOn = WallpaperPreferences.isDuotoneAlwaysOn(prefs),
-                duotoneLightColor = WallpaperPreferences.getDuotoneLightColor(prefs),
-                duotoneDarkColor = WallpaperPreferences.getDuotoneDarkColor(prefs)
-            )
 
         private fun decodeBitmapFromUri(uri: Uri): Bitmap? {
             return try {
@@ -337,6 +351,22 @@ class BuzeiWallpaperService : GLWallpaperService() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
+            }
+        }
+
+        private fun reprocessCurrentImage() {
+            val bitmap = currentImageBitmap ?: return
+            folderScheduler.execute {
+                val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+                val processed = processImageForRenderer(bitmap, blurAmount)
+                val payload = RendererImagePayload(
+                    original = bitmap,
+                    blurred = processed.blurred,
+                    sourceUri = currentImageUri
+                )
+                queueRendererEvent(allowWhenSurfaceUnavailable = true) {
+                    renderer.setImage(payload)
+                }
             }
         }
     }

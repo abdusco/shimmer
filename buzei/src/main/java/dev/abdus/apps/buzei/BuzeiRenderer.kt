@@ -1,13 +1,12 @@
 package dev.abdus.apps.buzei
 
-import android.view.animation.DecelerateInterpolator
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import android.view.animation.DecelerateInterpolator
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
@@ -15,13 +14,11 @@ import kotlin.math.min
 
 data class RendererImagePayload(
     val original: Bitmap,
-    val blurred: Bitmap? = null,
-    val tintedOriginal: Bitmap? = null,
-    val settingsSnapshot: RendererImageSettings? = null,
+    val blurred: Bitmap,
     val sourceUri: Uri? = null
 )
 
-class BuzeiRenderer(private val context: Context, private val callbacks: Callbacks) :
+class BuzeiRenderer(private val callbacks: Callbacks) :
     GLSurfaceView.Renderer {
 
     interface Callbacks {
@@ -31,6 +28,7 @@ class BuzeiRenderer(private val context: Context, private val callbacks: Callbac
     companion object {
         private const val BLUR_ANIMATION_DURATION = 1200
         private const val IMAGE_FADE_DURATION = 1200
+        private const val DUOTONE_ANIMATION_DURATION = 1200
     }
 
     private var originalBitmap: Bitmap? = null
@@ -56,23 +54,23 @@ class BuzeiRenderer(private val context: Context, private val callbacks: Callbac
     private lateinit var colorOverlay: GLColorOverlay
     private val blurKeyframes = 1
     private val blurAnimator = TickingFloatAnimator(BLUR_ANIMATION_DURATION, DecelerateInterpolator())
-    private val imageFadeAnimator = TickingFloatAnimator(
-        IMAGE_FADE_DURATION,
-        DecelerateInterpolator()
-    ).apply {
+    private val imageFadeAnimator = TickingFloatAnimator(IMAGE_FADE_DURATION, DecelerateInterpolator()).apply {
         snapTo(1f)
     }
-    private var blurRadiusFraction = WallpaperPreferences.DEFAULT_BLUR_AMOUNT
+    private val duotoneAnimator = TickingFloatAnimator(DUOTONE_ANIMATION_DURATION, DecelerateInterpolator())
+
     private var userDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
-    private var duotoneEnabled = WallpaperPreferences.DEFAULT_DUOTONE_ENABLED
-    private var duotoneAlwaysOn = WallpaperPreferences.DEFAULT_DUOTONE_ALWAYS_ON
-    private var duotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
-    private var duotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
-    private var tintedOriginalBitmap: Bitmap? = null
     private var isBlurred = false
 
+    // Duotone state
+    private var duotoneEnabled = false
+    private var currentDuotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
+    private var currentDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
+    private var targetDuotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
+    private var targetDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
+
     fun setImage(bitmap: Bitmap) {
-        setImage(RendererImagePayload(bitmap))
+        setImage(RendererImagePayload(original = bitmap, blurred = bitmap))
     }
 
     fun setImage(image: RendererImagePayload) {
@@ -86,36 +84,14 @@ class BuzeiRenderer(private val context: Context, private val callbacks: Callbac
             previousBitmapAspect = bitmapAspect
         }
         bitmapAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height
-        val snapshot = image.settingsSnapshot
-        val canReusePrecomputed =
-            snapshot?.matches(blurRadiusFraction, duotoneEnabled, duotoneAlwaysOn, duotoneLightColor, duotoneDarkColor) == true
-        if (canReusePrecomputed && image.blurred != null) {
-            blurredBitmap = image.blurred
-            tintedOriginalBitmap = if (duotoneEnabled && duotoneAlwaysOn) {
-                image.tintedOriginal
-            } else {
-                null
-            }
-        } else {
-            rebuildBlurredBitmap()
-        }
+
+        // Trust the service-provided pre-processed bitmap
+        blurredBitmap = image.blurred
+
         updatePictureSet()
         recomputeProjectionMatrix()
     }
 
-    fun setBlurRadiusFraction(fraction: Float) {
-        val clamped = fraction.coerceIn(0f, 1f)
-        if (blurRadiusFraction == clamped) {
-            return
-        }
-        blurRadiusFraction = clamped
-        rebuildBlurredBitmap()
-        updatePictureSet(preserveAspect = true)
-        if (isBlurred) {
-            blurAnimator.snapTo(blurKeyframes.toFloat())
-        }
-        callbacks.requestRender()
-    }
 
     fun toggleBlur() {
         isBlurred = !isBlurred
@@ -127,6 +103,54 @@ class BuzeiRenderer(private val context: Context, private val callbacks: Callbac
     fun setUserDimAmount(amount: Float) {
         userDimAmount = amount.coerceIn(0f, 1f)
         callbacks.requestRender()
+    }
+
+    fun setDuotoneSettings(enabled: Boolean, lightColor: Int, darkColor: Int, animate: Boolean = true) {
+        duotoneEnabled = enabled
+
+        // Check if colors are actually changing
+        val colorsChanged = (lightColor != targetDuotoneLightColor || darkColor != targetDuotoneDarkColor)
+
+        if (animate && colorsChanged) {
+            // If animator is already running, use its current interpolated colors as the new start
+            // Otherwise use the current target colors (which are what's currently displayed)
+            if (!duotoneAnimator.isRunning) {
+                currentDuotoneLightColor = targetDuotoneLightColor
+                currentDuotoneDarkColor = targetDuotoneDarkColor
+            }
+            // If animator IS running, currentDuotone*Color will be updated in onDrawFrame
+            // to the last interpolated values, so we keep those
+
+            // Set new target colors
+            targetDuotoneLightColor = lightColor
+            targetDuotoneDarkColor = darkColor
+
+            // Start animation from 0 to 1 (will interpolate between current and target)
+            duotoneAnimator.start(startValue = 0f, endValue = 1f)
+        } else {
+            // Instant change (no animation)
+            currentDuotoneLightColor = lightColor
+            currentDuotoneDarkColor = darkColor
+            targetDuotoneLightColor = lightColor
+            targetDuotoneDarkColor = darkColor
+        }
+
+        callbacks.requestRender()
+    }
+
+    private fun interpolateColor(from: Int, to: Int, t: Float): Int {
+        val fromR = Color.red(from)
+        val fromG = Color.green(from)
+        val fromB = Color.blue(from)
+        val toR = Color.red(to)
+        val toG = Color.green(to)
+        val toB = Color.blue(to)
+
+        val r = (fromR + (toR - fromR) * t).toInt().coerceIn(0, 255)
+        val g = (fromG + (toG - fromG) * t).toInt().coerceIn(0, 255)
+        val b = (fromB + (toB - fromB) * t).toInt().coerceIn(0, 255)
+
+        return Color.rgb(r, g, b)
     }
 
     override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
@@ -169,9 +193,27 @@ class BuzeiRenderer(private val context: Context, private val callbacks: Callbac
 
         val stillAnimating = blurAnimator.tick()
         val imageStillAnimating = imageFadeAnimator.tick()
+        val duotoneStillAnimating = duotoneAnimator.tick()
+
+        // Update duotone colors with animation
+        val lightColor: Int
+        val darkColor: Int
+        if (duotoneStillAnimating) {
+            val t = duotoneAnimator.currentValue
+            lightColor = interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
+            darkColor = interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
+        } else {
+            lightColor = targetDuotoneLightColor
+            darkColor = targetDuotoneDarkColor
+            currentDuotoneLightColor = targetDuotoneLightColor
+            currentDuotoneDarkColor = targetDuotoneDarkColor
+        }
+
         val imageAlpha = imageFadeAnimator.currentValue.coerceIn(0f, 1f)
-        previousPictureSet?.drawFrame(previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha)
-        currentPictureSet.drawFrame(mvpMatrix, blurAnimator.currentValue, imageAlpha)
+        previousPictureSet?.drawFrame(previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha,
+            duotoneEnabled, lightColor, darkColor)
+        currentPictureSet.drawFrame(mvpMatrix, blurAnimator.currentValue, imageAlpha,
+            duotoneEnabled, lightColor, darkColor)
 
         val blurProgress = if (blurKeyframes > 0) {
             (blurAnimator.currentValue / blurKeyframes).coerceIn(0f, 1f)
@@ -189,20 +231,19 @@ class BuzeiRenderer(private val context: Context, private val callbacks: Callbac
             previousBitmapAspect = null
         }
 
-        if (stillAnimating || imageStillAnimating) {
+        if (stillAnimating || imageStillAnimating || duotoneStillAnimating) {
             callbacks.requestRender()
         }
     }
 
     private fun updatePictureSet(preserveAspect: Boolean = false) {
         val baseOriginal = originalBitmap ?: return
-        val normal = tintedOriginalBitmap ?: baseOriginal
-        val blurred = blurredBitmap ?: normal
+        val blurred = blurredBitmap ?: baseOriginal
 
         previousPictureSet?.destroyPictures()
         previousPictureSet = pictureSet
         pictureSet = GLPictureSet(blurKeyframes).apply {
-            load(listOf(normal, blurred))
+            load(listOf(baseOriginal, blurred))
         }
         imageFadeAnimator.start(startValue = 0f, endValue = 1f)
 
@@ -215,53 +256,6 @@ class BuzeiRenderer(private val context: Context, private val callbacks: Callbac
         callbacks.requestRender()
     }
 
-    private fun rebuildBlurredBitmap() {
-        val source = originalBitmap ?: return
-        val processed = processImageForRenderer(
-            source,
-            blurRadiusFraction,
-            currentSettingsSnapshot()
-        )
-        blurredBitmap = processed.blurred
-        tintedOriginalBitmap = processed.tintedOriginal
-    }
-
-    fun setDuotoneEnabled(enabled: Boolean) {
-        if (duotoneEnabled == enabled) {
-            return
-        }
-        duotoneEnabled = enabled
-        rebuildBlurredBitmap()
-        updatePictureSet(preserveAspect = true)
-    }
-
-    fun setDuotoneAlwaysOn(enabled: Boolean) {
-        if (duotoneAlwaysOn == enabled) {
-            return
-        }
-        duotoneAlwaysOn = enabled
-        rebuildBlurredBitmap()
-        updatePictureSet(preserveAspect = true)
-    }
-
-    fun setDuotoneColors(lightColor: Int, darkColor: Int) {
-        if (duotoneLightColor == lightColor && duotoneDarkColor == darkColor) {
-            return
-        }
-        duotoneLightColor = lightColor
-        duotoneDarkColor = darkColor
-        rebuildBlurredBitmap()
-        updatePictureSet(preserveAspect = true)
-    }
-
-    private fun currentSettingsSnapshot(): RendererImageSettings =
-        RendererImageSettings(
-            blurAmount = blurRadiusFraction,
-            duotoneEnabled = duotoneEnabled,
-            duotoneAlwaysOn = duotoneAlwaysOn,
-            duotoneLightColor = duotoneLightColor,
-            duotoneDarkColor = duotoneDarkColor
-        )
 
     fun setParallaxOffset(offset: Float) {
         normalOffsetX = offset.coerceIn(0f, 1f)

@@ -15,7 +15,9 @@ class GLPictureSet(private val blurKeyframes: Int) {
         }
     }
 
-    fun drawFrame(mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f) {
+    fun drawFrame(mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
+                  duotoneEnabled: Boolean = false, duotoneLightColor: Int = 0xFFFFFFFF.toInt(),
+                  duotoneDarkColor: Int = 0xFF000000.toInt()) {
         if (pictures.all { it == null }) {
             return
         }
@@ -28,12 +30,12 @@ class GLPictureSet(private val blurKeyframes: Int) {
         when {
             globalAlpha <= 0f -> return
             lo == hi -> {
-                pictures[lo]?.draw(mvpMatrix, globalAlpha)
+                pictures[lo]?.draw(mvpMatrix, globalAlpha, duotoneEnabled, duotoneLightColor, duotoneDarkColor)
             }
 
             globalAlpha == 1f -> {
-                pictures[lo]?.draw(mvpMatrix, 1f - localHiAlpha)
-                pictures[hi]?.draw(mvpMatrix, localHiAlpha)
+                pictures[lo]?.draw(mvpMatrix, 1f - localHiAlpha, duotoneEnabled, duotoneLightColor, duotoneDarkColor)
+                pictures[hi]?.draw(mvpMatrix, localHiAlpha, duotoneEnabled, duotoneLightColor, duotoneDarkColor)
             }
 
             else -> {
@@ -42,8 +44,8 @@ class GLPictureSet(private val blurKeyframes: Int) {
                 val newLocalLoAlpha =
                     globalAlpha * (localHiAlpha - 1) / (globalAlpha * localHiAlpha - 1)
                 val newLocalHiAlpha = globalAlpha * localHiAlpha
-                loPicture.draw(mvpMatrix, newLocalLoAlpha)
-                hiPicture.draw(mvpMatrix, newLocalHiAlpha)
+                loPicture.draw(mvpMatrix, newLocalLoAlpha, duotoneEnabled, duotoneLightColor, duotoneDarkColor)
+                hiPicture.draw(mvpMatrix, newLocalHiAlpha, duotoneEnabled, duotoneLightColor, duotoneDarkColor)
             }
         }
     }
