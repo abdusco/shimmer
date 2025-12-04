@@ -217,13 +217,7 @@ private fun BuzeiSettingsScreen(
                         textAlign = TextAlign.Center
                     )
                 }
-                item {
-                    Text(
-                        text = "Tap the button below to set Buzei as your live wallpaper.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center
-                    )
-                }
+
                 item {
                     FolderSelection(
                         folderUris = folderUris,
