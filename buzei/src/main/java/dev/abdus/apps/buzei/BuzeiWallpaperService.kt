@@ -54,9 +54,6 @@ class BuzeiWallpaperService : GLWallpaperService() {
         private val prefs: SharedPreferences =
             WallpaperPreferences.prefs(this@BuzeiWallpaperService)
 
-        // Debounce handler to coalesce rapid preference updates
-        private val reprocessDebouncer = android.os.Handler(android.os.Looper.getMainLooper())
-        private var reprocessPending = false
 
         private val preferenceHandlers: Map<String, () -> Unit> = mapOf(
             WallpaperPreferences.KEY_BLUR_AMOUNT to ::applyBlurPreference,
@@ -115,7 +112,6 @@ class BuzeiWallpaperService : GLWallpaperService() {
 
         override fun onDestroy() {
             prefs.unregisterOnSharedPreferenceChangeListener(preferenceListener)
-            reprocessDebouncer.removeCallbacksAndMessages(null)
             transitionScheduler.cancel()
             folderScheduler.shutdownNow()
             if (activeEngineRef?.get() == this) {
@@ -221,7 +217,7 @@ class BuzeiWallpaperService : GLWallpaperService() {
         }
 
         private fun applyBlurPreference() {
-            debouncedReprocessCurrentImage()
+            reprocessCurrentImage()
         }
 
         private fun applyDimPreference() {
@@ -243,19 +239,6 @@ class BuzeiWallpaperService : GLWallpaperService() {
             }
         }
 
-        /**
-         * Debounces image reprocessing to coalesce rapid preference updates.
-         * Useful when multiple related preferences change in quick succession
-         * (e.g., applying a duotone preset updates 3-4 preferences at once).
-         */
-        private fun debouncedReprocessCurrentImage() {
-            if (reprocessPending) return
-            reprocessPending = true
-            reprocessDebouncer.postDelayed({
-                reprocessPending = false
-                reprocessCurrentImage()
-            }, 50) // 50ms debounce is enough to coalesce batch updates
-        }
 
         private fun applyImageFolderPreference() {
             val folderUris = WallpaperPreferences.getImageFolderUris(prefs)
