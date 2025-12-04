@@ -17,6 +17,8 @@ import kotlin.concurrent.thread
 class BuzeiWallpaperService : GLWallpaperService() {
 
     companion object {
+        private const val MAX_BLUR_RADIUS_PIXELS = 150f
+
         @Volatile
         private var activeEngineRef: WeakReference<BuzeiWallpaperEngine>? = null
 
@@ -160,7 +162,8 @@ class BuzeiWallpaperService : GLWallpaperService() {
             }
             thread {
                 try {
-                    val url = URL("https://images.unsplash.com/photo-1764193875912-0f0a64874344?ixlib=rb-4.1.0&q=85&fm=jpg&crop=entropy&cs=srgb&dl=luise-and-nic-6fWb2V1UIZU-unsplash.jpg&w=1920")
+                    val url =
+                        URL("https://images.unsplash.com/photo-1764193875912-0f0a64874344?ixlib=rb-4.1.0&q=85&fm=jpg&crop=entropy&cs=srgb&dl=luise-and-nic-6fWb2V1UIZU-unsplash.jpg&w=1920")
                     val inputStream = url.openStream()
                     val options = BitmapFactory.Options().apply {
                         inSampleSize = 2
@@ -171,19 +174,42 @@ class BuzeiWallpaperService : GLWallpaperService() {
                         currentImageUri = null
                         currentImageBitmap = it
                         val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-                        val processed = processImageForRenderer(it, blurAmount)
+                        val blurred = processImageForRenderer(it, blurAmount)
                         val payload = RendererImagePayload(
                             original = it,
-                            blurred = processed.blurred,
+                            blurred = blurred,
                             sourceUri = null
                         )
-                        queueRendererEvent(allowWhenSurfaceUnavailable = true) { renderer.setImage(payload) }
+                        queueRendererEvent(allowWhenSurfaceUnavailable = true) {
+                            renderer.setImage(
+                                payload
+                            )
+                        }
                     }
                 } catch (e: IOException) {
                     e.printStackTrace()
                 }
             }
         }
+
+        /**
+         * Process image for renderer. Duotone is now applied via GPU shader.
+         * This only handles blur processing.
+         */
+        private fun processImageForRenderer(
+            source: Bitmap,
+            blurFraction: Float,
+        ): Bitmap {
+            val normalizedBlur = blurFraction.coerceIn(0f, 1f)
+            val radius = normalizedBlur * MAX_BLUR_RADIUS_PIXELS
+            val blurred = if (radius <= 0f) {
+                source
+            } else {
+                source.blur(radius) ?: source
+            }
+            return blurred
+        }
+
 
         private fun applyPreferences(skipImageFolderReload: Boolean = false) {
             preferenceHandlers.forEach { (key, handler) ->
@@ -208,7 +234,12 @@ class BuzeiWallpaperService : GLWallpaperService() {
             val animate = duotoneInitialized // Only animate after first initialization
             duotoneInitialized = true
             queueRendererEvent {
-                renderer.setDuotoneSettings(settings.enabled, settings.lightColor, settings.darkColor, animate = animate)
+                renderer.setDuotoneSettings(
+                    settings.enabled,
+                    settings.lightColor,
+                    settings.darkColor,
+                    animate = animate
+                )
             }
         }
 
@@ -331,10 +362,10 @@ class BuzeiWallpaperService : GLWallpaperService() {
         private fun prepareRendererImage(uri: Uri): RendererImagePayload? {
             val bitmap = decodeBitmapFromUri(uri) ?: return null
             val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-            val processed = processImageForRenderer(bitmap, blurAmount)
+            val blurred = processImageForRenderer(bitmap, blurAmount)
             return RendererImagePayload(
                 original = bitmap,
-                blurred = processed.blurred,
+                blurred = blurred,
                 sourceUri = uri
             )
         }
@@ -357,10 +388,10 @@ class BuzeiWallpaperService : GLWallpaperService() {
             val bitmap = currentImageBitmap ?: return
             folderScheduler.execute {
                 val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-                val processed = processImageForRenderer(bitmap, blurAmount)
+                val blurred = processImageForRenderer(bitmap, blurAmount)
                 val payload = RendererImagePayload(
                     original = bitmap,
-                    blurred = processed.blurred,
+                    blurred = blurred,
                     sourceUri = currentImageUri
                 )
                 queueRendererEvent(allowWhenSurfaceUnavailable = true) {

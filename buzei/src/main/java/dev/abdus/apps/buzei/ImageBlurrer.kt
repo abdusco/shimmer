@@ -15,7 +15,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-fun Bitmap?.blur(radius: Float = ImageBlurrer.MAX_SUPPORTED_BLUR_PIXELS.toFloat()): Bitmap? {
+fun Bitmap?.blur(radius: Float): Bitmap? {
     val blurrer = ImageBlurrer(this)
     val blurred = blurrer.blurBitmap(radius)
     blurrer.destroy()
@@ -25,25 +25,21 @@ fun Bitmap?.blur(radius: Float = ImageBlurrer.MAX_SUPPORTED_BLUR_PIXELS.toFloat(
 private class ImageBlurrer(private val sourceBitmap: Bitmap?) {
 
     companion object {
-        const val MAX_SUPPORTED_BLUR_PIXELS = 200
+        const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
     }
 
-    fun blurBitmap(
-        radius: Float = MAX_SUPPORTED_BLUR_PIXELS.toFloat(),
-        desaturateAmount: Float = 0f
-    ): Bitmap? {
+    fun blurBitmap(radius: Float): Bitmap? {
         val config = sourceBitmap?.config ?: return null
         val original = sourceBitmap
-        if ((radius <= 0f || original.width == 0 || original.height == 0) && desaturateAmount == 0f) {
+        if (radius <= 0f || original.width == 0 || original.height == 0) {
             return original.copy(config, true)
         }
 
-        val normalizedRadius = radius.coerceIn(0f, MAX_SUPPORTED_BLUR_PIXELS.toFloat())
-        val normalizedDesaturate = desaturateAmount.constrain(0f, 1f)
+        val normalizedRadius = radius.coerceIn(0f, MAX_SUPPORTED_BLUR_RADIUS_PIXELS.toFloat())
 
         return try {
-            GpuBlurRenderer(original.width, original.height).use { renderer ->
-                renderer.blur(original, normalizedRadius, normalizedDesaturate)
+            GaussianBlurGPURenderer(original.width, original.height).use { renderer ->
+                renderer.blur(original, normalizedRadius)
             }
         } catch (t: Throwable) {
             original.copy(config, true)
@@ -53,21 +49,15 @@ private class ImageBlurrer(private val sourceBitmap: Bitmap?) {
     fun destroy() {
         // No persistent resources to clean up now that we no longer use RenderScript.
     }
-
-    private fun Float.constrain(min: Float, max: Float): Float = when {
-        this < min -> min
-        this > max -> max
-        else -> this
-    }
 }
 
-private class GpuBlurRenderer(
+private class GaussianBlurGPURenderer(
     private val width: Int,
     private val height: Int
 ) : Closeable {
 
     companion object {
-        private const val MAX_RADIUS = ImageBlurrer.MAX_SUPPORTED_BLUR_PIXELS
+        private const val MAX_RADIUS = ImageBlurrer.MAX_SUPPORTED_BLUR_RADIUS_PIXELS
         private const val POSITION_COMPONENTS = 2
         private const val TEX_COMPONENTS = 2
         private const val FLOAT_BYTES = 4
@@ -102,7 +92,6 @@ private class GpuBlurRenderer(
                 "uniform vec2 uDirection;" +
                 "uniform float uRadius;" +
                 "uniform float uWeights[" + (MAX_RADIUS + 1) + "];" +
-                "uniform float uDesaturate;" +
                 "varying vec2 vTexCoord;" +
                 "void main(){" +
                 "  vec4 color = texture2D(uTexture, vTexCoord) * uWeights[0];" +
@@ -115,8 +104,6 @@ private class GpuBlurRenderer(
                 "    color += texture2D(uTexture, vTexCoord + offset) * weight;" +
                 "    color += texture2D(uTexture, vTexCoord - offset) * weight;" +
                 "  }" +
-                "  float grey = dot(color.rgb, vec3(0.299, 0.587, 0.114));" +
-                "  color.rgb = mix(color.rgb, vec3(grey), uDesaturate);" +
                 "  gl_FragColor = color;" +
                 "}"
     }
@@ -140,7 +127,6 @@ private class GpuBlurRenderer(
     private val uniformDirection: Int
     private val uniformRadius: Int
     private val uniformWeights: Int
-    private val uniformDesaturate: Int
 
     init {
         eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -179,10 +165,9 @@ private class GpuBlurRenderer(
         uniformDirection = GLES20.glGetUniformLocation(program, "uDirection")
         uniformRadius = GLES20.glGetUniformLocation(program, "uRadius")
         uniformWeights = GLES20.glGetUniformLocation(program, "uWeights")
-        uniformDesaturate = GLES20.glGetUniformLocation(program, "uDesaturate")
     }
 
-    fun blur(source: Bitmap, radius: Float, desaturateAmount: Float): Bitmap? {
+    fun blur(source: Bitmap, radius: Float): Bitmap? {
         if (width == 0 || height == 0) {
             return null
         }
@@ -204,24 +189,24 @@ private class GpuBlurRenderer(
 
         val inputTexture = GLUtil.loadTexture(source)
 
+        // First pass: horizontal blur
         renderPass(
             inputTexture,
             framebuffers[0],
             floatArrayOf(1f, 0f),
             texelSize,
             radiusInt,
-            weights,
-            0f
+            weights
         )
 
+        // Second pass: vertical blur
         renderPass(
             pingPongTextures[0],
             framebuffers[1],
             floatArrayOf(0f, 1f),
             texelSize,
             radiusInt,
-            weights,
-            desaturateAmount
+            weights
         )
 
         val result = readFramebuffer(framebuffers[1])
@@ -241,8 +226,7 @@ private class GpuBlurRenderer(
         direction: FloatArray,
         texelSize: FloatArray,
         radius: Int,
-        weights: FloatArray,
-        desaturateAmount: Float
+        weights: FloatArray
     ) {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, targetFramebuffer)
         GLES20.glViewport(0, 0, width, height)
@@ -273,7 +257,6 @@ private class GpuBlurRenderer(
         GLES20.glUniform2f(uniformTexelSize, texelSize[0], texelSize[1])
         GLES20.glUniform2f(uniformDirection, direction[0], direction[1])
         GLES20.glUniform1f(uniformRadius, radius.toFloat())
-        GLES20.glUniform1f(uniformDesaturate, desaturateAmount)
         GLES20.glUniform1fv(uniformWeights, MAX_RADIUS + 1, weights, 0)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
