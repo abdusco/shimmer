@@ -112,20 +112,23 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
         val colorsChanged = (lightColor != targetDuotoneLightColor || darkColor != targetDuotoneDarkColor)
 
         if (animate && colorsChanged) {
-            // If animator is already running, use its current interpolated colors as the new start
-            // Otherwise use the current target colors (which are what's currently displayed)
-            if (!duotoneAnimator.isRunning) {
+            // Capture current visual colors (what's actually being displayed right now)
+            if (duotoneAnimator.isRunning) {
+                // Animation in progress - capture the current interpolated colors
+                val t = duotoneAnimator.currentValue
+                currentDuotoneLightColor = interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
+                currentDuotoneDarkColor = interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
+            } else {
+                // No animation - use the target (what's displayed)
                 currentDuotoneLightColor = targetDuotoneLightColor
                 currentDuotoneDarkColor = targetDuotoneDarkColor
             }
-            // If animator IS running, currentDuotone*Color will be updated in onDrawFrame
-            // to the last interpolated values, so we keep those
 
             // Set new target colors
             targetDuotoneLightColor = lightColor
             targetDuotoneDarkColor = darkColor
 
-            // Start animation from 0 to 1 (will interpolate between current and target)
+            // Start animation from 0 to 1 (will interpolate from current to new target)
             duotoneAnimator.start(startValue = 0f, endValue = 1f)
         } else {
             // Instant change (no animation)
