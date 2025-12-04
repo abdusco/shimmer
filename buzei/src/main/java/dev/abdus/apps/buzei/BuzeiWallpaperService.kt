@@ -119,7 +119,16 @@ class BuzeiWallpaperService : GLWallpaperService() {
         }
 
         override fun onTouchEvent(event: MotionEvent) {
+            // Check two-finger double tap first (advance to next image)
+            if (tapGestureDetector.onTwoFingerDoubleTap(event)) {
+                android.util.Log.d("BuzeiWallpaper", "Two-finger double tap detected - advancing to next image")
+                advanceToNextImage()
+                return
+            }
+
+            // Check triple tap (toggle blur)
             if (tapGestureDetector.onTripleTap(event)) {
+                android.util.Log.d("BuzeiWallpaper", "Triple tap detected - toggling blur")
                 queueRendererEvent { renderer.toggleBlur() }
             }
             super.onTouchEvent(event)
