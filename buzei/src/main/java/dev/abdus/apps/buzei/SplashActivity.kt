@@ -96,6 +96,7 @@ class SplashActivity : ComponentActivity() {
         surfaceView.queueEvent {
             renderer.setDuotoneSettings(
                 enabled = true,
+                alwaysOn = true,  // Always show duotone in splash
                 lightColor = preset.lightColor,
                 darkColor = preset.darkColor,
                 animate = true

@@ -5,8 +5,12 @@ import android.graphics.Color
 import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
+import android.opengl.GLUtils
 import android.opengl.Matrix
 import android.view.animation.DecelerateInterpolator
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
@@ -52,21 +56,25 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
     private var previousPictureSet: GLPictureSet? = null
     private lateinit var colorOverlay: GLColorOverlay
     private val blurKeyframes = 1
-    private val blurAnimator = TickingFloatAnimator(BLUR_ANIMATION_DURATION, DecelerateInterpolator())
-    private val imageFadeAnimator = TickingFloatAnimator(IMAGE_FADE_DURATION, DecelerateInterpolator()).apply {
-        snapTo(1f)
-    }
-    private val duotoneAnimator = TickingFloatAnimator(DUOTONE_ANIMATION_DURATION, DecelerateInterpolator())
+    private val blurAnimator =
+        TickingFloatAnimator(BLUR_ANIMATION_DURATION, DecelerateInterpolator())
+    private val imageFadeAnimator =
+        TickingFloatAnimator(IMAGE_FADE_DURATION, DecelerateInterpolator()).apply {
+            snapTo(1f)
+        }
+    private val duotoneAnimator =
+        TickingFloatAnimator(DUOTONE_ANIMATION_DURATION, DecelerateInterpolator())
 
     private var userDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
     private var isBlurred = false
 
     // Duotone state
-    private var duotoneEnabled = false
+    private var duotoneAlwaysOn = false
     private var currentDuotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
     private var currentDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
     private var targetDuotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
     private var targetDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
+    private var targetDuotoneOpacity = 0f
 
     fun setImage(bitmap: Bitmap) {
         setImage(RendererImagePayload(original = bitmap, blurred = bitmap))
@@ -104,19 +112,29 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
         callbacks.requestRender()
     }
 
-    fun setDuotoneSettings(enabled: Boolean, lightColor: Int, darkColor: Int, animate: Boolean = true) {
-        duotoneEnabled = enabled
+    fun setDuotoneSettings(
+        enabled: Boolean,
+        alwaysOn: Boolean,
+        lightColor: Int,
+        darkColor: Int,
+        animate: Boolean = true
+    ) {
+        duotoneAlwaysOn = alwaysOn
+        targetDuotoneOpacity = if (enabled) 1f else 0f
 
         // Check if colors are actually changing
-        val colorsChanged = (lightColor != targetDuotoneLightColor || darkColor != targetDuotoneDarkColor)
+        val colorsChanged =
+            (lightColor != targetDuotoneLightColor || darkColor != targetDuotoneDarkColor)
 
         if (animate && colorsChanged) {
             // Capture current visual colors (what's actually being displayed right now)
             if (duotoneAnimator.isRunning) {
                 // Animation in progress - capture the current interpolated colors
                 val t = duotoneAnimator.currentValue
-                currentDuotoneLightColor = interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
-                currentDuotoneDarkColor = interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
+                currentDuotoneLightColor =
+                    interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
+                currentDuotoneDarkColor =
+                    interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
             } else {
                 // No animation - use the target (what's displayed)
                 currentDuotoneLightColor = targetDuotoneLightColor
@@ -212,16 +230,29 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
         }
 
         val imageAlpha = imageFadeAnimator.currentValue.coerceIn(0f, 1f)
-        previousPictureSet?.drawFrame(previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha,
-            duotoneEnabled, lightColor, darkColor)
-        currentPictureSet.drawFrame(mvpMatrix, blurAnimator.currentValue, imageAlpha,
-            duotoneEnabled, lightColor, darkColor)
 
+        // Calculate duotone opacity based on blur progress (0 = no duotone, 1 = full duotone)
         val blurProgress = if (blurKeyframes > 0) {
             (blurAnimator.currentValue / blurKeyframes).coerceIn(0f, 1f)
         } else {
             0f
         }
+
+        // Calculate final duotone opacity:
+        // - If alwaysOn: use targetDuotoneOpacity (1.0 when enabled, 0.0 when disabled)
+        // - If not alwaysOn: multiply by blur progress (fade in/out with blur)
+        val duotoneOpacity =
+            if (duotoneAlwaysOn) targetDuotoneOpacity else (targetDuotoneOpacity * blurProgress)
+
+        previousPictureSet?.drawFrame(
+            previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha,
+            lightColor, darkColor, duotoneOpacity
+        )
+        currentPictureSet.drawFrame(
+            mvpMatrix, blurAnimator.currentValue, imageAlpha,
+            lightColor, darkColor, duotoneOpacity
+        )
+
         val overlayAlpha = (userDimAmount * blurProgress * 255).toInt().coerceIn(0, 255)
         colorOverlay.color = Color.argb(overlayAlpha, 0, 0, 0)
         Matrix.setIdentityM(modelMatrix, 0)
@@ -279,7 +310,13 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
             val prevRatio = safeSurface / prevAspect
             buildProjectionMatrix(previousProjectionMatrix, prevRatio)
         } else {
-            System.arraycopy(projectionMatrix, 0, previousProjectionMatrix, 0, projectionMatrix.size)
+            System.arraycopy(
+                projectionMatrix,
+                0,
+                previousProjectionMatrix,
+                0,
+                projectionMatrix.size
+            )
         }
     }
 
@@ -302,5 +339,106 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
         val bottom = -1f / zoom
         val top = 1f / zoom
         Matrix.orthoM(target, 0, left, right, bottom, top, 0f, 1f)
+    }
+}
+
+
+object GLUtil {
+    const val BYTES_PER_FLOAT = 4
+
+    fun loadShader(type: Int, shaderCode: String): Int {
+        val shader = GLES20.glCreateShader(type)
+        GLES20.glShaderSource(shader, shaderCode)
+        GLES20.glCompileShader(shader)
+        val compileStatus = IntArray(1)
+        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compileStatus, 0)
+        if (compileStatus[0] == 0) {
+            val log = GLES20.glGetShaderInfoLog(shader)
+            android.util.Log.e("GLUtil", "Shader compile error: $log")
+        }
+        return shader
+    }
+
+    fun createAndLinkProgram(
+        vertexShader: Int,
+        fragmentShader: Int,
+        attributes: Array<String>? = null
+    ): Int {
+        val program = GLES20.glCreateProgram()
+        checkGlError("glCreateProgram")
+        GLES20.glAttachShader(program, vertexShader)
+        GLES20.glAttachShader(program, fragmentShader)
+        attributes?.forEachIndexed { index, name ->
+            GLES20.glBindAttribLocation(program, index, name)
+        }
+        GLES20.glLinkProgram(program)
+        val linkStatus = IntArray(1)
+        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0)
+        if (linkStatus[0] == 0) {
+            val log = GLES20.glGetProgramInfoLog(program)
+            android.util.Log.e("GLUtil", "Program link error: $log")
+        }
+        GLES20.glDeleteShader(vertexShader)
+        GLES20.glDeleteShader(fragmentShader)
+        return program
+    }
+
+    fun loadTexture(bitmap: Bitmap): Int {
+        val textureHandle = IntArray(1)
+        GLES20.glGenTextures(1, textureHandle, 0)
+        checkGlError("glGenTextures")
+
+        if (textureHandle[0] != 0) {
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureHandle[0])
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D,
+                GLES20.GL_TEXTURE_WRAP_S,
+                GLES20.GL_CLAMP_TO_EDGE
+            )
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D,
+                GLES20.GL_TEXTURE_WRAP_T,
+                GLES20.GL_CLAMP_TO_EDGE
+            )
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D,
+                GLES20.GL_TEXTURE_MIN_FILTER,
+                GLES20.GL_LINEAR
+            )
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D,
+                GLES20.GL_TEXTURE_MAG_FILTER,
+                GLES20.GL_LINEAR
+            )
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            checkGlError("texImage2D")
+        }
+
+        if (textureHandle[0] == 0) {
+            error("Error loading texture.")
+        }
+
+        return textureHandle[0]
+    }
+
+    fun asFloatBuffer(array: FloatArray): FloatBuffer {
+        return newFloatBuffer(array.size).apply {
+            put(array)
+            position(0)
+        }
+    }
+
+    fun newFloatBuffer(size: Int): FloatBuffer {
+        return ByteBuffer.allocateDirect(size * BYTES_PER_FLOAT)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply { position(0) }
+    }
+
+    fun checkGlError(op: String) {
+        val error = GLES20.glGetError()
+        if (error != GLES20.GL_NO_ERROR) {
+            throw RuntimeException("$op: glError $error")
+        }
     }
 }

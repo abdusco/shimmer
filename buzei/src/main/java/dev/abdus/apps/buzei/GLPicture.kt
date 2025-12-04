@@ -4,7 +4,96 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.opengl.GLES20
 import java.nio.FloatBuffer
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.min
+
+class GLPictureSet(private val blurKeyframes: Int) {
+
+    private val pictures = arrayOfNulls<GLPicture>(blurKeyframes + 1)
+
+    fun load(bitmaps: List<Bitmap?>) {
+        destroyPictures()
+        for (index in pictures.indices) {
+            pictures[index] = bitmaps.getOrNull(index)?.let { GLPicture(it) }
+        }
+    }
+
+    fun drawFrame(
+        mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
+        duotoneLightColor: Int = 0xFFFFFFFF.toInt(),
+        duotoneDarkColor: Int = 0xFF000000.toInt(), duotoneOpacity: Float = 0f
+    ) {
+        if (pictures.all { it == null }) {
+            return
+        }
+
+        val clampedBlur = blurFrame.coerceIn(0f, blurKeyframes.toFloat())
+        val lo = floor(clampedBlur.toDouble()).toInt().coerceAtMost(blurKeyframes)
+        val hi = ceil(clampedBlur.toDouble()).toInt().coerceAtMost(blurKeyframes)
+        val localHiAlpha = clampedBlur - lo
+
+        when {
+            globalAlpha <= 0f -> return
+            lo == hi -> {
+                pictures[lo]?.draw(
+                    mvpMatrix,
+                    globalAlpha,
+                    duotoneLightColor,
+                    duotoneDarkColor,
+                    duotoneOpacity
+                )
+            }
+
+            globalAlpha == 1f -> {
+                pictures[lo]?.draw(
+                    mvpMatrix,
+                    1f - localHiAlpha,
+                    duotoneLightColor,
+                    duotoneDarkColor,
+                    duotoneOpacity
+                )
+                pictures[hi]?.draw(
+                    mvpMatrix,
+                    localHiAlpha,
+                    duotoneLightColor,
+                    duotoneDarkColor,
+                    duotoneOpacity
+                )
+            }
+
+            else -> {
+                val loPicture = pictures[lo] ?: return
+                val hiPicture = pictures[hi] ?: return
+                val newLocalLoAlpha =
+                    globalAlpha * (localHiAlpha - 1) / (globalAlpha * localHiAlpha - 1)
+                val newLocalHiAlpha = globalAlpha * localHiAlpha
+                loPicture.draw(
+                    mvpMatrix,
+                    newLocalLoAlpha,
+                    duotoneLightColor,
+                    duotoneDarkColor,
+                    duotoneOpacity
+                )
+                hiPicture.draw(
+                    mvpMatrix,
+                    newLocalHiAlpha,
+                    duotoneLightColor,
+                    duotoneDarkColor,
+                    duotoneOpacity
+                )
+            }
+        }
+    }
+
+    fun destroyPictures() {
+        for (i in pictures.indices) {
+            pictures[i]?.destroy()
+            pictures[i] = null
+        }
+    }
+}
+
 
 class GLPicture(bitmap: Bitmap) {
 
@@ -32,9 +121,9 @@ class GLPicture(bitmap: Bitmap) {
         private var UNIFORM_MVP_MATRIX_HANDLE = 0
         private var UNIFORM_TEXTURE_HANDLE = 0
         private var UNIFORM_ALPHA_HANDLE = 0
-        private var UNIFORM_DUOTONE_ENABLED_HANDLE = 0
         private var UNIFORM_DUOTONE_LIGHT_HANDLE = 0
         private var UNIFORM_DUOTONE_DARK_HANDLE = 0
+        private var UNIFORM_DUOTONE_OPACITY_HANDLE = 0
 
         private var TILE_SIZE: Int = 0
 
@@ -49,9 +138,12 @@ class GLPicture(bitmap: Bitmap) {
             UNIFORM_MVP_MATRIX_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uMVPMatrix")
             UNIFORM_TEXTURE_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uTexture")
             UNIFORM_ALPHA_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uAlpha")
-            UNIFORM_DUOTONE_ENABLED_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneEnabled")
-            UNIFORM_DUOTONE_LIGHT_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneLightColor")
-            UNIFORM_DUOTONE_DARK_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneDarkColor")
+            UNIFORM_DUOTONE_LIGHT_HANDLE =
+                GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneLightColor")
+            UNIFORM_DUOTONE_DARK_HANDLE =
+                GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneDarkColor")
+            UNIFORM_DUOTONE_OPACITY_HANDLE =
+                GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneOpacity")
 
             val maxTextureSize = IntArray(1)
             GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, maxTextureSize, 0)
@@ -75,19 +167,16 @@ class GLPicture(bitmap: Bitmap) {
                 "precision mediump float;" +
                 "uniform sampler2D uTexture;" +
                 "uniform float uAlpha;" +
-                "uniform int uDuotoneEnabled;" +
                 "uniform vec3 uDuotoneLightColor;" +
                 "uniform vec3 uDuotoneDarkColor;" +
+                "uniform float uDuotoneOpacity;" +
                 "varying vec2 vTexCoords;" +
                 "void main(){" +
                 "  vec4 color = texture2D(uTexture, vTexCoords);" +
-                "  if (uDuotoneEnabled == 1) {" +
-                "    float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;" +
-                "    vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);" +
-                "    gl_FragColor = vec4(duotone, color.a * uAlpha);" +
-                "  } else {" +
-                "    gl_FragColor = vec4(color.rgb, color.a * uAlpha);" +
-                "  }" +
+                "  float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;" +
+                "  vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);" +
+                "  vec3 finalColor = mix(color.rgb, duotone, uDuotoneOpacity);" +
+                "  gl_FragColor = vec4(finalColor, color.a * uAlpha);" +
                 "}"
     }
 
@@ -144,8 +233,11 @@ class GLPicture(bitmap: Bitmap) {
         }
     }
 
-    fun draw(mvpMatrix: FloatArray, alpha: Float, duotoneEnabled: Boolean = false,
-             duotoneLightColor: Int = 0xFFFFFFFF.toInt(), duotoneDarkColor: Int = 0xFF000000.toInt()) {
+    fun draw(
+        mvpMatrix: FloatArray, alpha: Float,
+        duotoneLightColor: Int = 0xFFFFFFFF.toInt(), duotoneDarkColor: Int = 0xFF000000.toInt(),
+        duotoneOpacity: Float = 0f
+    ) {
         if (textureHandles.isEmpty()) {
             return
         }
@@ -170,7 +262,6 @@ class GLPicture(bitmap: Bitmap) {
         GLES20.glUniform1f(UNIFORM_ALPHA_HANDLE, alpha)
 
         // Set duotone uniforms
-        GLES20.glUniform1i(UNIFORM_DUOTONE_ENABLED_HANDLE, if (duotoneEnabled) 1 else 0)
         GLES20.glUniform3f(
             UNIFORM_DUOTONE_LIGHT_HANDLE,
             android.graphics.Color.red(duotoneLightColor) / 255f,
@@ -183,6 +274,7 @@ class GLPicture(bitmap: Bitmap) {
             android.graphics.Color.green(duotoneDarkColor) / 255f,
             android.graphics.Color.blue(duotoneDarkColor) / 255f
         )
+        GLES20.glUniform1f(UNIFORM_DUOTONE_OPACITY_HANDLE, duotoneOpacity)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glUniform1i(UNIFORM_TEXTURE_HANDLE, 0)

@@ -226,6 +226,7 @@ class BuzeiWallpaperService : GLWallpaperService() {
             queueRendererEvent {
                 renderer.setDuotoneSettings(
                     settings.enabled,
+                    settings.alwaysOn,
                     settings.lightColor,
                     settings.darkColor,
                     animate = animate
