@@ -10,7 +10,6 @@ import android.view.animation.DecelerateInterpolator
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
-import kotlin.math.min
 
 data class RendererImagePayload(
     val original: Bitmap,
@@ -291,11 +290,12 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
         }
         val zoom = max(1f, screenToBitmapAspectRatio)
         val scaledBitmapToScreenAspectRatio = zoom / screenToBitmapAspectRatio
-        val maxPanScreenWidths = min(1.8f, scaledBitmapToScreenAspectRatio)
-        val minPan =
-            (1f - maxPanScreenWidths / scaledBitmapToScreenAspectRatio) / 2f
-        val maxPan =
-            (1f + (maxPanScreenWidths - 2f) / scaledBitmapToScreenAspectRatio) / 2f
+
+        // Allow full panning across the entire image width (no artificial limit)
+        val maxPanScreenWidths = scaledBitmapToScreenAspectRatio
+
+        val minPan = (1f - maxPanScreenWidths / scaledBitmapToScreenAspectRatio) / 2f
+        val maxPan = (1f + (maxPanScreenWidths - 2f) / scaledBitmapToScreenAspectRatio) / 2f
         val panFraction = minPan + (maxPan - minPan) * normalOffsetX
         val left = -1f + 2f * panFraction
         val right = left + 2f / scaledBitmapToScreenAspectRatio
