@@ -18,18 +18,18 @@ class ImageTransitionScheduler(
     private var transitionIntervalMillis = WallpaperPreferences.DEFAULT_TRANSITION_INTERVAL_MILLIS
     private var transitionEnabled = true
 
-    fun updateInterval(intervalMillis: Long, hasFolders: Boolean) {
+    fun updateInterval(intervalMillis: Long) {
         transitionIntervalMillis = intervalMillis
-        restartIfNecessary(hasFolders)
+        restartIfNecessary()
     }
 
-    fun updateEnabled(enabled: Boolean, hasFolders: Boolean) {
+    fun updateEnabled(enabled: Boolean) {
         transitionEnabled = enabled
-        restartIfNecessary(hasFolders)
+        restartIfNecessary()
     }
 
-    fun start(hasFolders: Boolean) {
-        restartIfNecessary(hasFolders)
+    fun start() {
+        restartIfNecessary()
     }
 
     fun cancel() {
@@ -37,16 +37,16 @@ class ImageTransitionScheduler(
         future = null
     }
 
-    fun restartAfterManualAdvance(hasFolders: Boolean) {
+    fun restartAfterManualAdvance() {
         if (!transitionEnabled) {
             return
         }
-        restartIfNecessary(hasFolders)
+        restartIfNecessary()
     }
 
-    private fun restartIfNecessary(hasFolders: Boolean) {
+    private fun restartIfNecessary() {
         future?.cancel(false)
-        if (!transitionEnabled || !hasFolders) {
+        if (!transitionEnabled) {
             future = null
             return
         }

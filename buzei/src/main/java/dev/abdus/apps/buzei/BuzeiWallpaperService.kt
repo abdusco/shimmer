@@ -256,18 +256,19 @@ class BuzeiWallpaperService : GLWallpaperService() {
                     loadDefaultImage()
                     return@execute
                 }
-                transitionScheduler.start(hasFolders = true)
+                // Only start scheduler if we successfully loaded an image
+                transitionScheduler.start()
             }
         }
 
         private fun applyTransitionIntervalPreference() {
             val interval = WallpaperPreferences.getTransitionIntervalMillis(prefs)
-            transitionScheduler.updateInterval(interval, folderRepository.hasFolders())
+            transitionScheduler.updateInterval(interval)
         }
 
         private fun applyTransitionEnabledPreference() {
             val enabled = WallpaperPreferences.isTransitionEnabled(prefs)
-            transitionScheduler.updateEnabled(enabled, folderRepository.hasFolders())
+            transitionScheduler.updateEnabled(enabled)
         }
 
         fun advanceToNextImage() {
@@ -297,11 +298,9 @@ class BuzeiWallpaperService : GLWallpaperService() {
         }
 
         private fun handleManualAdvance() {
-            val hadFolders = folderRepository.hasFolders()
             performAdvance()
-            if (hadFolders) {
-                transitionScheduler.restartAfterManualAdvance(hadFolders)
-            }
+            // Restart scheduler to reset the timer after manual advance
+            transitionScheduler.restartAfterManualAdvance()
         }
 
         private fun performAdvance(): Boolean {
