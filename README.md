@@ -1,4 +1,4 @@
-# Buzei
+# Shimmer
 
 A live wallpaper for Android that displays your photos with smooth GPU-based effects.
 

@@ -6,4 +6,4 @@ pluginManagement {
 }
 
 include ':gl-wallpaper'
-include ':buzei'
+include ':shimmer'

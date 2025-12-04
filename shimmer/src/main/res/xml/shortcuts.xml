@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_next_image"
+        android:shortcutId="shortcut_next_image"
+        android:shortcutShortLabel="@string/shortcut_next_image_short_label"
+        android:shortcutLongLabel="@string/shortcut_next_image_long_label">
+        <intent
+            android:action="dev.abdus.apps.shimmer.action.NEXT_IMAGE"
+            android:targetClass="dev.abdus.apps.shimmer.NextImageShortcutActivity"
+            android:targetPackage="dev.abdus.apps.shimmer" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_random_duotone"
+        android:shortcutId="shortcut_random_duotone"
+        android:shortcutShortLabel="@string/shortcut_random_duotone_short_label"
+        android:shortcutLongLabel="@string/shortcut_random_duotone_long_label">
+        <intent
+            android:action="dev.abdus.apps.shimmer.action.RANDOM_DUOTONE"
+            android:targetClass="dev.abdus.apps.shimmer.RandomDuotoneShortcutActivity"
+            android:targetPackage="dev.abdus.apps.shimmer" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>
