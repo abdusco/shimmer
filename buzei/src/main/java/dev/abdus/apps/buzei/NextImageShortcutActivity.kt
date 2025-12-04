@@ -11,7 +11,7 @@ class NextImageShortcutActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "Shortcut requested next image")
 
-        if (WallpaperUtil.isBuzeiActiveWallpaper(this)) {
+        if (WallpaperUtil.isActiveWallpaper(this)) {
             BuzeiWallpaperService.requestNextImage(this)
         } else {
             // Not active wallpaper, show splash screen

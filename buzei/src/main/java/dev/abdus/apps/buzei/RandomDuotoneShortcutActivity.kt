@@ -11,7 +11,7 @@ class RandomDuotoneShortcutActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "Shortcut requested next duotone preset")
 
-        if (WallpaperUtil.isBuzeiActiveWallpaper(this)) {
+        if (WallpaperUtil.isActiveWallpaper(this)) {
             BuzeiWallpaperService.requestNextDuotonePreset(this)
         } else {
             // Not active wallpaper, show splash screen

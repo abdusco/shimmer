@@ -13,7 +13,7 @@ object WallpaperUtil {
     /**
      * Checks if Buzei is currently set as the active live wallpaper.
      */
-    fun isBuzeiActiveWallpaper(context: Context): Boolean {
+    fun isActiveWallpaper(context: Context): Boolean {
         val wallpaperManager = WallpaperManager.getInstance(context)
         val wallpaperInfo = wallpaperManager.wallpaperInfo
 

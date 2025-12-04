@@ -37,7 +37,7 @@ class SplashActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // If wallpaper is already active, go directly to settings
-        if (WallpaperUtil.isBuzeiActiveWallpaper(this)) {
+        if (WallpaperUtil.isActiveWallpaper(this)) {
             navigateToSettings()
             return
         }
@@ -121,7 +121,7 @@ class SplashActivity : ComponentActivity() {
         super.onResume()
 
         // Check if wallpaper was just set and redirect to settings
-        if (WallpaperUtil.isBuzeiActiveWallpaper(this)) {
+        if (WallpaperUtil.isActiveWallpaper(this)) {
             navigateToSettings()
         }
     }
