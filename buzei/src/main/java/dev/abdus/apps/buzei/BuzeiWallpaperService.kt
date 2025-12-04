@@ -83,13 +83,13 @@ class BuzeiWallpaperService : GLWallpaperService() {
             setTouchEventsEnabled(true)
             setOffsetNotificationsEnabled(true)
 
-            applyPreferences(skipImageFolderReload = true)
             prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
+            // Apply all preferences now that surface is ready
             applyPreferences()
             super.requestRender()
         }
@@ -207,11 +207,8 @@ class BuzeiWallpaperService : GLWallpaperService() {
         }
 
 
-        private fun applyPreferences(skipImageFolderReload: Boolean = false) {
-            preferenceHandlers.forEach { (key, handler) ->
-                if (skipImageFolderReload && key == WallpaperPreferences.KEY_IMAGE_FOLDER_URIS) {
-                    return@forEach
-                }
+        private fun applyPreferences() {
+            preferenceHandlers.forEach { (_, handler) ->
                 handler()
             }
         }
