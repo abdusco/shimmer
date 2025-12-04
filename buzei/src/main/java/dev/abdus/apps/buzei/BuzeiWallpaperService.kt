@@ -154,7 +154,7 @@ class BuzeiWallpaperService : GLWallpaperService() {
             queueRendererEvent { renderer.setParallaxOffset(xOffset) }
         }
 
-        private fun loadImage() {
+        private fun loadDefaultImage() {
             if (folderRepository.hasFolders()) {
                 return
             }
@@ -248,12 +248,12 @@ class BuzeiWallpaperService : GLWallpaperService() {
             transitionScheduler.cancel()
             folderRepository.updateFolders(uris)
             if (!folderRepository.hasFolders()) {
-                loadImage()
+                loadDefaultImage()
                 return
             }
             folderScheduler.execute {
                 if (!loadNextImageFromFolders()) {
-                    loadImage()
+                    loadDefaultImage()
                     return@execute
                 }
                 transitionScheduler.start(hasFolders = true)
@@ -307,7 +307,7 @@ class BuzeiWallpaperService : GLWallpaperService() {
         private fun performAdvance(): Boolean {
             val loaded = loadNextImageFromFolders()
             if (!loaded && !folderRepository.hasFolders()) {
-                loadImage()
+                loadDefaultImage()
                 return false
             }
             return loaded

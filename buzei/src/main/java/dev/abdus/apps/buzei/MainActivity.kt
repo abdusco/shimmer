@@ -65,9 +65,12 @@ import androidx.documentfile.provider.DocumentFile
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
+import androidx.core.net.toUri
 
 class MainActivity : ComponentActivity() {
 
@@ -180,15 +183,24 @@ private fun BuzeiWallpaperPrompt(
     }
 
     LaunchedEffect(folderUris) {
+        // Keep existing previews for folders still in the list
         val updated = folderPreviews.filterKeys { it in folderUris }.toMutableMap()
-        folderUris.forEach { uri ->
-            if (!updated.containsKey(uri)) {
-                val preview = loadRandomFolderThumbnail(context, uri)
-                if (preview != null) {
-                    updated[uri] = preview
-                }
+
+        // Load missing thumbnails IN PARALLEL
+        val missingUris = folderUris.filter { !updated.containsKey(it) }
+        val newPreviews = missingUris.map { folderUri ->
+            async(Dispatchers.IO) {
+                folderUri to getFolderThumbnailUri(context, folderUri)
+            }
+        }.awaitAll()
+
+        // Add successfully loaded previews
+        newPreviews.forEach { (uri, preview) ->
+            if (preview != null) {
+                updated[uri] = preview
             }
         }
+
         folderPreviews = updated
     }
 
@@ -469,18 +481,15 @@ private fun FolderThumbnail(
     }
 }
 
-private suspend fun loadRandomFolderThumbnail(
+private suspend fun getFolderThumbnailUri(
     context: Context,
     folderUri: String
 ): Uri? {
     return withContext(Dispatchers.IO) {
         try {
             val folder =
-                DocumentFile.fromTreeUri(context, Uri.parse(folderUri)) ?: return@withContext null
-            folder.listFiles()
-                .filter { it.isFile && (it.type?.startsWith("image/") == true) }
-                .shuffled()
-                .firstOrNull()
+                DocumentFile.fromTreeUri(context, folderUri.toUri()) ?: return@withContext null
+            folder.listFiles().firstOrNull { it.isFile && (it.type?.startsWith("image/") == true) }
                 ?.uri
         } catch (ignored: SecurityException) {
             null
@@ -490,7 +499,7 @@ private suspend fun loadRandomFolderThumbnail(
 
 private fun formatTreeUriPath(uriString: String): String {
     return try {
-        val uri = Uri.parse(uriString)
+        val uri = uriString.toUri()
         val documentId = DocumentsContract.getTreeDocumentId(uri)
         val colonIndex = documentId.indexOf(':')
         val storage = if (colonIndex < 0) {
