@@ -12,7 +12,7 @@ class RandomDuotoneShortcutActivity : ComponentActivity() {
         Log.d(TAG, "Shortcut requested next duotone preset")
 
         if (WallpaperUtil.isBuzeiActiveWallpaper(this)) {
-            BuzeiWallpaperService.requestNextDuotonePreset()
+            BuzeiWallpaperService.requestNextDuotonePreset(this)
         } else {
             // Not active wallpaper, show splash screen
             val intent = Intent(this, SplashActivity::class.java)

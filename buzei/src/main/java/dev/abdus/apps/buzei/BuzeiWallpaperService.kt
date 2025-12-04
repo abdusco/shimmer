@@ -1,5 +1,9 @@
 package dev.abdus.apps.buzei
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -8,7 +12,6 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.widget.Toast
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService
-import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
@@ -17,15 +20,32 @@ class BuzeiWallpaperService : GLWallpaperService() {
     companion object {
         private const val MAX_BLUR_RADIUS_PIXELS = 150f
 
-        @Volatile
-        private var activeEngineRef: WeakReference<BuzeiWallpaperEngine>? = null
+        // Intent actions for communication
+        const val ACTION_NEXT_IMAGE = "dev.abdus.apps.buzei.action.NEXT_IMAGE"
+        const val ACTION_NEXT_DUOTONE = "dev.abdus.apps.buzei.action.RANDOM_DUOTONE"
 
-        fun requestNextImage() {
-            activeEngineRef?.get()?.advanceToNextImage()
+        /**
+         * Send a broadcast to request next image.
+         * Can be called from other apps using:
+         * context.sendBroadcast(Intent("dev.abdus.apps.buzei.action.NEXT_IMAGE"))
+         *
+         * Or via adb:
+         * adb shell am broadcast -a dev.abdus.apps.buzei.action.NEXT_IMAGE
+         */
+        fun requestNextImage(context: Context) {
+            context.sendBroadcast(Intent(ACTION_NEXT_IMAGE))
         }
 
-        fun requestNextDuotonePreset() {
-            activeEngineRef?.get()?.applyNextDuotonePreset()
+        /**
+         * Send a broadcast to request next duotone preset.
+         * Can be called from other apps using:
+         * context.sendBroadcast(Intent("dev.abdus.apps.buzei.action.RANDOM_DUOTONE"))
+         *
+         * Or via adb:
+         * adb shell am broadcast -a dev.abdus.apps.buzei.action.RANDOM_DUOTONE
+         */
+        fun requestNextDuotonePreset(context: Context) {
+            context.sendBroadcast(Intent(ACTION_NEXT_DUOTONE))
         }
     }
 
@@ -52,6 +72,15 @@ class BuzeiWallpaperService : GLWallpaperService() {
         private val prefs: SharedPreferences =
             WallpaperPreferences.prefs(this@BuzeiWallpaperService)
 
+        // BroadcastReceiver for handling shortcut actions
+        private val shortcutReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    ACTION_NEXT_IMAGE -> advanceToNextImage()
+                    ACTION_NEXT_DUOTONE -> applyNextDuotonePreset()
+                }
+            }
+        }
 
         private val preferenceHandlers: Map<String, () -> Unit> = mapOf(
             WallpaperPreferences.KEY_BLUR_AMOUNT to ::applyBlurPreference,
@@ -66,9 +95,6 @@ class BuzeiWallpaperService : GLWallpaperService() {
                 preferenceHandlers[key]?.invoke()
             }
 
-        init {
-            activeEngineRef = WeakReference(this)
-        }
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
@@ -82,6 +108,18 @@ class BuzeiWallpaperService : GLWallpaperService() {
             setOffsetNotificationsEnabled(true)
 
             prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
+
+            // Register shortcut broadcast receiver (exported - can receive from other apps)
+            val filter = IntentFilter().apply {
+                addAction(ACTION_NEXT_IMAGE)
+                addAction(ACTION_NEXT_DUOTONE)
+            }
+            androidx.core.content.ContextCompat.registerReceiver(
+                this@BuzeiWallpaperService,
+                shortcutReceiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+            )
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -110,11 +148,13 @@ class BuzeiWallpaperService : GLWallpaperService() {
 
         override fun onDestroy() {
             prefs.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+            try {
+                this@BuzeiWallpaperService.unregisterReceiver(shortcutReceiver)
+            } catch (_: IllegalArgumentException) {
+                // Receiver was not registered, ignore
+            }
             transitionScheduler.cancel()
             folderScheduler.shutdownNow()
-            if (activeEngineRef?.get() == this) {
-                activeEngineRef = null
-            }
             super.onDestroy()
         }
 

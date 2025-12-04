@@ -53,23 +53,6 @@
                 android:resource="@xml/wallpaper" />
         </service>
 
-        <receiver
-            android:name=".NextImageShortcutReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="dev.abdus.apps.buzei.action.NEXT_IMAGE" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".RandomDuotoneShortcutReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="dev.abdus.apps.buzei.action.RANDOM_DUOTONE" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
 
     </application>
 
