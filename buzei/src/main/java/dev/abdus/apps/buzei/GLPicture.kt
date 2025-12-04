@@ -21,8 +21,7 @@ class GLPictureSet(private val blurKeyframes: Int) {
 
     fun drawFrame(
         mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
-        duotoneLightColor: Int = 0xFFFFFFFF.toInt(),
-        duotoneDarkColor: Int = 0xFF000000.toInt(), duotoneOpacity: Float = 0f
+        duotone: Duotone = Duotone()
     ) {
         if (pictures.all { it == null }) {
             return
@@ -36,30 +35,12 @@ class GLPictureSet(private val blurKeyframes: Int) {
         when {
             globalAlpha <= 0f -> return
             lo == hi -> {
-                pictures[lo]?.draw(
-                    mvpMatrix,
-                    globalAlpha,
-                    duotoneLightColor,
-                    duotoneDarkColor,
-                    duotoneOpacity
-                )
+                pictures[lo]?.draw(mvpMatrix, globalAlpha, duotone)
             }
 
             globalAlpha == 1f -> {
-                pictures[lo]?.draw(
-                    mvpMatrix,
-                    1f - localHiAlpha,
-                    duotoneLightColor,
-                    duotoneDarkColor,
-                    duotoneOpacity
-                )
-                pictures[hi]?.draw(
-                    mvpMatrix,
-                    localHiAlpha,
-                    duotoneLightColor,
-                    duotoneDarkColor,
-                    duotoneOpacity
-                )
+                pictures[lo]?.draw(mvpMatrix, 1f - localHiAlpha, duotone)
+                pictures[hi]?.draw(mvpMatrix, localHiAlpha, duotone)
             }
 
             else -> {
@@ -68,20 +49,8 @@ class GLPictureSet(private val blurKeyframes: Int) {
                 val newLocalLoAlpha =
                     globalAlpha * (localHiAlpha - 1) / (globalAlpha * localHiAlpha - 1)
                 val newLocalHiAlpha = globalAlpha * localHiAlpha
-                loPicture.draw(
-                    mvpMatrix,
-                    newLocalLoAlpha,
-                    duotoneLightColor,
-                    duotoneDarkColor,
-                    duotoneOpacity
-                )
-                hiPicture.draw(
-                    mvpMatrix,
-                    newLocalHiAlpha,
-                    duotoneLightColor,
-                    duotoneDarkColor,
-                    duotoneOpacity
-                )
+                loPicture.draw(mvpMatrix, newLocalLoAlpha, duotone)
+                hiPicture.draw(mvpMatrix, newLocalHiAlpha, duotone)
             }
         }
     }
@@ -235,8 +204,7 @@ class GLPicture(bitmap: Bitmap) {
 
     fun draw(
         mvpMatrix: FloatArray, alpha: Float,
-        duotoneLightColor: Int = 0xFFFFFFFF.toInt(), duotoneDarkColor: Int = 0xFF000000.toInt(),
-        duotoneOpacity: Float = 0f
+        duotone: Duotone = Duotone()
     ) {
         if (textureHandles.isEmpty()) {
             return
@@ -264,17 +232,17 @@ class GLPicture(bitmap: Bitmap) {
         // Set duotone uniforms
         GLES20.glUniform3f(
             UNIFORM_DUOTONE_LIGHT_HANDLE,
-            android.graphics.Color.red(duotoneLightColor) / 255f,
-            android.graphics.Color.green(duotoneLightColor) / 255f,
-            android.graphics.Color.blue(duotoneLightColor) / 255f
+            android.graphics.Color.red(duotone.lightColor) / 255f,
+            android.graphics.Color.green(duotone.lightColor) / 255f,
+            android.graphics.Color.blue(duotone.lightColor) / 255f
         )
         GLES20.glUniform3f(
             UNIFORM_DUOTONE_DARK_HANDLE,
-            android.graphics.Color.red(duotoneDarkColor) / 255f,
-            android.graphics.Color.green(duotoneDarkColor) / 255f,
-            android.graphics.Color.blue(duotoneDarkColor) / 255f
+            android.graphics.Color.red(duotone.darkColor) / 255f,
+            android.graphics.Color.green(duotone.darkColor) / 255f,
+            android.graphics.Color.blue(duotone.darkColor) / 255f
         )
-        GLES20.glUniform1f(UNIFORM_DUOTONE_OPACITY_HANDLE, duotoneOpacity)
+        GLES20.glUniform1f(UNIFORM_DUOTONE_OPACITY_HANDLE, duotone.opacity)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glUniform1i(UNIFORM_TEXTURE_HANDLE, 0)

@@ -21,6 +21,12 @@ data class RendererImagePayload(
     val sourceUri: Uri? = null
 )
 
+data class Duotone(
+    val lightColor: Int = 0xFFFFFFFF.toInt(),
+    val darkColor: Int = 0xFF000000.toInt(),
+    val opacity: Float = 0f
+)
+
 class BuzeiRenderer(private val callbacks: Callbacks) :
     GLSurfaceView.Renderer {
 
@@ -244,13 +250,13 @@ class BuzeiRenderer(private val callbacks: Callbacks) :
         val duotoneOpacity =
             if (duotoneAlwaysOn) targetDuotoneOpacity else (targetDuotoneOpacity * blurProgress)
 
+        val duotone = Duotone(lightColor, darkColor, duotoneOpacity)
+
         previousPictureSet?.drawFrame(
-            previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha,
-            lightColor, darkColor, duotoneOpacity
+            previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha, duotone
         )
         currentPictureSet.drawFrame(
-            mvpMatrix, blurAnimator.currentValue, imageAlpha,
-            lightColor, darkColor, duotoneOpacity
+            mvpMatrix, blurAnimator.currentValue, imageAlpha, duotone
         )
 
         val overlayAlpha = (userDimAmount * blurProgress * 255).toInt().coerceIn(0, 255)
