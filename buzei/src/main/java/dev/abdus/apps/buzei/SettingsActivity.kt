@@ -1,7 +1,5 @@
 package dev.abdus.apps.buzei
 
-import android.app.WallpaperManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -32,7 +30,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -59,8 +56,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -70,36 +67,22 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
-import androidx.core.net.toUri
 
-class MainActivity : ComponentActivity() {
+class SettingsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawableResource(android.R.color.transparent)
         setContent {
-            BuzeiWallpaperPrompt(
-                onSetWallpaper = { openWallpaperPicker() }
-            )
+            BuzeiSettingsScreen()
         }
-    }
-
-    private fun openWallpaperPicker() {
-        val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-            putExtra(
-                WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                ComponentName(this@MainActivity, BuzeiWallpaperService::class.java)
-            )
-        }
-        startActivity(intent)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BuzeiWallpaperPrompt(
-    modifier: Modifier = Modifier,
-    onSetWallpaper: () -> Unit = {}
+private fun BuzeiSettingsScreen(
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val prefs = remember { WallpaperPreferences.prefs(context) }
@@ -210,14 +193,6 @@ private fun BuzeiWallpaperPrompt(
             TopAppBar(
                 title = { Text("Buzei") },
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onSetWallpaper) {
-                Text(
-                    text = "Set wallpaper",
-                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 24.dp)
-                )
-            }
         }
     ) { paddingValues ->
         Surface(
@@ -800,8 +775,3 @@ private val HEX_COLOR_REGEX = "^#[0-9A-Fa-f]{6}$".toRegex()
 private fun colorIntToComposeColor(colorInt: Int): Color =
     Color(colorInt.toLong() and 0xFFFFFFFFL)
 
-@Preview(showBackground = true)
-@Composable
-private fun BuzeiWallpaperPromptPreview() {
-    BuzeiWallpaperPrompt()
-}
