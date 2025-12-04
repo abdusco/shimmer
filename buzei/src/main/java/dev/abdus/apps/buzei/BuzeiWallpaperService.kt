@@ -283,12 +283,15 @@ class BuzeiWallpaperService : GLWallpaperService() {
                 return
             }
             folderScheduler.execute {
-                if (!loadNextImageFromFolders()) {
+                if (!loadNextImageFromFolders(skipBlur = true)) {
                     loadDefaultImage()
                     return@execute
                 }
                 // Only start scheduler if we successfully loaded an image
                 transitionScheduler.start()
+
+                // Apply blur in background after initial display
+                reprocessCurrentImage()
             }
         }
 
@@ -343,8 +346,8 @@ class BuzeiWallpaperService : GLWallpaperService() {
             return loaded
         }
 
-        private fun loadNextImageFromFolders(): Boolean {
-            val payload = prepareNextPayload() ?: return false
+        private fun loadNextImageFromFolders(skipBlur: Boolean = false): Boolean {
+            val payload = prepareNextPayload(skipBlur) ?: return false
             queueRendererEvent(allowWhenSurfaceUnavailable = true) {
                 renderer.setImage(payload)
             }
@@ -354,15 +357,22 @@ class BuzeiWallpaperService : GLWallpaperService() {
             return true
         }
 
-        private fun prepareNextPayload(): RendererImagePayload? {
+        private fun prepareNextPayload(skipBlur: Boolean = false): RendererImagePayload? {
             val nextUri = folderRepository.nextImageUri() ?: return null
-            return prepareRendererImage(nextUri)
+            return prepareRendererImage(nextUri, skipBlur)
         }
 
-        private fun prepareRendererImage(uri: Uri): RendererImagePayload? {
+        private fun prepareRendererImage(uri: Uri, skipBlur: Boolean = false): RendererImagePayload? {
             val bitmap = decodeBitmapFromUri(uri) ?: return null
-            val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-            val blurred = processImageForRenderer(bitmap, blurAmount)
+
+            // Skip blur for fast initial load
+            val blurred = if (skipBlur) {
+                bitmap
+            } else {
+                val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+                processImageForRenderer(bitmap, blurAmount)
+            }
+
             return RendererImagePayload(
                 original = bitmap,
                 blurred = blurred,
