@@ -15,40 +15,71 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
 
+/**
+ * Payload containing image data for the renderer.
+ * @property original The original unprocessed bitmap
+ * @property blurred The pre-blurred bitmap
+ * @property sourceUri Optional URI of the source image
+ */
 data class RendererImagePayload(
     val original: Bitmap,
     val blurred: Bitmap,
     val sourceUri: Uri? = null
 )
 
+/**
+ * Duotone color effect configuration.
+ * @property lightColor Color for highlights (default: white)
+ * @property darkColor Color for shadows (default: black)
+ * @property opacity Effect opacity (0.0 = disabled, 1.0 = full effect)
+ */
 data class Duotone(
-    val lightColor: Int = 0xFFFFFFFF.toInt(),
-    val darkColor: Int = 0xFF000000.toInt(),
+    val lightColor: Int = Color.WHITE,
+    val darkColor: Int = Color.BLACK,
     val opacity: Float = 0f
 )
 
+/**
+ * OpenGL ES 2.0 renderer for the Shimmer wallpaper.
+ * Handles rendering of images with blur, duotone effects, and parallax scrolling.
+ */
 class ShimmerRenderer(private val callbacks: Callbacks) :
     GLSurfaceView.Renderer {
 
+    /**
+     * Callbacks for the renderer to communicate with the host.
+     */
     interface Callbacks {
+        /** Request a new frame to be rendered */
         fun requestRender()
     }
 
     companion object {
+        /** Duration of blur animation in milliseconds */
         private const val BLUR_ANIMATION_DURATION = 1200
+
+        /** Duration of image crossfade animation in milliseconds */
         private const val IMAGE_FADE_DURATION = 1200
+
+        /** Duration of duotone color transition in milliseconds */
         private const val DUOTONE_ANIMATION_DURATION = 1200
     }
 
+    // Image state
     private var originalBitmap: Bitmap? = null
     private var blurredBitmap: Bitmap? = null
     private var pendingImage: RendererImagePayload? = null
+
+    // Surface state
     private var surfaceCreated = false
     private var surfaceAspect = 1f
     private var bitmapAspect = 1f
     private var previousBitmapAspect: Float? = null
+
+    /** Parallax offset (0.0 = left, 0.5 = center, 1.0 = right) */
     private var normalOffsetX = 0.5f
 
+    // Transformation matrices
     private val mvpMatrix = FloatArray(16)
     private val previousMvpMatrix = FloatArray(16)
     private val projectionMatrix = FloatArray(16)
@@ -58,23 +89,24 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     private val viewMatrix = FloatArray(16)
     private val modelMatrix = FloatArray(16)
 
+    // OpenGL resources
     private var pictureSet: GLPictureSet? = null
     private var previousPictureSet: GLPictureSet? = null
     private lateinit var colorOverlay: GLColorOverlay
-    private val blurKeyframes = 1
-    private val blurAnimator =
-        TickingFloatAnimator(BLUR_ANIMATION_DURATION, DecelerateInterpolator())
-    private val imageFadeAnimator =
-        TickingFloatAnimator(IMAGE_FADE_DURATION, DecelerateInterpolator()).apply {
-            snapTo(1f)
-        }
-    private val duotoneAnimator =
-        TickingFloatAnimator(DUOTONE_ANIMATION_DURATION, DecelerateInterpolator())
 
+    // Animation state
+    private val blurKeyframes = 1
+    private val blurAnimator = TickingFloatAnimator(BLUR_ANIMATION_DURATION, DecelerateInterpolator())
+    private val imageFadeAnimator = TickingFloatAnimator(IMAGE_FADE_DURATION, DecelerateInterpolator()).apply {
+        snapTo(1f)
+    }
+    private val duotoneAnimator = TickingFloatAnimator(DUOTONE_ANIMATION_DURATION, DecelerateInterpolator())
+
+    // Visual effects state
     private var userDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
     private var isBlurred = false
 
-    // Duotone state
+    // Duotone effect state
     private var duotoneAlwaysOn = false
     private var currentDuotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
     private var currentDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
@@ -82,10 +114,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     private var targetDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
     private var targetDuotoneOpacity = 0f
 
-    fun setImage(bitmap: Bitmap) {
-        setImage(RendererImagePayload(original = bitmap, blurred = bitmap))
-    }
-
+    /**
+     * Sets the wallpaper image with pre-processed blur variant.
+     * @param image Image payload containing original and blurred bitmaps
+     */
     fun setImage(image: RendererImagePayload) {
         if (!surfaceCreated) {
             pendingImage = image
@@ -98,14 +130,15 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
         bitmapAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height
 
-        // Trust the service-provided pre-processed bitmap
         blurredBitmap = image.blurred
 
         updatePictureSet()
         recomputeProjectionMatrix()
     }
 
-
+    /**
+     * Toggles the blur effect on/off with animation.
+     */
     fun toggleBlur() {
         isBlurred = !isBlurred
         val target = if (isBlurred) blurKeyframes.toFloat() else 0f
@@ -113,11 +146,23 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         callbacks.requestRender()
     }
 
+    /**
+     * Sets the dim overlay amount when blurred.
+     * @param amount Dim amount (0.0 = no dimming, 1.0 = full dimming)
+     */
     fun setUserDimAmount(amount: Float) {
         userDimAmount = amount.coerceIn(0f, 1f)
         callbacks.requestRender()
     }
 
+    /**
+     * Configures the duotone color effect.
+     * @param enabled Whether the duotone effect is enabled
+     * @param alwaysOn If true, effect is always visible; if false, only visible when blurred
+     * @param lightColor Color for highlights
+     * @param darkColor Color for shadows
+     * @param animate Whether to animate the color transition
+     */
     fun setDuotoneSettings(
         enabled: Boolean,
         alwaysOn: Boolean,
@@ -128,33 +173,27 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         duotoneAlwaysOn = alwaysOn
         targetDuotoneOpacity = if (enabled) 1f else 0f
 
-        // Check if colors are actually changing
-        val colorsChanged =
-            (lightColor != targetDuotoneLightColor || darkColor != targetDuotoneDarkColor)
+        val colorsChanged = lightColor != targetDuotoneLightColor || darkColor != targetDuotoneDarkColor
 
         if (animate && colorsChanged) {
-            // Capture current visual colors (what's actually being displayed right now)
+            // Capture current visual state
             if (duotoneAnimator.isRunning) {
-                // Animation in progress - capture the current interpolated colors
+                // Interpolate from mid-animation colors
                 val t = duotoneAnimator.currentValue
-                currentDuotoneLightColor =
-                    interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
-                currentDuotoneDarkColor =
-                    interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
+                currentDuotoneLightColor = interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
+                currentDuotoneDarkColor = interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
             } else {
-                // No animation - use the target (what's displayed)
+                // Use current target colors as starting point
                 currentDuotoneLightColor = targetDuotoneLightColor
                 currentDuotoneDarkColor = targetDuotoneDarkColor
             }
 
-            // Set new target colors
+            // Set new targets and animate
             targetDuotoneLightColor = lightColor
             targetDuotoneDarkColor = darkColor
-
-            // Start animation from 0 to 1 (will interpolate from current to new target)
             duotoneAnimator.start(startValue = 0f, endValue = 1f)
         } else {
-            // Instant change (no animation)
+            // Apply instantly
             currentDuotoneLightColor = lightColor
             currentDuotoneDarkColor = darkColor
             targetDuotoneLightColor = lightColor
@@ -164,6 +203,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         callbacks.requestRender()
     }
 
+    /**
+     * Linearly interpolates between two colors.
+     * @param from Starting color
+     * @param to Target color
+     * @param t Interpolation factor (0.0 = from, 1.0 = to)
+     * @return Interpolated color
+     */
     private fun interpolateColor(from: Int, to: Int, t: Float): Int {
         val fromR = Color.red(from)
         val fromG = Color.green(from)
@@ -212,11 +258,14 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
         val currentPictureSet = pictureSet ?: return
+
+        // Compute transformation matrices
         Matrix.setIdentityM(modelMatrix, 0)
         Matrix.multiplyMM(viewModelMatrix, 0, viewMatrix, 0, modelMatrix, 0)
         Matrix.multiplyMM(previousMvpMatrix, 0, previousProjectionMatrix, 0, viewModelMatrix, 0)
         Matrix.multiplyMM(mvpMatrix, 0, projectionMatrix, 0, viewModelMatrix, 0)
 
+        // Update animations
         val stillAnimating = blurAnimator.tick()
         val imageStillAnimating = imageFadeAnimator.tick()
         val duotoneStillAnimating = duotoneAnimator.tick()
@@ -252,29 +301,39 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         val duotone = Duotone(lightColor, darkColor, duotoneOpacity)
 
+        // Draw previous image (fade out during transition)
         previousPictureSet?.drawFrame(
             previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha, duotone
         )
+
+        // Draw current image (fade in during transition)
         currentPictureSet.drawFrame(
             mvpMatrix, blurAnimator.currentValue, imageAlpha, duotone
         )
 
+        // Draw dim overlay (increases with blur progress)
         val overlayAlpha = (userDimAmount * blurProgress * 255).toInt().coerceIn(0, 255)
         colorOverlay.color = Color.argb(overlayAlpha, 0, 0, 0)
         Matrix.setIdentityM(modelMatrix, 0)
         colorOverlay.draw(modelMatrix)
 
+        // Clean up previous picture set after fade completes
         if (!imageStillAnimating && imageAlpha >= 1f) {
             previousPictureSet?.destroyPictures()
             previousPictureSet = null
             previousBitmapAspect = null
         }
 
+        // Request another frame if any animation is still running
         if (stillAnimating || imageStillAnimating || duotoneStillAnimating) {
             callbacks.requestRender()
         }
     }
 
+    /**
+     * Updates the OpenGL picture set with current bitmaps and initiates crossfade animation.
+     * @param preserveAspect If true, preserves the aspect ratio for smooth color-only transitions
+     */
     private fun updatePictureSet(preserveAspect: Boolean = false) {
         val baseOriginal = originalBitmap ?: return
         val blurred = blurredBitmap ?: baseOriginal
@@ -295,7 +354,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         callbacks.requestRender()
     }
 
-
+    /**
+     * Sets the parallax scroll offset for the wallpaper.
+     * @param offset Normalized offset (0.0 = leftmost, 0.5 = center, 1.0 = rightmost)
+     */
     fun setParallaxOffset(offset: Float) {
         normalOffsetX = offset.coerceIn(0f, 1f)
         recomputeProjectionMatrix()
@@ -304,58 +366,79 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
     }
 
+    /**
+     * Recomputes projection matrices for current and previous images.
+     * Handles aspect ratio matching and parallax offset.
+     */
     private fun recomputeProjectionMatrix() {
-        val safeSurface = surfaceAspect.takeIf { it.isFinite() && it > 0f } ?: 1f
+        val safeSurfaceAspect = surfaceAspect.takeIf { it.isFinite() && it > 0f } ?: 1f
         val safeBitmapAspect = bitmapAspect.takeIf { it.isFinite() && it > 0f } ?: 1f
-        val screenToBitmapAspectRatio = safeSurface / safeBitmapAspect
-        buildProjectionMatrix(tempProjectionMatrix, screenToBitmapAspectRatio)
+        val aspectRatio = safeSurfaceAspect / safeBitmapAspect
+
+        buildProjectionMatrix(tempProjectionMatrix, aspectRatio)
         System.arraycopy(tempProjectionMatrix, 0, projectionMatrix, 0, tempProjectionMatrix.size)
 
         val prevAspect = previousBitmapAspect?.takeIf { it.isFinite() && it > 0f }
         if (prevAspect != null) {
-            val prevRatio = safeSurface / prevAspect
-            buildProjectionMatrix(previousProjectionMatrix, prevRatio)
+            val prevAspectRatio = safeSurfaceAspect / prevAspect
+            buildProjectionMatrix(previousProjectionMatrix, prevAspectRatio)
         } else {
-            System.arraycopy(
-                projectionMatrix,
-                0,
-                previousProjectionMatrix,
-                0,
-                projectionMatrix.size
-            )
+            System.arraycopy(projectionMatrix, 0, previousProjectionMatrix, 0, projectionMatrix.size)
         }
     }
 
-    private fun buildProjectionMatrix(target: FloatArray, screenToBitmapAspectRatio: Float) {
-        if (screenToBitmapAspectRatio == 0f) {
+    /**
+     * Builds an orthographic projection matrix with parallax scrolling support.
+     * @param target Output array for the projection matrix
+     * @param aspectRatio Ratio of screen aspect to bitmap aspect
+     */
+    private fun buildProjectionMatrix(target: FloatArray, aspectRatio: Float) {
+        if (aspectRatio == 0f) {
             Matrix.orthoM(target, 0, -1f, 1f, -1f, 1f, 0f, 1f)
             return
         }
-        val zoom = max(1f, screenToBitmapAspectRatio)
-        val scaledBitmapToScreenAspectRatio = zoom / screenToBitmapAspectRatio
 
-        // Allow full panning across the entire image width (no artificial limit)
-        val maxPanScreenWidths = scaledBitmapToScreenAspectRatio
+        // Calculate zoom to ensure bitmap covers the screen
+        val zoom = max(1f, aspectRatio)
+        val scaledAspect = zoom / aspectRatio
 
-        val minPan = (1f - maxPanScreenWidths / scaledBitmapToScreenAspectRatio) / 2f
-        val maxPan = (1f + (maxPanScreenWidths - 2f) / scaledBitmapToScreenAspectRatio) / 2f
+        // Allow full panning across the entire image width
+        val maxPanScreenWidths = scaledAspect
+
+        // Calculate pan range
+        val minPan = (1f - maxPanScreenWidths / scaledAspect) / 2f
+        val maxPan = (1f + (maxPanScreenWidths - 2f) / scaledAspect) / 2f
         val panFraction = minPan + (maxPan - minPan) * normalOffsetX
+
+        // Calculate orthographic projection bounds
         val left = -1f + 2f * panFraction
-        val right = left + 2f / scaledBitmapToScreenAspectRatio
+        val right = left + 2f / scaledAspect
         val bottom = -1f / zoom
         val top = 1f / zoom
+
         Matrix.orthoM(target, 0, left, right, bottom, top, 0f, 1f)
     }
 }
 
 
+/**
+ * Utility functions for OpenGL ES operations.
+ */
 object GLUtil {
+    /** Bytes per float value */
     const val BYTES_PER_FLOAT = 4
 
+    /**
+     * Compiles a shader from source code.
+     * @param type Shader type (GL_VERTEX_SHADER or GL_FRAGMENT_SHADER)
+     * @param shaderCode GLSL source code
+     * @return Compiled shader handle
+     */
     fun loadShader(type: Int, shaderCode: String): Int {
         val shader = GLES20.glCreateShader(type)
         GLES20.glShaderSource(shader, shaderCode)
         GLES20.glCompileShader(shader)
+
         val compileStatus = IntArray(1)
         GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compileStatus, 0)
         if (compileStatus[0] == 0) {
@@ -365,6 +448,13 @@ object GLUtil {
         return shader
     }
 
+    /**
+     * Creates and links a shader program.
+     * @param vertexShader Compiled vertex shader handle
+     * @param fragmentShader Compiled fragment shader handle
+     * @param attributes Optional array of attribute names to bind to specific locations
+     * @return Linked program handle
+     */
     fun createAndLinkProgram(
         vertexShader: Int,
         fragmentShader: Int,
@@ -372,23 +462,36 @@ object GLUtil {
     ): Int {
         val program = GLES20.glCreateProgram()
         checkGlError("glCreateProgram")
+
         GLES20.glAttachShader(program, vertexShader)
         GLES20.glAttachShader(program, fragmentShader)
+
         attributes?.forEachIndexed { index, name ->
             GLES20.glBindAttribLocation(program, index, name)
         }
+
         GLES20.glLinkProgram(program)
+
         val linkStatus = IntArray(1)
         GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0)
         if (linkStatus[0] == 0) {
             val log = GLES20.glGetProgramInfoLog(program)
             android.util.Log.e("GLUtil", "Program link error: $log")
         }
+
+        // Clean up shaders (program retains compiled code)
         GLES20.glDeleteShader(vertexShader)
         GLES20.glDeleteShader(fragmentShader)
+
         return program
     }
 
+    /**
+     * Loads a bitmap as an OpenGL texture with linear filtering and clamped edges.
+     * @param bitmap The bitmap to upload
+     * @return OpenGL texture handle
+     * @throws IllegalStateException if texture creation fails
+     */
     fun loadTexture(bitmap: Bitmap): Int {
         val textureHandle = IntArray(1)
         GLES20.glGenTextures(1, textureHandle, 0)
@@ -396,6 +499,8 @@ object GLUtil {
 
         if (textureHandle[0] != 0) {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureHandle[0])
+
+            // Set texture parameters
             GLES20.glTexParameteri(
                 GLES20.GL_TEXTURE_2D,
                 GLES20.GL_TEXTURE_WRAP_S,
@@ -416,6 +521,8 @@ object GLUtil {
                 GLES20.GL_TEXTURE_MAG_FILTER,
                 GLES20.GL_LINEAR
             )
+
+            // Upload bitmap data
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
             checkGlError("texImage2D")
         }
@@ -427,6 +534,11 @@ object GLUtil {
         return textureHandle[0]
     }
 
+    /**
+     * Converts a float array to a native-order FloatBuffer.
+     * @param array Float array to convert
+     * @return FloatBuffer ready for use with OpenGL
+     */
     fun asFloatBuffer(array: FloatArray): FloatBuffer {
         return newFloatBuffer(array.size).apply {
             put(array)
@@ -434,6 +546,11 @@ object GLUtil {
         }
     }
 
+    /**
+     * Creates a new native-order FloatBuffer with the specified size.
+     * @param size Number of float elements
+     * @return Allocated FloatBuffer
+     */
     fun newFloatBuffer(size: Int): FloatBuffer {
         return ByteBuffer.allocateDirect(size * BYTES_PER_FLOAT)
             .order(ByteOrder.nativeOrder())
@@ -441,6 +558,11 @@ object GLUtil {
             .apply { position(0) }
     }
 
+    /**
+     * Checks for OpenGL errors and throws an exception if one occurred.
+     * @param op Description of the operation being checked
+     * @throws RuntimeException if a GL error is detected
+     */
     fun checkGlError(op: String) {
         val error = GLES20.glGetError()
         if (error != GLES20.GL_NO_ERROR) {

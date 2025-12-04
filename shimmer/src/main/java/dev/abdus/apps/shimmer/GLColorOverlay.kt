@@ -2,70 +2,98 @@ package dev.abdus.apps.shimmer
 
 import android.graphics.Color
 import android.opengl.GLES20
-import java.nio.FloatBuffer
+import androidx.core.graphics.alpha
+import androidx.core.graphics.blue
+import androidx.core.graphics.green
+import androidx.core.graphics.red
 
+/**
+ * Renders a solid color overlay using OpenGL ES 2.0.
+ * Draws two triangles forming a quad that covers the entire screen.
+ */
 class GLColorOverlay {
 
     companion object {
-        // language=c
+        // Vertex coordinates: 3 floats per vertex (x, y, z)
+        private const val COORDS_PER_VERTEX = 3
+
+        // Number of vertices to draw (2 triangles × 3 vertices)
+        private const val VERTEX_COUNT = 6
+
+        // Stride in bytes between consecutive vertices (3 coords × 4 bytes per float)
+        private const val VERTEX_STRIDE_BYTES = COORDS_PER_VERTEX * 4
+
+        // Color normalization factor (convert 0-255 to 0.0-1.0)
+        private const val COLOR_NORMALIZE = 255f
+
+        // language=glsl
         private const val VERTEX_SHADER_CODE = """
             uniform mat4 uMVPMatrix;
             attribute vec4 aPosition;
-            
             void main(){
                 gl_Position = uMVPMatrix * aPosition;
             }
         """
 
-        // language=c
+        // language=glsl
         private const val FRAGMENT_SHADER_CODE = """
             precision mediump float;
             uniform vec4 uColor;
-            
             void main(){
                 gl_FragColor = uColor;
             }
         """
 
-        private const val COORDS_PER_VERTEX = 3
-        private const val VERTEX_STRIDE_BYTES = COORDS_PER_VERTEX * GLUtil.BYTES_PER_FLOAT
+        // OpenGL program and shader attribute/uniform handles
+        private var programHandle = 0
+        private var positionHandle = 0
+        private var colorHandle = 0
+        private var mvpMatrixHandle = 0
 
-        private var PROGRAM_HANDLE: Int = 0
-        private var ATTRIB_POSITION_HANDLE: Int = 0
-        private var UNIFORM_COLOR_HANDLE: Int = 0
-        private var UNIFORM_MVP_MATRIX_HANDLE: Int = 0
-
+        /**
+         * Initialize OpenGL resources. Must be called on the GL thread.
+         */
         fun initGl() {
-            val vertexShaderHandle = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_CODE)
-            val fragShaderHandle =
-                GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_CODE)
+            val vertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_CODE)
+            val fragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_CODE)
 
-            PROGRAM_HANDLE = GLUtil.createAndLinkProgram(vertexShaderHandle, fragShaderHandle, null)
-            ATTRIB_POSITION_HANDLE = GLES20.glGetAttribLocation(PROGRAM_HANDLE, "aPosition")
-            UNIFORM_MVP_MATRIX_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uMVPMatrix")
-            UNIFORM_COLOR_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uColor")
+            programHandle = GLUtil.createAndLinkProgram(vertexShader, fragmentShader)
+            positionHandle = GLES20.glGetAttribLocation(programHandle, "aPosition")
+            mvpMatrixHandle = GLES20.glGetUniformLocation(programHandle, "uMVPMatrix")
+            colorHandle = GLES20.glGetUniformLocation(programHandle, "uColor")
         }
     }
 
-    private val vertices = floatArrayOf(
-        -1f, 1f, 0f,
-        -1f, -1f, 0f,
-        1f, -1f, 0f,
-
-        -1f, 1f, 0f,
-        1f, -1f, 0f,
-        1f, 1f, 0f
+    /**
+     * Vertex buffer containing two triangles that cover the entire screen in normalized device coordinates.
+     * Each vertex has 3 coordinates (x, y, z).
+     */
+    private val vertexBuffer = GLUtil.asFloatBuffer(
+        floatArrayOf(
+            -1f, 1f, 0f,    // top left
+            -1f, -1f, 0f,   // bottom left
+            1f, -1f, 0f,    // bottom right
+            -1f, 1f, 0f,    // top left
+            1f, -1f, 0f,    // bottom right
+            1f, 1f, 0f      // top right
+        )
     )
 
-    private val vertexBuffer: FloatBuffer = GLUtil.asFloatBuffer(vertices)
-    var color: Int = 0
+    /** The color to render (ARGB format) */
+    var color: Int = Color.TRANSPARENT
 
+    /**
+     * Draws the color overlay.
+     * @param mvpMatrix Model-View-Projection matrix for transforming vertices
+     */
     fun draw(mvpMatrix: FloatArray) {
-        GLES20.glUseProgram(PROGRAM_HANDLE)
+        // Activate shader program
+        GLES20.glUseProgram(programHandle)
+        GLES20.glEnableVertexAttribArray(positionHandle)
 
-        GLES20.glEnableVertexAttribArray(ATTRIB_POSITION_HANDLE)
+        // Set vertex positions
         GLES20.glVertexAttribPointer(
-            ATTRIB_POSITION_HANDLE,
+            positionHandle,
             COORDS_PER_VERTEX,
             GLES20.GL_FLOAT,
             false,
@@ -73,16 +101,20 @@ class GLColorOverlay {
             vertexBuffer
         )
 
-        GLES20.glUniformMatrix4fv(UNIFORM_MVP_MATRIX_HANDLE, 1, false, mvpMatrix, 0)
-        GLUtil.checkGlError("glUniformMatrix4fv")
+        // Set transformation matrix
+        GLES20.glUniformMatrix4fv(mvpMatrixHandle, 1, false, mvpMatrix, 0)
 
-        val r = Color.red(color) / 255f
-        val g = Color.green(color) / 255f
-        val b = Color.blue(color) / 255f
-        val a = Color.alpha(color) / 255f
-        GLES20.glUniform4f(UNIFORM_COLOR_HANDLE, r, g, b, a)
+        // Set color (normalize from 0-255 to 0.0-1.0)
+        GLES20.glUniform4f(
+            colorHandle,
+            color.red / COLOR_NORMALIZE,
+            color.green / COLOR_NORMALIZE,
+            color.blue / COLOR_NORMALIZE,
+            color.alpha / COLOR_NORMALIZE
+        )
 
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, vertices.size / COORDS_PER_VERTEX)
-        GLES20.glDisableVertexAttribArray(ATTRIB_POSITION_HANDLE)
+        // Draw the triangles
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, VERTEX_COUNT)
+        GLES20.glDisableVertexAttribArray(positionHandle)
     }
 }
