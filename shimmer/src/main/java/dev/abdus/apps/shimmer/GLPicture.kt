@@ -122,31 +122,37 @@ class GLPicture(bitmap: Bitmap) {
             }
         }
 
-        private const val VERTEX_SHADER_CODE = "" +
-                "uniform mat4 uMVPMatrix;" +
-                "attribute vec4 aPosition;" +
-                "attribute vec2 aTexCoords;" +
-                "varying vec2 vTexCoords;" +
-                "void main(){" +
-                "  vTexCoords = aTexCoords;" +
-                "  gl_Position = uMVPMatrix * aPosition;" +
-                "}"
+        //language=c
+        private const val VERTEX_SHADER_CODE = """
+            uniform mat4 uMVPMatrix;
+            attribute vec4 aPosition;
+            attribute vec2 aTexCoords;
+            varying vec2 vTexCoords;
+            
+            void main() {
+                vTexCoords = aTexCoords;
+                gl_Position = uMVPMatrix * aPosition;
+            }
+        """
 
-        private const val FRAGMENT_SHADER_CODE = "" +
-                "precision mediump float;" +
-                "uniform sampler2D uTexture;" +
-                "uniform float uAlpha;" +
-                "uniform vec3 uDuotoneLightColor;" +
-                "uniform vec3 uDuotoneDarkColor;" +
-                "uniform float uDuotoneOpacity;" +
-                "varying vec2 vTexCoords;" +
-                "void main(){" +
-                "  vec4 color = texture2D(uTexture, vTexCoords);" +
-                "  float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;" +
-                "  vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);" +
-                "  vec3 finalColor = mix(color.rgb, duotone, uDuotoneOpacity);" +
-                "  gl_FragColor = vec4(finalColor, color.a * uAlpha);" +
-                "}"
+        //language=c
+        private const val FRAGMENT_SHADER_CODE = """
+            precision mediump float;
+            uniform sampler2D uTexture;
+            uniform float uAlpha;
+            uniform vec3 uDuotoneLightColor;
+            uniform vec3 uDuotoneDarkColor;
+            uniform float uDuotoneOpacity;
+            varying vec2 vTexCoords;
+            
+            void main() {
+                vec4 color = texture2D(uTexture, vTexCoords);
+                float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+                vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
+                vec3 finalColor = mix(color.rgb, duotone, uDuotoneOpacity);
+                gl_FragColor = vec4(finalColor, color.a * uAlpha);
+            }    
+        """
     }
 
     private val vertices = FloatArray(COORDS_PER_VERTEX * VERTICES)

@@ -18,7 +18,6 @@ import kotlin.math.roundToInt
 fun Bitmap?.blur(radius: Float): Bitmap? {
     val blurrer = ImageBlurrer(this)
     val blurred = blurrer.blurBitmap(radius)
-    blurrer.destroy()
     return blurred
 }
 
@@ -44,10 +43,6 @@ private class ImageBlurrer(private val sourceBitmap: Bitmap?) {
         } catch (t: Throwable) {
             original.copy(config, true)
         }
-    }
-
-    fun destroy() {
-        // No persistent resources to clean up now that we no longer use RenderScript.
     }
 }
 
@@ -76,36 +71,40 @@ private class GaussianBlurGPURenderer(
             1f, 1f
         )
 
-        private const val VERTEX_SHADER_CODE = "" +
-                "attribute vec2 aPosition;" +
-                "attribute vec2 aTexCoord;" +
-                "varying vec2 vTexCoord;" +
-                "void main(){" +
-                "  vTexCoord = aTexCoord;" +
-                "  gl_Position = vec4(aPosition, 0.0, 1.0);" +
-                "}"
+        // language=c
+        private const val VERTEX_SHADER_CODE = """
+            attribute vec2 aPosition;
+            attribute vec2 aTexCoord;
+            varying vec2 vTexCoord;
+            void main(){
+              vTexCoord = aTexCoord;
+              gl_Position = vec4(aPosition, 0.0, 1.0);
+            }
+        """
 
-        private const val FRAGMENT_SHADER_CODE = "" +
-                "precision mediump float;" +
-                "uniform sampler2D uTexture;" +
-                "uniform vec2 uTexelSize;" +
-                "uniform vec2 uDirection;" +
-                "uniform float uRadius;" +
-                "uniform float uWeights[" + (MAX_RADIUS + 1) + "];" +
-                "varying vec2 vTexCoord;" +
-                "void main(){" +
-                "  vec4 color = texture2D(uTexture, vTexCoord) * uWeights[0];" +
-                "  for (int i = 1; i <= " + MAX_RADIUS + "; i++) {" +
-                "    if (float(i) > uRadius) {" +
-                "      break;" +
-                "    }" +
-                "    vec2 offset = uDirection * uTexelSize * float(i);" +
-                "    float weight = uWeights[i];" +
-                "    color += texture2D(uTexture, vTexCoord + offset) * weight;" +
-                "    color += texture2D(uTexture, vTexCoord - offset) * weight;" +
-                "  }" +
-                "  gl_FragColor = color;" +
-                "}"
+        // language=c
+        private const val FRAGMENT_SHADER_CODE = """
+            precision mediump float;
+            uniform sampler2D uTexture;
+            uniform vec2 uTexelSize;
+            uniform vec2 uDirection;
+            uniform float uRadius;
+            uniform float uWeights[${MAX_RADIUS + 1}];
+            varying vec2 vTexCoord;
+            void main(){
+              vec4 color = texture2D(uTexture, vTexCoord) * uWeights[0];
+              for (int i = 1; i <= $MAX_RADIUS; i++) {
+                if (float(i) > uRadius) {
+                  break;
+                }
+                vec2 offset = uDirection * uTexelSize * float(i);
+                float weight = uWeights[i];
+                color += texture2D(uTexture, vTexCoord + offset) * weight;
+                color += texture2D(uTexture, vTexCoord - offset) * weight;
+              }
+              gl_FragColor = color;
+            }
+        """
     }
 
     private val previousDisplay: EGLDisplay = EGL14.eglGetCurrentDisplay()

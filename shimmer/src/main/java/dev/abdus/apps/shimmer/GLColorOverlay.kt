@@ -7,19 +7,25 @@ import java.nio.FloatBuffer
 class GLColorOverlay {
 
     companion object {
-        private const val VERTEX_SHADER_CODE = "" +
-                "uniform mat4 uMVPMatrix;" +
-                "attribute vec4 aPosition;" +
-                "void main(){" +
-                "  gl_Position = uMVPMatrix * aPosition;" +
-                "}"
+        // language=c
+        private const val VERTEX_SHADER_CODE = """
+            uniform mat4 uMVPMatrix;
+            attribute vec4 aPosition;
+            
+            void main(){
+                gl_Position = uMVPMatrix * aPosition;
+            }
+        """
 
-        private const val FRAGMENT_SHADER_CODE = "" +
-                "precision mediump float;" +
-                "uniform vec4 uColor;" +
-                "void main(){" +
-                "  gl_FragColor = uColor;" +
-                "}"
+        // language=c
+        private const val FRAGMENT_SHADER_CODE = """
+            precision mediump float;
+            uniform vec4 uColor;
+            
+            void main(){
+                gl_FragColor = uColor;
+            }
+        """
 
         private const val COORDS_PER_VERTEX = 3
         private const val VERTEX_STRIDE_BYTES = COORDS_PER_VERTEX * GLUtil.BYTES_PER_FLOAT
