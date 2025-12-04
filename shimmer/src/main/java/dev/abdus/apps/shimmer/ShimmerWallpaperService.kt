@@ -3,7 +3,6 @@ package dev.abdus.apps.shimmer
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -19,34 +18,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
     companion object {
         private const val MAX_BLUR_RADIUS_PIXELS = 150f
-
-        // Intent actions for communication
-        const val ACTION_NEXT_IMAGE = "dev.abdus.apps.shimmer.action.NEXT_IMAGE"
-        const val ACTION_NEXT_DUOTONE = "dev.abdus.apps.shimmer.action.RANDOM_DUOTONE"
-
-        /**
-         * Send a broadcast to request next image.
-         * Can be called from other apps using:
-         * context.sendBroadcast(Intent("dev.abdus.apps.shimmer.action.NEXT_IMAGE"))
-         *
-         * Or via adb:
-         * adb shell am broadcast -a dev.abdus.apps.shimmer.action.NEXT_IMAGE
-         */
-        fun requestNextImage(context: Context) {
-            context.sendBroadcast(Intent(ACTION_NEXT_IMAGE))
-        }
-
-        /**
-         * Send a broadcast to request next duotone preset.
-         * Can be called from other apps using:
-         * context.sendBroadcast(Intent("dev.abdus.apps.shimmer.action.RANDOM_DUOTONE"))
-         *
-         * Or via adb:
-         * adb shell am broadcast -a dev.abdus.apps.shimmer.action.RANDOM_DUOTONE
-         */
-        fun requestNextDuotonePreset(context: Context) {
-            context.sendBroadcast(Intent(ACTION_NEXT_DUOTONE))
-        }
     }
 
     override fun onCreateEngine(): Engine {
@@ -76,8 +47,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val shortcutReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
-                    ACTION_NEXT_IMAGE -> advanceToNextImage()
-                    ACTION_NEXT_DUOTONE -> applyNextDuotonePreset()
+                    Actions.ACTION_NEXT_IMAGE -> advanceToNextImage()
+                    Actions.ACTION_NEXT_DUOTONE -> applyNextDuotonePreset()
                 }
             }
         }
@@ -109,17 +80,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
 
-            // Register shortcut broadcast receiver (exported - can receive from other apps)
-            val filter = IntentFilter().apply {
-                addAction(ACTION_NEXT_IMAGE)
-                addAction(ACTION_NEXT_DUOTONE)
-            }
-            androidx.core.content.ContextCompat.registerReceiver(
-                this@BuzeiWallpaperService,
-                shortcutReceiver,
-                filter,
-                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
-            )
+            Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
