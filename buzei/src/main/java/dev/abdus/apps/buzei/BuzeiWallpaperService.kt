@@ -8,9 +8,7 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.widget.Toast
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService
-import java.io.IOException
 import java.lang.ref.WeakReference
-import java.net.URL
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
@@ -158,14 +156,15 @@ class BuzeiWallpaperService : GLWallpaperService() {
             }
             thread {
                 try {
-                    val url =
-                        URL("https://images.unsplash.com/photo-1764193875912-0f0a64874344?ixlib=rb-4.1.0&q=85&fm=jpg&crop=entropy&cs=srgb&dl=luise-and-nic-6fWb2V1UIZU-unsplash.jpg&w=1920")
-                    val inputStream = url.openStream()
+                    // Load embedded default wallpaper from drawable resources
                     val options = BitmapFactory.Options().apply {
                         inSampleSize = 2
                     }
-                    val bitmap = BitmapFactory.decodeStream(inputStream, null, options)
-                    inputStream.close()
+                    val bitmap = BitmapFactory.decodeResource(
+                        resources,
+                        R.drawable.default_wallpaper,
+                        options
+                    )
                     bitmap?.let {
                         currentImageUri = null
                         currentImageBitmap = it
@@ -177,12 +176,10 @@ class BuzeiWallpaperService : GLWallpaperService() {
                             sourceUri = null
                         )
                         queueRendererEvent(allowWhenSurfaceUnavailable = true) {
-                            renderer.setImage(
-                                payload
-                            )
+                            renderer.setImage(payload)
                         }
                     }
-                } catch (e: IOException) {
+                } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
