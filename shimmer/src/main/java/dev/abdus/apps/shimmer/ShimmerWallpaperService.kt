@@ -252,7 +252,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 return
             }
             folderScheduler.execute {
-                if (!loadNextImageFromFolders(skipBlur = true)) {
+                if (!loadNextImageFromFolders()) {
                     loadDefaultImage()
                     return@execute
                 }
@@ -314,9 +314,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
             return loaded
         }
 
-        private fun loadNextImageFromFolders(skipBlur: Boolean = false): Boolean {
+        private fun loadNextImageFromFolders(): Boolean {
             val nextUri = folderRepository.nextImageUri() ?: return false
-            val payload = prepareRendererImage(nextUri, skipBlur) ?: return false
+            val payload = prepareRendererImage(nextUri) ?: return false
 
             queueRendererEvent(allowWhenSurfaceUnavailable = true) {
                 renderer.setImage(payload)
@@ -326,13 +326,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             return true
         }
 
-        private fun prepareRendererImage(uri: Uri, skipBlur: Boolean = false): ImageSet? {
+        private fun prepareRendererImage(uri: Uri): ImageSet? {
             val bitmap = decodeBitmapFromUri(uri) ?: return null
 
             val blurAmount = preferences.getBlurAmount()
             val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
 
-            // If skipBlur is true, maxRadius will be 0, so blurLevels will be empty
             val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
 
             return ImageSet(
