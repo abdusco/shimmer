@@ -12,11 +12,13 @@ import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
-const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
+const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 300
 const val BLUR_KEYFRAMES = 2
 
 /**
@@ -56,8 +58,12 @@ fun Bitmap.blur(radius: Float): Bitmap? {
 fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
     if (levels <= 0) return emptyList()
 
+    // If the radius is very small, no need to generate multiple levels
+    val pixelsPerLevel = 100
+    val maxLevels = min(levels, ceil(maxRadius / pixelsPerLevel).toInt())
+
     return buildList {
-        for (i in 1..levels) {
+        for (i in 1..maxLevels) {
             val radius = maxRadius * i / levels
             val blurred = this@generateBlurLevels.blur(radius)
                 ?: // If any level fails, return what we have so far
