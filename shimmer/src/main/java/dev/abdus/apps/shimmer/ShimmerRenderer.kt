@@ -56,16 +56,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         fun requestRender()
     }
 
-    companion object {
-        /** Duration of blur animation in milliseconds */
-        private const val BLUR_ANIMATION_DURATION = 1200
-
-        /** Duration of image crossfade animation in milliseconds */
-        private const val IMAGE_FADE_DURATION = 1200
-
-        /** Duration of duotone color transition in milliseconds */
-        private const val DUOTONE_ANIMATION_DURATION = 1200
-    }
+    // Effect transition duration (for blur, duotone, and image fade animations)
+    private var effectTransitionDurationMillis = 1500
 
     // Image state
     private var originalBitmap: Bitmap? = null
@@ -99,11 +91,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     // Animation state
     /** Number of blur keyframes (equals the number of blur levels provided) */
     private var blurKeyframes = 0
-    private val blurAnimator = TickingFloatAnimator(BLUR_ANIMATION_DURATION, DecelerateInterpolator())
-    private val imageFadeAnimator = TickingFloatAnimator(IMAGE_FADE_DURATION, DecelerateInterpolator()).apply {
+    private val blurAnimator = TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
+    private val imageFadeAnimator = TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator()).apply {
         snapTo(1f)
     }
-    private val duotoneAnimator = TickingFloatAnimator(DUOTONE_ANIMATION_DURATION, DecelerateInterpolator())
+    private val duotoneAnimator = TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
 
     // Visual effects state
     private var userDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
@@ -139,6 +131,17 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         updatePictureSet()
         recomputeProjectionMatrix()
+    }
+
+    /**
+     * Sets the duration for effect transitions (blur, duotone, and image fade animations).
+     * @param durationMillis Duration in milliseconds
+     */
+    fun setEffectTransitionDuration(durationMillis: Long) {
+        effectTransitionDurationMillis = durationMillis.toInt()
+        blurAnimator.durationMillis = effectTransitionDurationMillis
+        imageFadeAnimator.durationMillis = effectTransitionDurationMillis
+        duotoneAnimator.durationMillis = effectTransitionDurationMillis
     }
 
     /**

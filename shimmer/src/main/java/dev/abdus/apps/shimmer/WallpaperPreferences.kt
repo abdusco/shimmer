@@ -28,6 +28,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_IMAGE_FOLDER_URIS = "wallpaper_image_folder_uris"
         const val KEY_TRANSITION_INTERVAL = "wallpaper_transition_interval"
         const val KEY_TRANSITION_ENABLED = "wallpaper_transition_enabled"
+        const val KEY_EFFECT_TRANSITION_DURATION = "wallpaper_effect_transition_duration"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -36,6 +37,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val DEFAULT_DUOTONE_DARK = 0xFF696969.toInt()
         const val DEFAULT_DUOTONE_ALWAYS_ON = false
         const val DEFAULT_TRANSITION_INTERVAL_MILLIS = 30_000L
+        const val DEFAULT_EFFECT_TRANSITION_DURATION_MILLIS = 1500L
 
         fun create(context: Context): WallpaperPreferences {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -180,6 +182,15 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setTransitionEnabled(enabled: Boolean) {
         prefs.edit {
             putBoolean(KEY_TRANSITION_ENABLED, enabled)
+        }
+    }
+
+    fun getEffectTransitionDurationMillis(): Long =
+        prefs.getLong(KEY_EFFECT_TRANSITION_DURATION, DEFAULT_EFFECT_TRANSITION_DURATION_MILLIS)
+
+    fun setEffectTransitionDurationMillis(durationMillis: Long) {
+        prefs.edit {
+            putLong(KEY_EFFECT_TRANSITION_DURATION, durationMillis.coerceIn(0L, 3000L))
         }
     }
 

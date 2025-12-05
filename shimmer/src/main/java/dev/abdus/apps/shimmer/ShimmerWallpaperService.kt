@@ -63,7 +63,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
             WallpaperPreferences.KEY_DUOTONE_SETTINGS to ::applyDuotoneSettingsPreference,
             WallpaperPreferences.KEY_IMAGE_FOLDER_URIS to ::applyImageFolderPreference,
             WallpaperPreferences.KEY_TRANSITION_ENABLED to ::applyTransitionEnabledPreference,
-            WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference
+            WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference,
+            WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION to ::applyEffectTransitionDurationPreference
         )
         private val preferenceListener =
             SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -231,6 +232,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
         }
 
+        private fun applyEffectTransitionDurationPreference() {
+            val duration = preferences.getEffectTransitionDurationMillis()
+            queueRendererEvent {
+                renderer.setEffectTransitionDuration(duration)
+            }
+        }
 
         private fun applyImageFolderPreference() {
             val folderUris = preferences.getImageFolderUris()

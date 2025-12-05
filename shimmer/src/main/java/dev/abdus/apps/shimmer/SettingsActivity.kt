@@ -114,6 +114,9 @@ private fun ShimmerSettingsScreen(
     var transitionEnabled by remember {
         mutableStateOf(preferences.isTransitionEnabled())
     }
+    var effectTransitionDurationMillis by remember {
+        mutableLongStateOf(preferences.getEffectTransitionDurationMillis())
+    }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -151,6 +154,10 @@ private fun ShimmerSettingsScreen(
 
                 WallpaperPreferences.KEY_TRANSITION_ENABLED -> {
                     transitionEnabled = preferences.isTransitionEnabled()
+                }
+
+                WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION -> {
+                    effectTransitionDurationMillis = preferences.getEffectTransitionDurationMillis()
                 }
             }
         }
@@ -239,11 +246,15 @@ private fun ShimmerSettingsScreen(
                     blurAmount = blurAmount,
                     dimAmount = dimAmount,
                     duotone = duotone,
+                    effectTransitionDurationMillis = effectTransitionDurationMillis,
                     onBlurAmountChange = {
                         preferences.setBlurAmount(it)
                     },
                     onDimAmountChange = {
                         preferences.setDimAmount(it)
+                    },
+                    onEffectTransitionDurationChange = {
+                        preferences.setEffectTransitionDurationMillis(it)
                     },
                     onDuotoneEnabledChange = {
                         preferences.setDuotoneEnabled(it)
@@ -323,8 +334,10 @@ private fun EffectsTab(
     blurAmount: Float,
     dimAmount: Float,
     duotone: DuotoneSettings,
+    effectTransitionDurationMillis: Long,
     onBlurAmountChange: (Float) -> Unit,
     onDimAmountChange: (Float) -> Unit,
+    onEffectTransitionDurationChange: (Long) -> Unit,
     onDuotoneEnabledChange: (Boolean) -> Unit,
     onDuotoneAlwaysOnChange: (Boolean) -> Unit,
     onDuotoneLightColorChange: (String) -> Unit,
@@ -360,6 +373,10 @@ private fun EffectsTab(
                         title = "Dim amount",
                         value = dimAmount,
                         onValueChange = onDimAmountChange
+                    )
+                    EffectTransitionDurationSlider(
+                        durationMillis = effectTransitionDurationMillis,
+                        onDurationChange = onEffectTransitionDurationChange
                     )
                 }
             }
@@ -573,6 +590,51 @@ private fun SliderSetting(
 }
 
 private fun formatPercent(value: Float): String = "${(value * 100).roundToInt()}%"
+
+@Composable
+private fun EffectTransitionDurationSlider(
+    durationMillis: Long,
+    onDurationChange: (Long) -> Unit
+) {
+    // Range: 0ms to 3000ms in 250ms steps = 13 steps (0, 250, 500, ..., 3000)
+    val steps = 12 // 13 values means 12 steps between them
+    val stepSize = 250L
+    val maxValue = 3000L
+
+    val sliderValue = (durationMillis / stepSize).toFloat()
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = "Effect transition duration: ${formatDurationMs(durationMillis)}",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
+        Slider(
+            value = sliderValue,
+            onValueChange = { newValue ->
+                val newDuration = (newValue.roundToInt() * stepSize).coerceIn(0L, maxValue)
+                onDurationChange(newDuration)
+            },
+            steps = steps - 1,
+            valueRange = 0f..(maxValue / stepSize).toFloat()
+        )
+    }
+}
+
+private fun formatDurationMs(millis: Long): String {
+    return if (millis == 0L) {
+        "0s"
+    } else if (millis < 1000L) {
+        "${millis}ms"
+    } else {
+        val seconds = millis / 1000.0
+        if (seconds == seconds.toInt().toDouble()) {
+            "${seconds.toInt()}s"
+        } else {
+            "${seconds}s"
+        }
+    }
+}
 
 @Composable
 private fun TransitionDurationSetting(

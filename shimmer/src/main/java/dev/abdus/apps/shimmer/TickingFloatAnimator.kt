@@ -16,7 +16,7 @@ import kotlin.math.min
  * frame-synchronized rather than time-synchronized.
  */
 class TickingFloatAnimator(
-    private val duration: Int,
+    var durationMillis: Int,
     private val interpolator: TimeInterpolator = DecelerateInterpolator()
 ) {
 
@@ -55,7 +55,7 @@ class TickingFloatAnimator(
             return false
         }
 
-        val t = min((SystemClock.elapsedRealtime() - startTime).toFloat() / duration, 1f)
+        val t = min((SystemClock.elapsedRealtime() - startTime).toFloat() / durationMillis, 1f)
         isRunning = t < 1f
         currentValue = if (isRunning) {
             startValue + interpolator.getInterpolation(t) * (endValue - startValue)
