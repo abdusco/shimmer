@@ -26,7 +26,7 @@ import kotlin.math.max
  */
 data class ImageSet(
     val original: Bitmap,
-    val blurred: List<Bitmap>
+    val blurred: List<Bitmap> = emptyList()
 )
 
 /**
@@ -91,23 +91,30 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     // Animation state
     /** Number of blur keyframes (equals the number of blur levels provided) */
     private var blurKeyframes = 0
-    private val blurAnimator = TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
-    private val imageFadeAnimator = TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator()).apply {
-        snapTo(1f)
-    }
-    private val duotoneAnimator = TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
+    private val blurFrameAnimator =
+        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
+    private val imageFadeAnimator =
+        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator()).apply {
+            snapTo(0f)
+        }
+    private val duotoneAnimator =
+        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
+    private val dimAnimator =
+        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
 
     // Visual effects state
-    private var userDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
+    private var currentDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
+    private var targetDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
     private var isBlurred = false
 
     // Duotone effect state
     private var duotoneAlwaysOn = false
-    private var currentDuotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
-    private var currentDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
-    private var targetDuotoneLightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
-    private var targetDuotoneDarkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK
-    private var targetDuotoneOpacity = 0f
+    private var currentDuotone = Duotone(
+        lightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT,
+        darkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK,
+        opacity = 0f
+    )
+    private var targetDuotone = currentDuotone
 
     /**
      * Sets the wallpaper image with pre-processed blur levels.
@@ -134,14 +141,15 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
-     * Sets the duration for effect transitions (blur, duotone, and image fade animations).
+     * Sets the duration for effect transitions (blur, duotone, dim, and image fade animations).
      * @param durationMillis Duration in milliseconds
      */
     fun setEffectTransitionDuration(durationMillis: Long) {
         effectTransitionDurationMillis = durationMillis.toInt()
-        blurAnimator.durationMillis = effectTransitionDurationMillis
+        blurFrameAnimator.durationMillis = effectTransitionDurationMillis
         imageFadeAnimator.durationMillis = effectTransitionDurationMillis
         duotoneAnimator.durationMillis = effectTransitionDurationMillis
+        dimAnimator.durationMillis = effectTransitionDurationMillis
     }
 
     /**
@@ -149,8 +157,14 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun toggleBlur() {
         isBlurred = !isBlurred
-        val target = if (isBlurred) blurKeyframes.toFloat() else 0f
-        blurAnimator.start(startValue = blurAnimator.currentValue, endValue = target)
+        // When blurKeyframes > 0: animate to keyframe count
+        // When blurKeyframes = 0: animate to 1.0 for smooth duotone/dim transitions
+        val target = if (isBlurred) {
+            if (blurKeyframes > 0) blurKeyframes.toFloat() else 1f
+        } else {
+            0f
+        }
+        blurFrameAnimator.start(startValue = blurFrameAnimator.currentValue, endValue = target)
         callbacks.requestRender()
     }
 
@@ -165,7 +179,20 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param amount Dim amount (0.0 = no dimming, 1.0 = full dimming)
      */
     fun setUserDimAmount(amount: Float) {
-        userDimAmount = amount.coerceIn(0f, 1f)
+        val newAmount = amount.coerceIn(0f, 1f)
+        if (newAmount != targetDimAmount) {
+            currentDimAmount = if (dimAnimator.isRunning) {
+                val t = dimAnimator.currentValue
+                currentDimAmount + (targetDimAmount - currentDimAmount) * t
+            } else {
+                targetDimAmount
+            }
+            targetDimAmount = newAmount
+            dimAnimator.start(startValue = 0f, endValue = 1f)
+        } else {
+            currentDimAmount = newAmount
+            targetDimAmount = newAmount
+        }
         callbacks.requestRender()
     }
 
@@ -173,45 +200,33 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * Configures the duotone color effect.
      * @param enabled Whether the duotone effect is enabled
      * @param alwaysOn If true, effect is always visible; if false, only visible when blurred
-     * @param lightColor Color for highlights
-     * @param darkColor Color for shadows
-     * @param animate Whether to animate the color transition
+     * @param duotone Duotone colors to blend when enabled
      */
     fun setDuotoneSettings(
         enabled: Boolean,
         alwaysOn: Boolean,
-        lightColor: Int,
-        darkColor: Int,
-        animate: Boolean = true
+        duotone: Duotone,
     ) {
         duotoneAlwaysOn = alwaysOn
-        targetDuotoneOpacity = if (enabled) 1f else 0f
+        val newTarget = Duotone(
+            lightColor = duotone.lightColor,
+            darkColor = duotone.darkColor,
+            opacity = if (enabled) 1f else 0f
+        )
 
-        val colorsChanged = lightColor != targetDuotoneLightColor || darkColor != targetDuotoneDarkColor
-
-        if (animate && colorsChanged) {
-            // Capture current visual state
-            if (duotoneAnimator.isRunning) {
-                // Interpolate from mid-animation colors
-                val t = duotoneAnimator.currentValue
-                currentDuotoneLightColor = interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
-                currentDuotoneDarkColor = interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
+        val shouldAnimate = newTarget != targetDuotone
+        if (shouldAnimate) {
+            currentDuotone = if (duotoneAnimator.isRunning) {
+                lerpDuotone(currentDuotone, targetDuotone, duotoneAnimator.currentValue)
             } else {
-                // Use current target colors as starting point
-                currentDuotoneLightColor = targetDuotoneLightColor
-                currentDuotoneDarkColor = targetDuotoneDarkColor
+                targetDuotone
             }
-
-            // Set new targets and animate
-            targetDuotoneLightColor = lightColor
-            targetDuotoneDarkColor = darkColor
+            targetDuotone = newTarget
             duotoneAnimator.start(startValue = 0f, endValue = 1f)
         } else {
-            // Apply instantly
-            currentDuotoneLightColor = lightColor
-            currentDuotoneDarkColor = darkColor
-            targetDuotoneLightColor = lightColor
-            targetDuotoneDarkColor = darkColor
+            duotoneAnimator.snapTo(0f)
+            currentDuotone = newTarget
+            targetDuotone = newTarget
         }
 
         callbacks.requestRender()
@@ -237,6 +252,15 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         val b = (fromB + (toB - fromB) * t).toInt().coerceIn(0, 255)
 
         return Color.rgb(r, g, b)
+    }
+
+    private fun lerpDuotone(from: Duotone, to: Duotone, t: Float): Duotone {
+        val clampedT = t.coerceIn(0f, 1f)
+        return Duotone(
+            lightColor = interpolateColor(from.lightColor, to.lightColor, clampedT),
+            darkColor = interpolateColor(from.darkColor, to.darkColor, clampedT),
+            opacity = from.opacity + (to.opacity - from.opacity) * clampedT
+        )
     }
 
     override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
@@ -280,53 +304,63 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         Matrix.multiplyMM(mvpMatrix, 0, projectionMatrix, 0, viewModelMatrix, 0)
 
         // Update animations
-        val stillAnimating = blurAnimator.tick()
+        val stillAnimating = blurFrameAnimator.tick()
         val imageStillAnimating = imageFadeAnimator.tick()
         val duotoneStillAnimating = duotoneAnimator.tick()
+        val dimStillAnimating = dimAnimator.tick()
 
-        // Update duotone colors with animation
-        val lightColor: Int
-        val darkColor: Int
-        if (duotoneStillAnimating) {
-            val t = duotoneAnimator.currentValue
-            lightColor = interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, t)
-            darkColor = interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, t)
+        // Calculate blur progress (0 = no blur visible, 1 = full blur)
+        // When blurKeyframes > 0: normalize animator value by keyframe count
+        // When blurKeyframes = 0: use animator value directly (animates 0->1 or 1->0)
+        val blurProgress = if (blurKeyframes > 0) {
+            (blurFrameAnimator.currentValue / blurKeyframes).coerceIn(0f, 1f)
         } else {
-            lightColor = targetDuotoneLightColor
-            darkColor = targetDuotoneDarkColor
-            currentDuotoneLightColor = targetDuotoneLightColor
-            currentDuotoneDarkColor = targetDuotoneDarkColor
+            // No blur levels, but animate blur progress for smooth duotone/dim transitions
+            blurFrameAnimator.currentValue.coerceIn(0f, 1f)
+        }
+
+        // Update duotone colors and opacity with animation
+        val blendedDuotone = if (duotoneStillAnimating) {
+            lerpDuotone(currentDuotone, targetDuotone, duotoneAnimator.currentValue)
+        } else {
+            currentDuotone = targetDuotone
+            targetDuotone
+        }
+
+        val duotone = Duotone(
+            lightColor = blendedDuotone.lightColor,
+            darkColor = blendedDuotone.darkColor,
+            opacity = if (duotoneAlwaysOn) blendedDuotone.opacity else (blendedDuotone.opacity * blurProgress)
+        )
+
+        // Update dim amount with animation
+        val dimAmount: Float = if (dimStillAnimating) {
+            val t = dimAnimator.currentValue
+            currentDimAmount + (targetDimAmount - currentDimAmount) * t
+        } else {
+            currentDimAmount = targetDimAmount
+            targetDimAmount
         }
 
         val imageAlpha = imageFadeAnimator.currentValue.coerceIn(0f, 1f)
 
-        // Calculate duotone opacity based on blur progress (0 = no duotone, 1 = full duotone)
-        val blurProgress = if (blurKeyframes > 0) {
-            (blurAnimator.currentValue / blurKeyframes).coerceIn(0f, 1f)
-        } else {
-            0f
-        }
 
         // Calculate final duotone opacity:
-        // - If alwaysOn: use targetDuotoneOpacity (1.0 when enabled, 0.0 when disabled)
+        // - If alwaysOn: use animated opacity (smoothly transitions between 0 and 1)
         // - If not alwaysOn: multiply by blur progress (fade in/out with blur)
-        val duotoneOpacity =
-            if (duotoneAlwaysOn) targetDuotoneOpacity else (targetDuotoneOpacity * blurProgress)
-
-        val duotone = Duotone(lightColor, darkColor, duotoneOpacity)
 
         // Draw previous image (fade out during transition)
         previousPictureSet?.drawFrame(
-            previousMvpMatrix, blurAnimator.currentValue, 1f - imageAlpha, duotone
+            previousMvpMatrix, blurFrameAnimator.currentValue, 1f - imageAlpha, duotone
         )
 
         // Draw current image (fade in during transition)
         currentPictureSet.drawFrame(
-            mvpMatrix, blurAnimator.currentValue, imageAlpha, duotone
+            mvpMatrix, blurFrameAnimator.currentValue, imageAlpha, duotone
         )
 
-        // Draw dim overlay (increases with blur progress)
-        val overlayAlpha = (userDimAmount * blurProgress * 255).toInt().coerceIn(0, 255)
+        // Draw dim overlay (fades with blur progress)
+        val overlayAlpha = (dimAmount * blurProgress * 255).toInt().coerceIn(0, 255)
         colorOverlay.color = Color.argb(overlayAlpha, 0, 0, 0)
         Matrix.setIdentityM(modelMatrix, 0)
         colorOverlay.draw(modelMatrix)
@@ -339,7 +373,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
 
         // Request another frame if any animation is still running
-        if (stillAnimating || imageStillAnimating || duotoneStillAnimating) {
+        if (stillAnimating || imageStillAnimating || duotoneStillAnimating || dimStillAnimating) {
             callbacks.requestRender()
         }
     }
@@ -351,6 +385,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     private fun updatePictureSet(preserveAspect: Boolean = false) {
         val baseOriginal = originalBitmap ?: return
         val levels = blurLevels ?: return
+
+        val isFirstImage = pictureSet == null
 
         previousPictureSet?.destroyPictures()
         previousPictureSet = pictureSet
@@ -364,7 +400,14 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         pictureSet = GLPictureSet().apply {
             load(bitmapList)
         }
-        imageFadeAnimator.start(startValue = 0f, endValue = 1f)
+
+        // For first image, start from 0 (fade in from black)
+        // For subsequent images, crossfade from current alpha
+        if (isFirstImage) {
+            imageFadeAnimator.start(startValue = 0f, endValue = 1f)
+        } else {
+            imageFadeAnimator.start(startValue = 0f, endValue = 1f)
+        }
 
         // When preserving aspect (color changes only), ensure we use the same projection matrix
         if (preserveAspect) {
@@ -404,7 +447,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             val prevAspectRatio = safeSurfaceAspect / prevAspect
             buildProjectionMatrix(previousProjectionMatrix, prevAspectRatio)
         } else {
-            System.arraycopy(projectionMatrix, 0, previousProjectionMatrix, 0, projectionMatrix.size)
+            System.arraycopy(
+                projectionMatrix,
+                0,
+                previousProjectionMatrix,
+                0,
+                projectionMatrix.size
+            )
         }
     }
 

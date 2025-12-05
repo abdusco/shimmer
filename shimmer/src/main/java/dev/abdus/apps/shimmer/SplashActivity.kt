@@ -97,9 +97,11 @@ class SplashActivity : ComponentActivity() {
             renderer.setDuotoneSettings(
                 enabled = true,
                 alwaysOn = true,  // Always show duotone in splash
-                lightColor = preset.lightColor,
-                darkColor = preset.darkColor,
-                animate = true
+                duotone = Duotone(
+                    lightColor = preset.lightColor,
+                    darkColor = preset.darkColor,
+                    opacity = 1f
+                ),
             )
         }
 
@@ -211,4 +213,3 @@ private fun SplashScreen(
 }
 
 private class PreviewSurfaceView(context: android.content.Context) : android.opengl.GLSurfaceView(context)
-

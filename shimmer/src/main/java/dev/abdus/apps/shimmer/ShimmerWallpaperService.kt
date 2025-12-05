@@ -15,11 +15,6 @@ import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
 class ShimmerWallpaperService : GLWallpaperService() {
-
-    companion object {
-        private const val MAX_BLUR_RADIUS_PIXELS = 150f
-    }
-
     override fun onCreateEngine(): Engine {
         return ShimmerWallpaperEngine()
     }
@@ -36,8 +31,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         // Track current image for reprocessing when settings change
         private var currentImageBitmap: Bitmap? = null
-        private var duotoneInitialized = false
-
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
         private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
 
@@ -219,15 +212,15 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyDuotoneSettingsPreference() {
             val settings = preferences.getDuotoneSettings()
-            val animate = duotoneInitialized // Only animate after first initialization
-            duotoneInitialized = true
             queueRendererEvent {
                 renderer.setDuotoneSettings(
-                    settings.enabled,
-                    settings.alwaysOn,
-                    settings.lightColor,
-                    settings.darkColor,
-                    animate = animate
+                    enabled = settings.enabled,
+                    alwaysOn = settings.alwaysOn,
+                    duotone = Duotone(
+                        lightColor = settings.lightColor,
+                        darkColor = settings.darkColor,
+                        opacity = if (settings.enabled) 1f else 0f
+                    ),
                 )
             }
         }
