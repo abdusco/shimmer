@@ -1,3 +1,5 @@
+![shimmer_logo](https://github.com/user-attachments/assets/6490fdd3-4b6a-45ba-8b4c-d74d2146cd61)
+
 # Shimmer
 
 A live wallpaper for Android that displays your photos with smooth GPU-based effects.
