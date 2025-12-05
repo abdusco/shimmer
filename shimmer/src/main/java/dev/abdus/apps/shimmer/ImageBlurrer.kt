@@ -19,12 +19,29 @@ const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
 const val BLUR_KEYFRAMES = 1
 
 /**
- * Applies a Gaussian blur to this bitmap.
+ * Applies a Gaussian blur to this bitmap using GPU acceleration.
  * @param radius Blur radius in pixels (0-200)
- * @return Blurred bitmap, or null if the operation fails
+ * @return Blurred bitmap, or a copy of the original if blur fails
  */
 fun Bitmap?.blur(radius: Float): Bitmap? {
-    return ImageBlurrer(this).blurBitmap(radius)
+    val original = this ?: return null
+    val config = original.config ?: Bitmap.Config.ARGB_8888
+
+    // Return copy if no blur needed
+    if (radius <= 0f || original.width == 0 || original.height == 0) {
+        return original.copy(config, true)
+    }
+
+    val clampedRadius = radius.coerceIn(0f, MAX_SUPPORTED_BLUR_RADIUS_PIXELS.toFloat())
+
+    return try {
+        GaussianBlurGPURenderer(original.width, original.height).use { renderer ->
+            renderer.blur(original, clampedRadius)
+        }
+    } catch (_: Throwable) {
+        // Fallback to unblurred copy on error
+        original.copy(config, true)
+    }
 }
 
 /**
@@ -49,41 +66,6 @@ fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
     }
 }
 
-/**
- * Handles GPU-accelerated Gaussian blur operations on bitmaps.
- */
-private class ImageBlurrer(private val sourceBitmap: Bitmap?) {
-
-    companion object {
-        // Note: MAX_SUPPORTED_BLUR_RADIUS_PIXELS is now a package-level constant
-    }
-
-    /**
-     * Blurs the source bitmap using GPU acceleration.
-     * @param radius Blur radius in pixels
-     * @return Blurred bitmap, or a copy of the original if blur fails
-     */
-    fun blurBitmap(radius: Float): Bitmap? {
-        val original = sourceBitmap ?: return null
-        val config = original.config ?: Bitmap.Config.ARGB_8888
-
-        // Return copy if no blur needed
-        if (radius <= 0f || original.width == 0 || original.height == 0) {
-            return original.copy(config, true)
-        }
-
-        val clampedRadius = radius.coerceIn(0f, MAX_SUPPORTED_BLUR_RADIUS_PIXELS.toFloat())
-
-        return try {
-            GaussianBlurGPURenderer(original.width, original.height).use { renderer ->
-                renderer.blur(original, clampedRadius)
-            }
-        } catch (_: Throwable) {
-            // Fallback to unblurred copy on error
-            original.copy(config, true)
-        }
-    }
-}
 
 /**
  * GPU-accelerated Gaussian blur renderer using OpenGL ES 2.0.
@@ -95,7 +77,7 @@ private class GaussianBlurGPURenderer(
 ) : Closeable {
 
     companion object {
-        /** Maximum blur radius (inherited from ImageBlurrer) */
+        /** Maximum blur radius */
         private const val MAX_RADIUS = MAX_SUPPORTED_BLUR_RADIUS_PIXELS
 
         /** Number of position components per vertex (x, y) */
