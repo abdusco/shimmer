@@ -12,14 +12,30 @@ android {
         applicationId "dev.abdus.apps.shimmer"
         minSdkVersion 23
         targetSdkVersion libs.versions.targetSdk.get()
-        versionCode 1
-        versionName "1.0"
+        versionCode project.hasProperty('version.code') ? project.property('version.code').toInteger() : 1
+        versionName project.hasProperty('version.name') ? project.property('version.name') : '1.0.0'
+    }
+
+    def keystorePath = System.getenv("KEYSTORE_FILE") ?: project.findProperty("KEYSTORE_FILE")
+
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS") ?: project.findProperty("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystorePath) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
