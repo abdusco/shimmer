@@ -53,7 +53,7 @@ class SplashActivity : ComponentActivity() {
                     previewRenderer = renderer
                     previewSurfaceView = surfaceView
                     loadPreviewImage()
-                    startDuotoneRotation()
+                    duotoneRotationHandler.postDelayed({ startDuotoneRotation() }, 4000)
                 },
                 onDestroyRenderer = {
                     stopDuotoneRotation()
@@ -73,10 +73,7 @@ class SplashActivity : ComponentActivity() {
         Thread {
             val bitmap = BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper)
             bitmap?.let {
-                val payload = ImageSet(
-                    original = it,
-                    blurred = emptyList() // No blur for splash screen
-                )
+                val payload = ImageSet(original = it)
                 surfaceView.queueEvent {
                     renderer.setImage(payload)
                 }
@@ -141,6 +138,12 @@ private fun SplashScreen(
     onCreateRenderer: (ShimmerRenderer, PreviewSurfaceView) -> Unit,
     onDestroyRenderer: () -> Unit
 ) {
+    DisposableEffect(Unit) {
+        onDispose {
+            onDestroyRenderer()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // OpenGL preview in background
         AndroidView(
@@ -153,6 +156,7 @@ private fun SplashScreen(
                             this@apply.requestRender()
                         }
                     })
+                    renderer.setEffectTransitionDuration(2000)
                     setRenderer(renderer)
                     renderMode = GLWallpaperService.GLEngine.RENDERMODE_WHEN_DIRTY
                     onCreateRenderer(renderer, this)
@@ -161,11 +165,6 @@ private fun SplashScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        DisposableEffect(Unit) {
-            onDispose {
-                onDestroyRenderer()
-            }
-        }
 
         // UI overlay
         Surface(
@@ -189,7 +188,7 @@ private fun SplashScreen(
                     )
 
                     Text(
-                        text = "shimmer",
+                        text = "Shimmer",
                         style = MaterialTheme.typography.displayLarge,
                         textAlign = TextAlign.Center,
                         color = androidx.compose.ui.graphics.Color.White
