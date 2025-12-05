@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import coil.compose.AsyncImage
@@ -66,7 +67,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
-import android.graphics.Color as AndroidColor
 
 class SettingsActivity : ComponentActivity() {
 
@@ -85,30 +85,17 @@ private fun ShimmerSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val prefs = remember { WallpaperPreferences.prefs(context) }
-    var blurAmount by remember { mutableFloatStateOf(WallpaperPreferences.getBlurAmount(prefs)) }
-    var dimAmount by remember { mutableFloatStateOf(WallpaperPreferences.getDimAmount(prefs)) }
-    var duotoneEnabled by remember { mutableStateOf(WallpaperPreferences.isDuotoneEnabled(prefs)) }
-    var duotoneAlwaysOn by remember { mutableStateOf(WallpaperPreferences.isDuotoneAlwaysOn(prefs)) }
-    var lightColor by remember { mutableStateOf(WallpaperPreferences.getDuotoneLightColor(prefs)) }
-    var darkColor by remember { mutableStateOf(WallpaperPreferences.getDuotoneDarkColor(prefs)) }
-    var lightColorText by remember { mutableStateOf(colorIntToHex(lightColor)) }
-    var darkColorText by remember { mutableStateOf(colorIntToHex(darkColor)) }
-    var folderUris by remember { mutableStateOf(WallpaperPreferences.getImageFolderUris(prefs)) }
+    val preferences = remember { WallpaperPreferences.create(context) }
+    var blurAmount by remember { mutableFloatStateOf(preferences.getBlurAmount()) }
+    var dimAmount by remember { mutableFloatStateOf(preferences.getDimAmount()) }
+    var duotone by remember { mutableStateOf(preferences.getDuotoneSettings()) }
+    var folderUris by remember { mutableStateOf(preferences.getImageFolderUris()) }
     var folderPreviews by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
     var transitionIntervalMillis by remember {
-        mutableLongStateOf(
-            WallpaperPreferences.getTransitionIntervalMillis(
-                prefs
-            )
-        )
+        mutableLongStateOf(preferences.getTransitionIntervalMillis())
     }
     var transitionEnabled by remember {
-        mutableStateOf(
-            WallpaperPreferences.isTransitionEnabled(
-                prefs
-            )
-        )
+        mutableStateOf(preferences.isTransitionEnabled())
     }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -121,47 +108,38 @@ private fun ShimmerSettingsScreen(
                 )
                 val nextList = (folderUris + it.toString()).distinct()
                 folderUris = nextList
-                WallpaperPreferences.setImageFolderUris(prefs, nextList)
+                preferences.setImageFolderUris(nextList)
             }
         }
     )
 
-    DisposableEffect(prefs) {
+    DisposableEffect(preferences) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             when (key) {
-                WallpaperPreferences.KEY_BLUR_AMOUNT -> blurAmount =
-                    WallpaperPreferences.getBlurAmount(prefs)
+                WallpaperPreferences.KEY_BLUR_AMOUNT -> blurAmount = preferences.getBlurAmount()
 
-                WallpaperPreferences.KEY_DIM_AMOUNT -> dimAmount =
-                    WallpaperPreferences.getDimAmount(prefs)
+                WallpaperPreferences.KEY_DIM_AMOUNT -> dimAmount = preferences.getDimAmount()
 
                 WallpaperPreferences.KEY_DUOTONE_SETTINGS -> {
-                    val settings = WallpaperPreferences.getDuotoneSettings(prefs)
-                    duotoneEnabled = settings.enabled
-                    duotoneAlwaysOn = settings.alwaysOn
-                    lightColor = settings.lightColor
-                    lightColorText = colorIntToHex(settings.lightColor)
-                    darkColor = settings.darkColor
-                    darkColorText = colorIntToHex(settings.darkColor)
+                    duotone = preferences.getDuotoneSettings()
                 }
 
                 WallpaperPreferences.KEY_IMAGE_FOLDER_URIS -> {
-                    folderUris = WallpaperPreferences.getImageFolderUris(prefs)
+                    folderUris = preferences.getImageFolderUris()
                 }
 
                 WallpaperPreferences.KEY_TRANSITION_INTERVAL -> {
-                    transitionIntervalMillis =
-                        WallpaperPreferences.getTransitionIntervalMillis(prefs)
+                    transitionIntervalMillis = preferences.getTransitionIntervalMillis()
                 }
 
                 WallpaperPreferences.KEY_TRANSITION_ENABLED -> {
-                    transitionEnabled = WallpaperPreferences.isTransitionEnabled(prefs)
+                    transitionEnabled = preferences.isTransitionEnabled()
                 }
             }
         }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
+        preferences.registerOnSharedPreferenceChangeListener(listener)
         onDispose {
-            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+            preferences.unregisterOnSharedPreferenceChangeListener(listener)
         }
     }
 
@@ -226,7 +204,7 @@ private fun ShimmerSettingsScreen(
                         onRemoveFolder = { uri ->
                             val nextList = folderUris.filter { it != uri }
                             folderUris = nextList
-                            WallpaperPreferences.setImageFolderUris(prefs, nextList)
+                            preferences.setImageFolderUris(nextList)
                         }
                     )
                 }
@@ -236,12 +214,10 @@ private fun ShimmerSettingsScreen(
                         enabled = transitionEnabled,
                         durationMillis = transitionIntervalMillis,
                         onEnabledChange = {
-                            transitionEnabled = it
-                            WallpaperPreferences.setTransitionEnabled(prefs, it)
+                            preferences.setTransitionEnabled(it)
                         },
                         onDurationChange = { newDuration ->
-                            transitionIntervalMillis = newDuration
-                            WallpaperPreferences.setTransitionIntervalMillis(prefs, newDuration)
+                            preferences.setTransitionIntervalMillis(newDuration)
                         }
                     )
                 }
@@ -261,7 +237,7 @@ private fun ShimmerSettingsScreen(
                                 value = blurAmount,
                                 onValueChange = {
                                     blurAmount = it
-                                    WallpaperPreferences.setBlurAmount(prefs, it)
+                                    preferences.setBlurAmount(it)
                                 }
                             )
                             SliderSetting(
@@ -269,7 +245,7 @@ private fun ShimmerSettingsScreen(
                                 value = dimAmount,
                                 onValueChange = {
                                     dimAmount = it
-                                    WallpaperPreferences.setDimAmount(prefs, it)
+                                    preferences.setDimAmount(it)
                                 }
                             )
                         }
@@ -278,47 +254,35 @@ private fun ShimmerSettingsScreen(
 
                 item {
                     DuotoneSettings(
-                        enabled = duotoneEnabled,
-                        alwaysOn = duotoneAlwaysOn,
-                        lightColorText = lightColorText,
-                        darkColorText = darkColorText,
-                        lightColorPreview = colorIntToComposeColor(lightColor),
-                        darkColorPreview = colorIntToComposeColor(darkColor),
+                        enabled = duotone.enabled,
+                        alwaysOn = duotone.alwaysOn,
+                        lightColorText = colorIntToHex(duotone.lightColor),
+                        darkColorText = colorIntToHex(duotone.darkColor),
+                        lightColorPreview = colorIntToComposeColor(duotone.lightColor),
+                        darkColorPreview = colorIntToComposeColor(duotone.darkColor),
                         onEnabledChange = {
-                            duotoneEnabled = it
-                            WallpaperPreferences.setDuotoneEnabled(prefs, it)
+                            preferences.setDuotoneEnabled(it)
                         },
                         onAlwaysOnChange = {
-                            duotoneAlwaysOn = it
-                            WallpaperPreferences.setDuotoneAlwaysOn(prefs, it)
+                            preferences.setDuotoneAlwaysOn(it)
                         },
                         onLightColorChange = { input ->
-                            lightColorText = input
                             parseColorHex(input)?.let { parsed ->
-                                lightColor = parsed
-                                WallpaperPreferences.setDuotoneLightColor(prefs, parsed)
+                                preferences.setDuotoneLightColor(parsed)
                             }
                         },
                         onDarkColorChange = { input ->
-                            darkColorText = input
                             parseColorHex(input)?.let { parsed ->
-                                darkColor = parsed
-                                WallpaperPreferences.setDuotoneDarkColor(prefs, parsed)
+                                preferences.setDuotoneDarkColor(parsed)
                             }
                         },
                         onPresetSelected = { preset ->
-                            lightColor = preset.lightColor
-                            darkColor = preset.darkColor
-                            val nextLightHex = colorIntToHex(preset.lightColor)
-                            val nextDarkHex = colorIntToHex(preset.darkColor)
-                            lightColorText = nextLightHex
-                            darkColorText = nextDarkHex
-                            WallpaperPreferences.setDuotoneLightColor(prefs, preset.lightColor)
-                            WallpaperPreferences.setDuotoneDarkColor(prefs, preset.darkColor)
+                            preferences.setDuotoneLightColor(preset.lightColor)
+                            preferences.setDuotoneDarkColor(preset.darkColor)
                             // Save the preset index for round-robin cycling
                             val presetIndex = DUOTONE_PRESETS.indexOf(preset)
                             if (presetIndex >= 0) {
-                                WallpaperPreferences.setDuotonePresetIndex(prefs, presetIndex)
+                                preferences.setDuotonePresetIndex(presetIndex)
                             }
                         }
                     )
@@ -383,7 +347,7 @@ private fun FolderCard(
 ) {
     val context = LocalContext.current
     val folderName = remember(folderUri) {
-        DocumentFile.fromTreeUri(context, Uri.parse(folderUri))?.name ?: folderUri
+        DocumentFile.fromTreeUri(context, folderUri.toUri())?.name ?: folderUri
     }
     val displayPath = remember(folderUri) {
         formatTreeUriPath(folderUri)
@@ -460,7 +424,7 @@ private suspend fun getFolderThumbnailUri(
                 DocumentFile.fromTreeUri(context, folderUri.toUri()) ?: return@withContext null
             folder.listFiles().firstOrNull { it.isFile && (it.type?.startsWith("image/") == true) }
                 ?.uri
-        } catch (ignored: SecurityException) {
+        } catch (_: SecurityException) {
             null
         }
     }
@@ -491,7 +455,7 @@ private fun formatTreeUriPath(uriString: String): String {
             val decodedPath = Uri.decode(rawPath).trimStart('/')
             "$storageLabel/$decodedPath"
         }
-    } catch (ignored: Exception) {
+    } catch (_: Exception) {
         uriString
     }
 }
@@ -758,7 +722,7 @@ private fun parseColorHex(value: String): Int? {
     }
     val candidate = if (value.startsWith("#")) value else "#$value"
     return try {
-        AndroidColor.parseColor(candidate)
+        candidate.toColorInt()
     } catch (e: IllegalArgumentException) {
         null
     }

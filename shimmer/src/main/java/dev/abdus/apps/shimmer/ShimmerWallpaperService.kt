@@ -39,8 +39,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private var duotoneInitialized = false
 
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
-        private val prefs: SharedPreferences =
-            WallpaperPreferences.prefs(this@ShimmerWallpaperService)
+        private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
 
         // BroadcastReceiver for handling shortcut actions
         private val shortcutReceiver = object : BroadcastReceiver() {
@@ -77,7 +76,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             setTouchEventsEnabled(true)
             setOffsetNotificationsEnabled(true)
 
-            prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
+            preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
 
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
         }
@@ -107,7 +106,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onDestroy() {
-            prefs.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+            preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
             try {
                 this@ShimmerWallpaperService.unregisterReceiver(shortcutReceiver)
             } catch (_: IllegalArgumentException) {
@@ -175,7 +174,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     )
                     bitmap?.let {
                         currentImageBitmap = it
-                        val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+                        val blurAmount = preferences.getBlurAmount()
                         val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
                         val blurLevels = it.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
                         val imageSet = ImageSet(
@@ -204,12 +203,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun applyDimPreference() {
-            val dimAmount = WallpaperPreferences.getDimAmount(prefs)
+            val dimAmount = preferences.getDimAmount()
             queueRendererEvent { renderer.setUserDimAmount(dimAmount) }
         }
 
         private fun applyDuotoneSettingsPreference() {
-            val settings = WallpaperPreferences.getDuotoneSettings(prefs)
+            val settings = preferences.getDuotoneSettings()
             val animate = duotoneInitialized // Only animate after first initialization
             duotoneInitialized = true
             queueRendererEvent {
@@ -225,7 +224,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
 
         private fun applyImageFolderPreference() {
-            val folderUris = WallpaperPreferences.getImageFolderUris(prefs)
+            val folderUris = preferences.getImageFolderUris()
             setImageFolders(folderUris)
         }
 
@@ -263,12 +262,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun applyTransitionIntervalPreference() {
-            val interval = WallpaperPreferences.getTransitionIntervalMillis(prefs)
+            val interval = preferences.getTransitionIntervalMillis()
             transitionScheduler.updateInterval(interval)
         }
 
         private fun applyTransitionEnabledPreference() {
-            val enabled = WallpaperPreferences.isTransitionEnabled(prefs)
+            val enabled = preferences.isTransitionEnabled()
             transitionScheduler.updateEnabled(enabled)
         }
 
@@ -278,13 +277,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         fun applyNextDuotonePreset() {
             // Get the last applied preset index and increment it (round-robin)
-            val lastIndex = WallpaperPreferences.getDuotonePresetIndex(prefs)
+            val lastIndex = preferences.getDuotonePresetIndex()
             val nextIndex = (lastIndex + 1) % DUOTONE_PRESETS.size
             val nextPreset = DUOTONE_PRESETS[nextIndex]
 
             // Apply preset atomically - single transaction triggers only one listener notification
-            WallpaperPreferences.applyDuotonePreset(
-                prefs = prefs,
+            preferences.applyDuotonePreset(
                 lightColor = nextPreset.lightColor,
                 darkColor = nextPreset.darkColor,
                 enabled = true,
@@ -328,7 +326,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun prepareRendererImage(uri: Uri, skipBlur: Boolean = false): ImageSet? {
             val bitmap = decodeBitmapFromUri(uri) ?: return null
 
-            val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+            val blurAmount = preferences.getBlurAmount()
             val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
 
             // If skipBlur is true, maxRadius will be 0, so blurLevels will be empty
@@ -357,7 +355,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun reprocessCurrentImage() {
             val bitmap = currentImageBitmap ?: return
             folderScheduler.execute {
-                val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+                val blurAmount = preferences.getBlurAmount()
 
                 val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
                 val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
