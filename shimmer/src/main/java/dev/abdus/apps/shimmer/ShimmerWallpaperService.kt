@@ -100,8 +100,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onVisibilityChanged(visible: Boolean) {
             super.onVisibilityChanged(visible)
             engineVisible = visible
-            if (engineVisible && surfaceAvailable) {
-                super.requestRender()
+            if (engineVisible) {
+                tapGestureDetector.reset()
+                if (surfaceAvailable) {
+                    super.requestRender()
+                }
             }
         }
 

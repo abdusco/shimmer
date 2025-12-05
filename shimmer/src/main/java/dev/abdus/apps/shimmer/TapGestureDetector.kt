@@ -153,7 +153,7 @@ private class TapTracker(
         isPotential = false
     }
 
-    private fun reset() {
+    fun reset() {
         tapCount = 0
         lastTapTime = 0L
         isPotential = false
@@ -203,5 +203,14 @@ class TapGestureDetector(context: Context) {
         }
 
         return TapEvent.NONE
+    }
+
+    /**
+     * Resets all gesture tracking state.
+     * Call when the wallpaper regains visibility to clear stale state from before the app switch.
+     */
+    fun reset() {
+        singleFingerTracker.reset()
+        twoFingerTracker.reset()
     }
 }
