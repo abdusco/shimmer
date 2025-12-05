@@ -47,6 +47,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 when (intent.action) {
                     Actions.ACTION_NEXT_IMAGE -> advanceToNextImage()
                     Actions.ACTION_NEXT_DUOTONE -> applyNextDuotonePreset()
+                    Actions.ACTION_SET_BLUR_PERCENT -> {
+                        Actions.BlurPercentAction.fromIntent(intent)?.let { action ->
+                            preferences.setBlurAmount(action.percent)
+                        }
+                    }
                 }
             }
         }
