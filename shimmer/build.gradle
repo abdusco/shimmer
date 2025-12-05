@@ -65,6 +65,7 @@ dependencies {
     implementation libs.androidxActivityCompose
     implementation libs.composeMaterial3
     implementation libs.composeUiToolingPreview
+    implementation "androidx.compose.material:material-icons-extended"
     implementation 'io.coil-kt:coil-compose:2.6.0'
     implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'

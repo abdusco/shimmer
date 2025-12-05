@@ -16,26 +16,35 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -70,6 +79,11 @@ import kotlin.math.roundToInt
 
 val PADDING_X = 24.dp
 val PADDING_Y = 24.dp
+
+enum class SettingsTab {
+    SOURCES,
+    EFFECTS
+}
 
 class SettingsActivity : ComponentActivity() {
 
@@ -168,129 +182,203 @@ private fun ShimmerSettingsScreen(
         folderPreviews = updated
     }
 
+    var selectedTab by remember { mutableStateOf(SettingsTab.SOURCES) }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = { Text("Shimmer") },
             )
+        },
+        bottomBar = {
+            TabRow(
+                selectedTabIndex = selectedTab.ordinal,
+                modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+            ) {
+                Tab(
+                    selected = selectedTab == SettingsTab.SOURCES,
+                    onClick = { selectedTab = SettingsTab.SOURCES },
+                    text = { Text("Sources") },
+                    icon = { Icon(Icons.Default.Folder, contentDescription = null) }
+                )
+                Tab(
+                    selected = selectedTab == SettingsTab.EFFECTS,
+                    onClick = { selectedTab = SettingsTab.EFFECTS },
+                    text = { Text("Effects") },
+                    icon = { Icon(Icons.Default.Palette, contentDescription = null) }
+                )
+            }
         }
     ) { paddingValues ->
         Surface(
             modifier = Modifier.fillMaxSize(),
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(
-                    start = PADDING_X,
-                    top = PADDING_Y,
-                    end = PADDING_X,
-                    bottom = PADDING_Y,
-                ),
-                verticalArrangement = Arrangement.spacedBy(PADDING_X),
-            ) {
-                item {
-                    Text(
-                        text = "Shimmer Live Wallpaper",
-                        style = MaterialTheme.typography.headlineMedium,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                item {
-                    FolderSelection(
-                        folderUris = folderUris,
-                        folderPreviews = folderPreviews,
-                        onPickFolder = { folderPickerLauncher.launch(null) },
-                        onRemoveFolder = { uri ->
-                            val nextList = folderUris.filter { it != uri }
-                            folderUris = nextList
-                            preferences.setImageFolderUris(nextList)
+            when (selectedTab) {
+                SettingsTab.SOURCES -> SourcesTab(
+                    modifier = Modifier.padding(paddingValues),
+                    folderUris = folderUris,
+                    folderPreviews = folderPreviews,
+                    transitionEnabled = transitionEnabled,
+                    transitionIntervalMillis = transitionIntervalMillis,
+                    onPickFolder = { folderPickerLauncher.launch(null) },
+                    onRemoveFolder = { uri ->
+                        val nextList = folderUris.filter { it != uri }
+                        folderUris = nextList
+                        preferences.setImageFolderUris(nextList)
+                    },
+                    onTransitionEnabledChange = {
+                        preferences.setTransitionEnabled(it)
+                    },
+                    onTransitionDurationChange = { newDuration ->
+                        preferences.setTransitionIntervalMillis(newDuration)
+                    }
+                )
+                SettingsTab.EFFECTS -> EffectsTab(
+                    modifier = Modifier.padding(paddingValues),
+                    blurAmount = blurAmount,
+                    dimAmount = dimAmount,
+                    duotone = duotone,
+                    onBlurAmountChange = {
+                        preferences.setBlurAmount(it)
+                    },
+                    onDimAmountChange = {
+                        preferences.setDimAmount(it)
+                    },
+                    onDuotoneEnabledChange = {
+                        preferences.setDuotoneEnabled(it)
+                    },
+                    onDuotoneAlwaysOnChange = {
+                        preferences.setDuotoneAlwaysOn(it)
+                    },
+                    onDuotoneLightColorChange = { input ->
+                        parseColorHex(input)?.let { parsed ->
+                            preferences.setDuotoneLightColor(parsed)
                         }
-                    )
-                }
-
-                item {
-                    TransitionDurationSetting(
-                        enabled = transitionEnabled,
-                        durationMillis = transitionIntervalMillis,
-                        onEnabledChange = {
-                            preferences.setTransitionEnabled(it)
-                        },
-                        onDurationChange = { newDuration ->
-                            preferences.setTransitionIntervalMillis(newDuration)
+                    },
+                    onDuotoneDarkColorChange = { input ->
+                        parseColorHex(input)?.let { parsed ->
+                            preferences.setDuotoneDarkColor(parsed)
                         }
-                    )
-                }
-
-                item {
-                    Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = PADDING_X, vertical = PADDING_Y),
-                            verticalArrangement = Arrangement.spacedBy(PADDING_Y)
-                        ) {
-                            Text(
-                                text = "Image Effects",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            SliderSetting(
-                                title = "Blur amount",
-                                value = blurAmount,
-                                onValueChange = {
-                                    blurAmount = it
-                                    preferences.setBlurAmount(it)
-                                }
-                            )
-                            SliderSetting(
-                                title = "Dim amount",
-                                value = dimAmount,
-                                onValueChange = {
-                                    dimAmount = it
-                                    preferences.setDimAmount(it)
-                                }
-                            )
+                    },
+                    onDuotonePresetSelected = { preset ->
+                        preferences.setDuotoneLightColor(preset.lightColor)
+                        preferences.setDuotoneDarkColor(preset.darkColor)
+                        val presetIndex = DUOTONE_PRESETS.indexOf(preset)
+                        if (presetIndex >= 0) {
+                            preferences.setDuotonePresetIndex(presetIndex)
                         }
                     }
-                }
+                )
+            }
+        }
+    }
+}
 
-                item {
-                    DuotoneSettings(
-                        enabled = duotone.enabled,
-                        alwaysOn = duotone.alwaysOn,
-                        lightColorText = colorIntToHex(duotone.lightColor),
-                        darkColorText = colorIntToHex(duotone.darkColor),
-                        lightColorPreview = colorIntToComposeColor(duotone.lightColor),
-                        darkColorPreview = colorIntToComposeColor(duotone.darkColor),
-                        onEnabledChange = {
-                            preferences.setDuotoneEnabled(it)
-                        },
-                        onAlwaysOnChange = {
-                            preferences.setDuotoneAlwaysOn(it)
-                        },
-                        onLightColorChange = { input ->
-                            parseColorHex(input)?.let { parsed ->
-                                preferences.setDuotoneLightColor(parsed)
-                            }
-                        },
-                        onDarkColorChange = { input ->
-                            parseColorHex(input)?.let { parsed ->
-                                preferences.setDuotoneDarkColor(parsed)
-                            }
-                        },
-                        onPresetSelected = { preset ->
-                            preferences.setDuotoneLightColor(preset.lightColor)
-                            preferences.setDuotoneDarkColor(preset.darkColor)
-                            // Save the preset index for round-robin cycling
-                            val presetIndex = DUOTONE_PRESETS.indexOf(preset)
-                            if (presetIndex >= 0) {
-                                preferences.setDuotonePresetIndex(presetIndex)
-                            }
-                        }
+@Composable
+private fun SourcesTab(
+    modifier: Modifier = Modifier,
+    folderUris: List<String>,
+    folderPreviews: Map<String, Uri>,
+    transitionEnabled: Boolean,
+    transitionIntervalMillis: Long,
+    onPickFolder: () -> Unit,
+    onRemoveFolder: (String) -> Unit,
+    onTransitionEnabledChange: (Boolean) -> Unit,
+    onTransitionDurationChange: (Long) -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = PADDING_X,
+            top = PADDING_Y,
+            end = PADDING_X,
+            bottom = PADDING_Y,
+        ),
+        verticalArrangement = Arrangement.spacedBy(PADDING_X),
+    ) {
+        item {
+            FolderSelection(
+                folderUris = folderUris,
+                folderPreviews = folderPreviews,
+                onPickFolder = onPickFolder,
+                onRemoveFolder = onRemoveFolder
+            )
+        }
+
+        item {
+            TransitionDurationSetting(
+                enabled = transitionEnabled,
+                durationMillis = transitionIntervalMillis,
+                onEnabledChange = onTransitionEnabledChange,
+                onDurationChange = onTransitionDurationChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun EffectsTab(
+    modifier: Modifier = Modifier,
+    blurAmount: Float,
+    dimAmount: Float,
+    duotone: DuotoneSettings,
+    onBlurAmountChange: (Float) -> Unit,
+    onDimAmountChange: (Float) -> Unit,
+    onDuotoneEnabledChange: (Boolean) -> Unit,
+    onDuotoneAlwaysOnChange: (Boolean) -> Unit,
+    onDuotoneLightColorChange: (String) -> Unit,
+    onDuotoneDarkColorChange: (String) -> Unit,
+    onDuotonePresetSelected: (DuotonePreset) -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = PADDING_X,
+            top = PADDING_Y,
+            end = PADDING_X,
+            bottom = PADDING_Y,
+        ),
+        verticalArrangement = Arrangement.spacedBy(PADDING_X),
+    ) {
+        item {
+            Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
+                Column(
+                    modifier = Modifier.padding(horizontal = PADDING_X, vertical = PADDING_Y),
+                    verticalArrangement = Arrangement.spacedBy(PADDING_Y)
+                ) {
+                    Text(
+                        text = "Image Effects",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    SliderSetting(
+                        title = "Blur amount",
+                        value = blurAmount,
+                        onValueChange = onBlurAmountChange
+                    )
+                    SliderSetting(
+                        title = "Dim amount",
+                        value = dimAmount,
+                        onValueChange = onDimAmountChange
                     )
                 }
             }
+        }
+
+        item {
+            DuotoneSettings(
+                enabled = duotone.enabled,
+                alwaysOn = duotone.alwaysOn,
+                lightColorText = colorIntToHex(duotone.lightColor),
+                darkColorText = colorIntToHex(duotone.darkColor),
+                lightColorPreview = colorIntToComposeColor(duotone.lightColor),
+                darkColorPreview = colorIntToComposeColor(duotone.darkColor),
+                onEnabledChange = onDuotoneEnabledChange,
+                onAlwaysOnChange = onDuotoneAlwaysOnChange,
+                onLightColorChange = onDuotoneLightColorChange,
+                onDarkColorChange = onDuotoneDarkColorChange,
+                onPresetSelected = onDuotonePresetSelected
+            )
         }
     }
 }
