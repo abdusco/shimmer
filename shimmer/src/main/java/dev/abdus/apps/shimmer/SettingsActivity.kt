@@ -137,9 +137,9 @@ private fun ShimmerSettingsScreen(
                 }
             }
         }
-        preferences.registerOnSharedPreferenceChangeListener(listener)
+        preferences.registerListener(listener)
         onDispose {
-            preferences.unregisterOnSharedPreferenceChangeListener(listener)
+            preferences.unregisterListener(listener)
         }
     }
 

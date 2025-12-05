@@ -76,7 +76,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             setTouchEventsEnabled(true)
             setOffsetNotificationsEnabled(true)
 
-            preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
+            preferences.registerListener(preferenceListener)
 
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
         }
@@ -106,7 +106,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onDestroy() {
-            preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+            preferences.unregisterListener(preferenceListener)
             try {
                 this@ShimmerWallpaperService.unregisterReceiver(shortcutReceiver)
             } catch (_: IllegalArgumentException) {

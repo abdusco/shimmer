@@ -7,6 +7,7 @@ import android.opengl.EGLContext
 import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
 import android.opengl.GLES20
+import androidx.core.graphics.createBitmap
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -146,7 +147,8 @@ private class GaussianBlurGPURenderer(
     private val previousReadSurface: EGLSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
     private val previousContext: EGLContext = EGL14.eglGetCurrentContext()
 
-    private val eglDisplay: EGLDisplay
+    // Initialize EGL display
+    private val eglDisplay: EGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
     private val eglContext: EGLContext
     private val eglSurface: EGLSurface
     private val vertexBuffer: FloatBuffer
@@ -162,8 +164,6 @@ private class GaussianBlurGPURenderer(
     private val uniformWeights: Int
 
     init {
-        // Initialize EGL display
-        eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         require(eglDisplay != EGL14.EGL_NO_DISPLAY) { "Unable to get EGL14 display" }
 
         val version = IntArray(2)
@@ -373,7 +373,7 @@ private class GaussianBlurGPURenderer(
             }
         }
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(width, height)
         bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
         return bitmap
     }
