@@ -68,6 +68,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+val PADDING_X = 24.dp
+val PADDING_Y = 24.dp
+
 class SettingsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -181,12 +184,12 @@ private fun ShimmerSettingsScreen(
                     .fillMaxSize()
                     .padding(paddingValues),
                 contentPadding = PaddingValues(
-                    start = 16.dp,
-                    top = 16.dp,
-                    end = 16.dp,
-                    bottom = 96.dp
+                    start = PADDING_X,
+                    top = PADDING_Y,
+                    end = PADDING_X,
+                    bottom = PADDING_Y,
                 ),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(PADDING_X),
             ) {
                 item {
                     Text(
@@ -225,8 +228,8 @@ private fun ShimmerSettingsScreen(
                 item {
                     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.padding(horizontal = PADDING_X, vertical = PADDING_Y),
+                            verticalArrangement = Arrangement.spacedBy(PADDING_Y)
                         ) {
                             Text(
                                 text = "Image Effects",
@@ -360,7 +363,7 @@ private fun FolderCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -396,7 +399,7 @@ private fun FolderThumbnail(
 ) {
     Surface(
         modifier = modifier
-            .size(64.dp),
+            .size(96.dp),
         shape = RoundedCornerShape(12.dp),
         color = Color.LightGray
     ) {
@@ -495,7 +498,7 @@ private fun TransitionDurationSetting(
     val selectedOption = options.getOrElse(sliderIndex) { options.first() }
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -573,7 +576,7 @@ private fun DuotoneSettings(
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
