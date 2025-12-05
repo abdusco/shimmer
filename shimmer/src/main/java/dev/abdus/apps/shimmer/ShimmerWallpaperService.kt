@@ -35,7 +35,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             ImageTransitionScheduler(folderScheduler) { handleScheduledAdvance() }
 
         // Track current image for reprocessing when settings change
-        private var currentImageUri: Uri? = null
         private var currentImageBitmap: Bitmap? = null
         private var duotoneInitialized = false
 
@@ -175,18 +174,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         options
                     )
                     bitmap?.let {
-                        currentImageUri = null
                         currentImageBitmap = it
                         val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
                         val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
                         val blurLevels = it.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
-                        val payload = RendererImagePayload(
+                        val imageSet = ImageSet(
                             original = it,
-                            blurred = blurLevels,
-                            sourceUri = null
+                            blurred = blurLevels
                         )
                         queueRendererEvent(allowWhenSurfaceUnavailable = true) {
-                            renderer.setImage(payload)
+                            renderer.setImage(imageSet)
                         }
                     }
                 } catch (e: Exception) {
@@ -317,22 +314,18 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun loadNextImageFromFolders(skipBlur: Boolean = false): Boolean {
-            val payload = prepareNextPayload(skipBlur) ?: return false
+            val nextUri = folderRepository.nextImageUri() ?: return false
+            val payload = prepareRendererImage(nextUri, skipBlur) ?: return false
+
             queueRendererEvent(allowWhenSurfaceUnavailable = true) {
                 renderer.setImage(payload)
             }
             // Track current image for reprocessing
-            currentImageUri = payload.sourceUri
             currentImageBitmap = payload.original
             return true
         }
 
-        private fun prepareNextPayload(skipBlur: Boolean = false): RendererImagePayload? {
-            val nextUri = folderRepository.nextImageUri() ?: return null
-            return prepareRendererImage(nextUri, skipBlur)
-        }
-
-        private fun prepareRendererImage(uri: Uri, skipBlur: Boolean = false): RendererImagePayload? {
+        private fun prepareRendererImage(uri: Uri, skipBlur: Boolean = false): ImageSet? {
             val bitmap = decodeBitmapFromUri(uri) ?: return null
 
             val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
@@ -341,10 +334,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
             // If skipBlur is true, maxRadius will be 0, so blurLevels will be empty
             val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
 
-            return RendererImagePayload(
+            return ImageSet(
                 original = bitmap,
-                blurred = blurLevels,
-                sourceUri = uri
+                blurred = blurLevels
             )
         }
 
@@ -370,10 +362,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
                 val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
 
-                val payload = RendererImagePayload(
+                val payload = ImageSet(
                     original = bitmap,
-                    blurred = blurLevels,
-                    sourceUri = currentImageUri
+                    blurred = blurLevels
                 )
                 queueRendererEvent(allowWhenSurfaceUnavailable = true) {
                     renderer.setImage(payload)

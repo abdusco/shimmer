@@ -2,7 +2,6 @@ package dev.abdus.apps.shimmer
 
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
@@ -24,12 +23,10 @@ import kotlin.math.max
  *                   - 0 levels: No blur animation (just original)
  *                   - 1 level: [100% blur] → 2 states (original, blurred)
  *                   - 2 levels: [50% blur, 100% blur] → 3 states (original, 50%, 100%)
- * @property sourceUri Optional URI of the source image
  */
-data class RendererImagePayload(
+data class ImageSet(
     val original: Bitmap,
-    val blurred: List<Bitmap>,
-    val sourceUri: Uri? = null
+    val blurred: List<Bitmap>
 )
 
 /**
@@ -73,7 +70,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     // Image state
     private var originalBitmap: Bitmap? = null
     private var blurLevels: List<Bitmap>? = null
-    private var pendingImage: RendererImagePayload? = null
+    private var pendingImage: ImageSet? = null
 
     // Surface state
     private var surfaceCreated = false
@@ -122,23 +119,23 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     /**
      * Sets the wallpaper image with pre-processed blur levels.
-     * @param image Image payload containing original and blur level bitmaps
+     * @param imageSet Image payload containing original and blur level bitmaps
      */
-    fun setImage(image: RendererImagePayload) {
+    fun setImage(imageSet: ImageSet) {
         if (!surfaceCreated) {
-            pendingImage = image
+            pendingImage = imageSet
             return
         }
-        val bitmap = image.original
+        val bitmap = imageSet.original
         originalBitmap = bitmap
         if (pictureSet != null) {
             previousBitmapAspect = bitmapAspect
         }
         bitmapAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height
 
-        blurLevels = image.blurred
+        blurLevels = imageSet.blurred
         // Calculate keyframes from the number of blur levels provided
-        blurKeyframes = image.blurred.size
+        blurKeyframes = imageSet.blurred.size
 
         updatePictureSet()
         recomputeProjectionMatrix()

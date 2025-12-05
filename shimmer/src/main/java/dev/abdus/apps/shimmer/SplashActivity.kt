@@ -69,10 +69,9 @@ class SplashActivity : ComponentActivity() {
         Thread {
             val bitmap = BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper)
             bitmap?.let {
-                val payload = RendererImagePayload(
+                val payload = ImageSet(
                     original = it,
-                    blurred = emptyList(), // No blur for splash screen
-                    sourceUri = null
+                    blurred = emptyList() // No blur for splash screen
                 )
                 surfaceView.queueEvent {
                     renderer.setImage(payload)
