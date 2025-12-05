@@ -58,7 +58,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     companion object {
         /** Duration of blur animation in milliseconds */
-        private const val BLUR_ANIMATION_DURATION = 3000
+        private const val BLUR_ANIMATION_DURATION = 1200
 
         /** Duration of image crossfade animation in milliseconds */
         private const val IMAGE_FADE_DURATION = 1200

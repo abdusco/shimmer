@@ -16,15 +16,15 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
-const val BLUR_KEYFRAMES = 1
+const val BLUR_KEYFRAMES = 2
 
 /**
  * Applies a Gaussian blur to this bitmap using GPU acceleration.
  * @param radius Blur radius in pixels (0-200)
  * @return Blurred bitmap, or a copy of the original if blur fails
  */
-fun Bitmap?.blur(radius: Float): Bitmap? {
-    val original = this ?: return null
+fun Bitmap.blur(radius: Float): Bitmap? {
+    val original = this
     val config = original.config ?: Bitmap.Config.ARGB_8888
 
     // Return copy if no blur needed
