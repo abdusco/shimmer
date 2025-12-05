@@ -52,6 +52,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             preferences.setBlurAmount(action.percent)
                         }
                     }
+                    Actions.ACTION_ENABLE_BLUR -> enableBlur()
                 }
             }
         }
@@ -298,6 +299,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
             )
 
             Toast.makeText(this@ShimmerWallpaperService, "Duotone Preset: ${nextPreset.name}", Toast.LENGTH_SHORT).show()
+        }
+
+        fun enableBlur() {
+            queueRendererEvent { renderer.enableBlur() }
         }
 
         private fun handleScheduledAdvance() {

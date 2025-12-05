@@ -11,7 +11,7 @@ class Actions {
         const val ACTION_NEXT_IMAGE = "dev.abdus.apps.shimmer.action.NEXT_IMAGE"
         const val ACTION_NEXT_DUOTONE = "dev.abdus.apps.shimmer.action.RANDOM_DUOTONE"
         const val ACTION_SET_BLUR_PERCENT = "dev.abdus.apps.shimmer.action.SET_BLUR_PERCENT"
-        const val EXTRA_BLUR_PERCENT = "blur_percent"
+        const val ACTION_ENABLE_BLUR = "dev.abdus.apps.shimmer.action.ENABLE_BLUR"
 
         /**
          * Send a broadcast to request next image.
@@ -42,6 +42,7 @@ class Actions {
                 addAction(ACTION_NEXT_IMAGE)
                 addAction(ACTION_NEXT_DUOTONE)
                 addAction(ACTION_SET_BLUR_PERCENT)
+                addAction(ACTION_ENABLE_BLUR)
             }
             androidx.core.content.ContextCompat.registerReceiver(
                 context,

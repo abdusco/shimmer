@@ -151,6 +151,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         callbacks.requestRender()
     }
 
+    fun enableBlur(enable: Boolean = true) {
+        if (isBlurred != enable) {
+            toggleBlur()
+        }
+    }
+
     /**
      * Sets the dim overlay amount when blurred.
      * @param amount Dim amount (0.0 = no dimming, 1.0 = full dimming)
@@ -476,7 +482,9 @@ object GLUtil {
         checkGlError("glCreateProgram")
 
         GLES20.glAttachShader(program, vertexShader)
+        checkGlError("glAttachShader(vertex)")
         GLES20.glAttachShader(program, fragmentShader)
+        checkGlError("glAttachShader(fragment)")
 
         attributes?.forEachIndexed { index, name ->
             GLES20.glBindAttribLocation(program, index, name)
