@@ -8,17 +8,48 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 
-class GLPictureSet(private val blurKeyframes: Int) {
+/**
+ * Manages a set of images with progressive blur levels for smooth blur animation.
+ *
+ * The picture set expects bitmaps with progressive blur levels:
+ * - Index 0: Original image
+ * - Index 1..N: Progressively blurred versions
+ *
+ * Example with 3 bitmaps:
+ * - pictures[0] = original
+ * - pictures[1] = 50% blurred
+ * - pictures[2] = 100% blurred
+ */
+class GLPictureSet {
 
-    private val pictures = arrayOfNulls<GLPicture>(blurKeyframes + 1)
+    private var pictures = arrayOfNulls<GLPicture>(0)
 
+    /**
+     * Number of blur keyframes (total pictures - 1).
+     * For example, 3 pictures means 2 blur keyframes.
+     */
+    private val blurKeyframes: Int
+        get() = (pictures.size - 1).coerceAtLeast(0)
+
+    /**
+     * Loads bitmaps into the picture set.
+     * @param bitmaps List of bitmaps with progressive blur levels (first = original, rest = increasingly blurred)
+     */
     fun load(bitmaps: List<Bitmap?>) {
         destroyPictures()
+        pictures = arrayOfNulls(bitmaps.size)
         for (index in pictures.indices) {
             pictures[index] = bitmaps.getOrNull(index)?.let { GLPicture(it) }
         }
     }
 
+    /**
+     * Draws a frame with interpolated blur level.
+     * @param mvpMatrix Model-view-projection matrix
+     * @param blurFrame Current blur level (0.0 = original, blurKeyframes = fully blurred)
+     * @param globalAlpha Overall opacity (0.0 = transparent, 1.0 = opaque)
+     * @param duotone Duotone color effect to apply
+     */
     fun drawFrame(
         mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
         duotone: Duotone = Duotone()
@@ -27,6 +58,7 @@ class GLPictureSet(private val blurKeyframes: Int) {
             return
         }
 
+        // Clamp and determine which two images to interpolate between
         val clampedBlur = blurFrame.coerceIn(0f, blurKeyframes.toFloat())
         val lo = floor(clampedBlur.toDouble()).toInt().coerceAtMost(blurKeyframes)
         val hi = ceil(clampedBlur.toDouble()).toInt().coerceAtMost(blurKeyframes)
@@ -34,23 +66,22 @@ class GLPictureSet(private val blurKeyframes: Int) {
 
         when {
             globalAlpha <= 0f -> return
+
             lo == hi -> {
+                // Single blur level - just draw it normally
                 pictures[lo]?.draw(mvpMatrix, globalAlpha, duotone)
             }
 
-            globalAlpha == 1f -> {
-                pictures[lo]?.draw(mvpMatrix, 1f - localHiAlpha, duotone)
-                pictures[hi]?.draw(mvpMatrix, localHiAlpha, duotone)
-            }
-
             else -> {
-                val loPicture = pictures[lo] ?: return
-                val hiPicture = pictures[hi] ?: return
-                val newLocalLoAlpha =
-                    globalAlpha * (localHiAlpha - 1) / (globalAlpha * localHiAlpha - 1)
-                val newLocalHiAlpha = globalAlpha * localHiAlpha
-                loPicture.draw(mvpMatrix, newLocalLoAlpha, duotone)
-                hiPicture.draw(mvpMatrix, newLocalHiAlpha, duotone)
+                // Interpolating between two blur keyframes
+                // Distribute globalAlpha proportionally and composite blur levels correctly
+                val loAlpha = globalAlpha * (1f - localHiAlpha)
+                val hiAlpha = globalAlpha * localHiAlpha
+
+                // Draw first blur level without blending (replaces background)
+                // Then draw second blur level with blending (adds on top)
+                pictures[lo]?.draw(mvpMatrix, loAlpha, duotone, enableBlending = false)
+                pictures[hi]?.draw(mvpMatrix, hiAlpha, duotone, enableBlending = true)
             }
         }
     }
@@ -135,7 +166,7 @@ class GLPicture(bitmap: Bitmap) {
             }
         """
 
-        //language=c
+        //language=glsl
         private const val FRAGMENT_SHADER_CODE = """
             precision mediump float;
             uniform sampler2D uTexture;
@@ -210,10 +241,18 @@ class GLPicture(bitmap: Bitmap) {
 
     fun draw(
         mvpMatrix: FloatArray, alpha: Float,
-        duotone: Duotone = Duotone()
+        duotone: Duotone = Duotone(),
+        enableBlending: Boolean = true
     ) {
         if (textureHandles.isEmpty()) {
             return
+        }
+
+        // Control blending state
+        if (enableBlending) {
+            GLES20.glEnable(GLES20.GL_BLEND)
+        } else {
+            GLES20.glDisable(GLES20.GL_BLEND)
         }
 
         GLES20.glUseProgram(PROGRAM_HANDLE)

@@ -178,10 +178,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         currentImageUri = null
                         currentImageBitmap = it
                         val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-                        val blurred = processImageForRenderer(it, blurAmount)
+                        val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
+                        val blurLevels = it.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
                         val payload = RendererImagePayload(
                             original = it,
-                            blurred = blurred,
+                            blurred = blurLevels,
                             sourceUri = null
                         )
                         queueRendererEvent(allowWhenSurfaceUnavailable = true) {
@@ -192,24 +193,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     e.printStackTrace()
                 }
             }
-        }
-
-        /**
-         * Process image for renderer. Duotone is now applied via GPU shader.
-         * This only handles blur processing.
-         */
-        private fun processImageForRenderer(
-            source: Bitmap,
-            blurFraction: Float,
-        ): Bitmap {
-            val normalizedBlur = blurFraction.coerceIn(0f, 1f)
-            val radius = normalizedBlur * MAX_BLUR_RADIUS_PIXELS
-            val blurred = if (radius <= 0f) {
-                source
-            } else {
-                source.blur(radius) ?: source
-            }
-            return blurred
         }
 
 
@@ -352,17 +335,15 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun prepareRendererImage(uri: Uri, skipBlur: Boolean = false): RendererImagePayload? {
             val bitmap = decodeBitmapFromUri(uri) ?: return null
 
-            // Skip blur for fast initial load
-            val blurred = if (skipBlur) {
-                bitmap
-            } else {
-                val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-                processImageForRenderer(bitmap, blurAmount)
-            }
+            val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
+            val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
+
+            // If skipBlur is true, maxRadius will be 0, so blurLevels will be empty
+            val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
 
             return RendererImagePayload(
                 original = bitmap,
-                blurred = blurred,
+                blurred = blurLevels,
                 sourceUri = uri
             )
         }
@@ -385,10 +366,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val bitmap = currentImageBitmap ?: return
             folderScheduler.execute {
                 val blurAmount = WallpaperPreferences.getBlurAmount(prefs)
-                val blurred = processImageForRenderer(bitmap, blurAmount)
+
+                val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
+                val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
+
                 val payload = RendererImagePayload(
                     original = bitmap,
-                    blurred = blurred,
+                    blurred = blurLevels,
                     sourceUri = currentImageUri
                 )
                 queueRendererEvent(allowWhenSurfaceUnavailable = true) {

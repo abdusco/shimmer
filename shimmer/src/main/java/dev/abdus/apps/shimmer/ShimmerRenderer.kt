@@ -18,12 +18,17 @@ import kotlin.math.max
 /**
  * Payload containing image data for the renderer.
  * @property original The original unprocessed bitmap
- * @property blurred The pre-blurred bitmap
+ * @property blurred List of progressively blurred bitmaps (excluding original).
+ *                   The number of blur levels determines the keyframe count.
+ *                   Examples:
+ *                   - 0 levels: No blur animation (just original)
+ *                   - 1 level: [100% blur] → 2 states (original, blurred)
+ *                   - 2 levels: [50% blur, 100% blur] → 3 states (original, 50%, 100%)
  * @property sourceUri Optional URI of the source image
  */
 data class RendererImagePayload(
     val original: Bitmap,
-    val blurred: Bitmap,
+    val blurred: List<Bitmap>,
     val sourceUri: Uri? = null
 )
 
@@ -56,7 +61,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     companion object {
         /** Duration of blur animation in milliseconds */
-        private const val BLUR_ANIMATION_DURATION = 1200
+        private const val BLUR_ANIMATION_DURATION = 3000
 
         /** Duration of image crossfade animation in milliseconds */
         private const val IMAGE_FADE_DURATION = 1200
@@ -67,7 +72,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // Image state
     private var originalBitmap: Bitmap? = null
-    private var blurredBitmap: Bitmap? = null
+    private var blurLevels: List<Bitmap>? = null
     private var pendingImage: RendererImagePayload? = null
 
     // Surface state
@@ -95,7 +100,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     private lateinit var colorOverlay: GLColorOverlay
 
     // Animation state
-    private val blurKeyframes = 1
+    /** Number of blur keyframes (equals the number of blur levels provided) */
+    private var blurKeyframes = 0
     private val blurAnimator = TickingFloatAnimator(BLUR_ANIMATION_DURATION, DecelerateInterpolator())
     private val imageFadeAnimator = TickingFloatAnimator(IMAGE_FADE_DURATION, DecelerateInterpolator()).apply {
         snapTo(1f)
@@ -115,8 +121,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     private var targetDuotoneOpacity = 0f
 
     /**
-     * Sets the wallpaper image with pre-processed blur variant.
-     * @param image Image payload containing original and blurred bitmaps
+     * Sets the wallpaper image with pre-processed blur levels.
+     * @param image Image payload containing original and blur level bitmaps
      */
     fun setImage(image: RendererImagePayload) {
         if (!surfaceCreated) {
@@ -130,7 +136,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
         bitmapAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height
 
-        blurredBitmap = image.blurred
+        blurLevels = image.blurred
+        // Calculate keyframes from the number of blur levels provided
+        blurKeyframes = image.blurred.size
 
         updatePictureSet()
         recomputeProjectionMatrix()
@@ -336,12 +344,19 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     private fun updatePictureSet(preserveAspect: Boolean = false) {
         val baseOriginal = originalBitmap ?: return
-        val blurred = blurredBitmap ?: baseOriginal
+        val levels = blurLevels ?: return
 
         previousPictureSet?.destroyPictures()
         previousPictureSet = pictureSet
-        pictureSet = GLPictureSet(blurKeyframes).apply {
-            load(listOf(baseOriginal, blurred))
+
+        // Build the bitmap list: [original, ...blurLevels]
+        val bitmapList = buildList {
+            add(baseOriginal)
+            addAll(levels)
+        }
+
+        pictureSet = GLPictureSet().apply {
+            load(bitmapList)
         }
         imageFadeAnimator.start(startValue = 0f, endValue = 1f)
 

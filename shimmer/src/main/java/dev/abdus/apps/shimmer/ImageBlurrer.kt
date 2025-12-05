@@ -15,6 +15,9 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
+const val BLUR_KEYFRAMES = 1
+
 /**
  * Applies a Gaussian blur to this bitmap.
  * @param radius Blur radius in pixels (0-200)
@@ -25,13 +28,34 @@ fun Bitmap?.blur(radius: Float): Bitmap? {
 }
 
 /**
+ * Generates a list of progressively blurred bitmaps.
+ * @param levels Number of blur keyframes (e.g., 2 = [50% blur, 100% blur])
+ *               This produces `levels` bitmaps. Combined with the original, you get `levels + 1` total states.
+ *               Example: levels=2 produces [50% blur, 100% blur], which with original = 3 states (0%, 50%, 100%)
+ * @param maxRadius Maximum blur radius in pixels for the final level
+ * @return List of blurred bitmaps, or empty list if generation fails
+ */
+fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
+    if (levels <= 0) return emptyList()
+
+    return buildList {
+        for (i in 1..levels) {
+            val radius = maxRadius * i / levels
+            val blurred = this@generateBlurLevels.blur(radius)
+                ?: // If any level fails, return what we have so far
+                return this
+            add(blurred)
+        }
+    }
+}
+
+/**
  * Handles GPU-accelerated Gaussian blur operations on bitmaps.
  */
 private class ImageBlurrer(private val sourceBitmap: Bitmap?) {
 
     companion object {
-        /** Maximum blur radius supported in pixels */
-        const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
+        // Note: MAX_SUPPORTED_BLUR_RADIUS_PIXELS is now a package-level constant
     }
 
     /**
@@ -72,7 +96,7 @@ private class GaussianBlurGPURenderer(
 
     companion object {
         /** Maximum blur radius (inherited from ImageBlurrer) */
-        private const val MAX_RADIUS = ImageBlurrer.MAX_SUPPORTED_BLUR_RADIUS_PIXELS
+        private const val MAX_RADIUS = MAX_SUPPORTED_BLUR_RADIUS_PIXELS
 
         /** Number of position components per vertex (x, y) */
         private const val POSITION_COMPONENTS = 2

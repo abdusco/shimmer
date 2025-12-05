@@ -71,7 +71,7 @@ class SplashActivity : ComponentActivity() {
             bitmap?.let {
                 val payload = RendererImagePayload(
                     original = it,
-                    blurred = it,
+                    blurred = emptyList(), // No blur for splash screen
                     sourceUri = null
                 )
                 surfaceView.queueEvent {
