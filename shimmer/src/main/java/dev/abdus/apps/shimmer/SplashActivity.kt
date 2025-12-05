@@ -166,7 +166,7 @@ private fun SplashScreen(
         // UI overlay
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.3f)
+            color = androidx.compose.ui.graphics.Color.Transparent
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -181,7 +181,7 @@ private fun SplashScreen(
                         text = "Shimmer",
                         style = MaterialTheme.typography.displayLarge,
                         textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.inversePrimary
+                        color = androidx.compose.ui.graphics.Color.White
                     )
 
                     Button(
