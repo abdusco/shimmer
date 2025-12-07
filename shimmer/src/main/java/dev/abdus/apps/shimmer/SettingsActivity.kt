@@ -74,6 +74,7 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -83,6 +84,23 @@ val PADDING_Y = 24.dp
 enum class SettingsTab {
     SOURCES,
     EFFECTS
+}
+
+/**
+ * Debounces value changes - only executes the callback after [delayMillis] of inactivity.
+ * Automatically cancels pending execution when value changes, implementing true debounce behavior.
+ * Useful for expensive operations like image reprocessing.
+ */
+@Composable
+fun <T> DebouncedEffect(
+    value: T,
+    delayMillis: Long = 300,
+    onDebounced: suspend (T) -> Unit
+) {
+    LaunchedEffect(value) {
+        delay(delayMillis)
+        onDebounced(value)
+    }
 }
 
 class SettingsActivity : ComponentActivity() {
@@ -344,6 +362,33 @@ private fun EffectsTab(
     onDuotoneDarkColorChange: (String) -> Unit,
     onDuotonePresetSelected: (DuotonePreset) -> Unit
 ) {
+    // Local state for sliders to provide instant UI feedback
+    var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
+    var localDimAmount by remember { mutableFloatStateOf(dimAmount) }
+
+    // Sync local state when preferences change externally
+    LaunchedEffect(blurAmount) {
+        localBlurAmount = blurAmount
+    }
+
+    LaunchedEffect(dimAmount) {
+        localDimAmount = dimAmount
+    }
+
+    // Debounce blur changes (300ms delay after user stops dragging)
+    DebouncedEffect(localBlurAmount, delayMillis = 300) { newValue ->
+        if (newValue != blurAmount) {
+            onBlurAmountChange(newValue)
+        }
+    }
+
+    // Debounce dim changes (300ms delay after user stops dragging)
+    DebouncedEffect(localDimAmount, delayMillis = 300) { newValue ->
+        if (newValue != dimAmount) {
+            onDimAmountChange(newValue)
+        }
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -366,13 +411,13 @@ private fun EffectsTab(
                     )
                     SliderSetting(
                         title = "Blur amount",
-                        value = blurAmount,
-                        onValueChange = onBlurAmountChange
+                        value = localBlurAmount,
+                        onValueChange = { localBlurAmount = it }
                     )
                     SliderSetting(
                         title = "Dim amount",
-                        value = dimAmount,
-                        onValueChange = onDimAmountChange
+                        value = localDimAmount,
+                        onValueChange = { localDimAmount = it }
                     )
                     EffectTransitionDurationSlider(
                         durationMillis = effectTransitionDurationMillis,
