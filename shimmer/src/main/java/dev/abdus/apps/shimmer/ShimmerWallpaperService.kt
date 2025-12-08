@@ -264,9 +264,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
                 // Only start scheduler if we successfully loaded an image
                 transitionScheduler.start()
-
-                // Apply blur in background after initial display
-                reprocessCurrentImage()
             }
         }
 
