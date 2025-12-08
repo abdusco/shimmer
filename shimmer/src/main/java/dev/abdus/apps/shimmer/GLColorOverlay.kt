@@ -25,45 +25,8 @@ class GLColorOverlay {
 
         // Color normalization factor (convert 0-255 to 0.0-1.0)
         private const val COLOR_NORMALIZE = 255f
-
-        // language=glsl
-        private const val VERTEX_SHADER_CODE = """
-            uniform mat4 uMVPMatrix;
-            attribute vec4 aPosition;
-            void main(){
-                gl_Position = uMVPMatrix * aPosition;
-            }
-        """
-
-        // language=glsl
-        private const val FRAGMENT_SHADER_CODE = """
-            precision mediump float;
-            uniform vec4 uColor;
-            void main(){
-                gl_FragColor = uColor;
-            }
-        """
-
-        // OpenGL program and shader attribute/uniform handles
-        private var programHandle = 0
-        private var positionHandle = 0
-        private var colorHandle = 0
-        private var mvpMatrixHandle = 0
-
-        /**
-         * Initialize OpenGL resources. Must be called on the GL thread.
-         */
-        fun initGl() {
-            val vertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_CODE)
-            val fragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_CODE)
-
-            programHandle = GLUtil.createAndLinkProgram(vertexShader, fragmentShader)
-            positionHandle = GLES20.glGetAttribLocation(programHandle, "aPosition")
-            mvpMatrixHandle = GLES20.glGetUniformLocation(programHandle, "uMVPMatrix")
-            colorHandle = GLES20.glGetUniformLocation(programHandle, "uColor")
-        }
     }
-
+    
     /**
      * Vertex buffer containing two triangles that cover the entire screen in normalized device coordinates.
      * Each vertex has 3 coordinates (x, y, z).
@@ -86,14 +49,14 @@ class GLColorOverlay {
      * Draws the color overlay.
      * @param mvpMatrix Model-View-Projection matrix for transforming vertices
      */
-    fun draw(mvpMatrix: FloatArray) {
+    fun draw(handles: ColorOverlayHandles, mvpMatrix: FloatArray) {
         // Activate shader program
-        GLES20.glUseProgram(programHandle)
-        GLES20.glEnableVertexAttribArray(positionHandle)
+        GLES20.glUseProgram(handles.program)
+        GLES20.glEnableVertexAttribArray(handles.attribPosition)
 
         // Set vertex positions
         GLES20.glVertexAttribPointer(
-            positionHandle,
+            handles.attribPosition,
             COORDS_PER_VERTEX,
             GLES20.GL_FLOAT,
             false,
@@ -102,11 +65,11 @@ class GLColorOverlay {
         )
 
         // Set transformation matrix
-        GLES20.glUniformMatrix4fv(mvpMatrixHandle, 1, false, mvpMatrix, 0)
+        GLES20.glUniformMatrix4fv(handles.uniformMvpMatrix, 1, false, mvpMatrix, 0)
 
         // Set color (normalize from 0-255 to 0.0-1.0)
         GLES20.glUniform4f(
-            colorHandle,
+            handles.uniformColor,
             color.red / COLOR_NORMALIZE,
             color.green / COLOR_NORMALIZE,
             color.blue / COLOR_NORMALIZE,
@@ -115,6 +78,7 @@ class GLColorOverlay {
 
         // Draw the triangles
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, VERTEX_COUNT)
-        GLES20.glDisableVertexAttribArray(positionHandle)
+        GLES20.glDisableVertexAttribArray(handles.attribPosition)
     }
 }
+

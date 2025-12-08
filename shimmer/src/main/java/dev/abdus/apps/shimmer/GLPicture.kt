@@ -35,11 +35,11 @@ class GLPictureSet {
      * Loads bitmaps into the picture set.
      * @param bitmaps List of bitmaps with progressive blur levels (first = original, rest = increasingly blurred)
      */
-    fun load(bitmaps: List<Bitmap?>) {
+    fun load(bitmaps: List<Bitmap?>, tileSize: Int) {
         destroyPictures()
         pictures = arrayOfNulls(bitmaps.size)
         for (index in pictures.indices) {
-            pictures[index] = bitmaps.getOrNull(index)?.let { GLPicture(it) }
+            pictures[index] = bitmaps.getOrNull(index)?.let { GLPicture(it, tileSize) }
         }
     }
 
@@ -51,6 +51,8 @@ class GLPictureSet {
      * @param duotone Duotone color effect to apply
      */
     fun drawFrame(
+        handles: PictureHandles,
+        tileSize: Int,
         mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
         duotone: Duotone = Duotone()
     ) {
@@ -69,7 +71,7 @@ class GLPictureSet {
 
             lo == hi -> {
                 // Single blur level - just draw it normally
-                pictures[lo]?.draw(mvpMatrix, globalAlpha, duotone)
+                pictures[lo]?.draw(handles, tileSize, mvpMatrix, globalAlpha, duotone)
             }
 
             else -> {
@@ -80,8 +82,8 @@ class GLPictureSet {
 
                 // Draw first blur level without blending (replaces background)
                 // Then draw second blur level with blending (adds on top)
-                pictures[lo]?.draw(mvpMatrix, loAlpha, duotone, enableBlending = false)
-                pictures[hi]?.draw(mvpMatrix, hiAlpha, duotone, enableBlending = true)
+                pictures[lo]?.draw(handles, tileSize, mvpMatrix, loAlpha, duotone, enableBlending = false)
+                pictures[hi]?.draw(handles, tileSize, mvpMatrix, hiAlpha, duotone, enableBlending = true)
             }
         }
     }
@@ -95,7 +97,7 @@ class GLPictureSet {
 }
 
 
-class GLPicture(bitmap: Bitmap) {
+class GLPicture(bitmap: Bitmap, tileSize: Int) {
 
     companion object {
         private const val COORDS_PER_VERTEX = 3
@@ -114,76 +116,6 @@ class GLPicture(bitmap: Bitmap) {
             1f, 1f, // bottom right
             1f, 0f
         ) // top right
-
-        private var PROGRAM_HANDLE = 0
-        private var ATTRIB_POSITION_HANDLE = 0
-        private var ATTRIB_TEXTURE_COORDS_HANDLE = 0
-        private var UNIFORM_MVP_MATRIX_HANDLE = 0
-        private var UNIFORM_TEXTURE_HANDLE = 0
-        private var UNIFORM_ALPHA_HANDLE = 0
-        private var UNIFORM_DUOTONE_LIGHT_HANDLE = 0
-        private var UNIFORM_DUOTONE_DARK_HANDLE = 0
-        private var UNIFORM_DUOTONE_OPACITY_HANDLE = 0
-
-        private var TILE_SIZE: Int = 0
-
-        fun initGl() {
-            val vertexShaderHandle = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_CODE)
-            val fragShaderHandle =
-                GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_CODE)
-
-            PROGRAM_HANDLE = GLUtil.createAndLinkProgram(vertexShaderHandle, fragShaderHandle, null)
-            ATTRIB_POSITION_HANDLE = GLES20.glGetAttribLocation(PROGRAM_HANDLE, "aPosition")
-            ATTRIB_TEXTURE_COORDS_HANDLE = GLES20.glGetAttribLocation(PROGRAM_HANDLE, "aTexCoords")
-            UNIFORM_MVP_MATRIX_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uMVPMatrix")
-            UNIFORM_TEXTURE_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uTexture")
-            UNIFORM_ALPHA_HANDLE = GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uAlpha")
-            UNIFORM_DUOTONE_LIGHT_HANDLE =
-                GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneLightColor")
-            UNIFORM_DUOTONE_DARK_HANDLE =
-                GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneDarkColor")
-            UNIFORM_DUOTONE_OPACITY_HANDLE =
-                GLES20.glGetUniformLocation(PROGRAM_HANDLE, "uDuotoneOpacity")
-
-            val maxTextureSize = IntArray(1)
-            GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, maxTextureSize, 0)
-            TILE_SIZE = min(512, maxTextureSize[0])
-            if (TILE_SIZE == 0) {
-                TILE_SIZE = 512
-            }
-        }
-
-        //language=c
-        private const val VERTEX_SHADER_CODE = """
-            uniform mat4 uMVPMatrix;
-            attribute vec4 aPosition;
-            attribute vec2 aTexCoords;
-            varying vec2 vTexCoords;
-            
-            void main() {
-                vTexCoords = aTexCoords;
-                gl_Position = uMVPMatrix * aPosition;
-            }
-        """
-
-        //language=glsl
-        private const val FRAGMENT_SHADER_CODE = """
-            precision mediump float;
-            uniform sampler2D uTexture;
-            uniform float uAlpha;
-            uniform vec3 uDuotoneLightColor;
-            uniform vec3 uDuotoneDarkColor;
-            uniform float uDuotoneOpacity;
-            varying vec2 vTexCoords;
-            
-            void main() {
-                vec4 color = texture2D(uTexture, vTexCoords);
-                float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-                vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-                vec3 finalColor = mix(color.rgb, duotone, uDuotoneOpacity);
-                gl_FragColor = vec4(finalColor, color.a * uAlpha);
-            }    
-        """
     }
 
     private val vertices = FloatArray(COORDS_PER_VERTEX * VERTICES)
@@ -197,15 +129,15 @@ class GLPicture(bitmap: Bitmap) {
     private val height = bitmap.height
 
     init {
-        val tileSize = if (TILE_SIZE > 0) TILE_SIZE else bitmap.width.coerceAtLeast(bitmap.height)
-        if (tileSize == 0 || width == 0 || height == 0) {
+        val effectiveTileSize = if (tileSize > 0) tileSize else bitmap.width.coerceAtLeast(bitmap.height)
+        if (effectiveTileSize == 0 || width == 0 || height == 0) {
             numColumns = 0
             numRows = 0
             textureHandles = IntArray(0)
         } else {
-            val leftoverHeight = height % tileSize
-            numColumns = width.divideRoundUp(tileSize)
-            numRows = height.divideRoundUp(tileSize)
+            val leftoverHeight = height % effectiveTileSize
+            numColumns = width.divideRoundUp(effectiveTileSize)
+            numRows = height.divideRoundUp(effectiveTileSize)
 
             textureHandles = IntArray(numColumns * numRows)
             if (numColumns == 1 && numRows == 1) {
@@ -215,13 +147,13 @@ class GLPicture(bitmap: Bitmap) {
                 for (y in 0 until numRows) {
                     for (x in 0 until numColumns) {
                         rect.set(
-                            x * tileSize,
-                            (numRows - y - 1) * tileSize,
-                            (x + 1) * tileSize,
-                            (numRows - y) * tileSize
+                            x * effectiveTileSize,
+                            (numRows - y - 1) * effectiveTileSize,
+                            (x + 1) * effectiveTileSize,
+                            (numRows - y) * effectiveTileSize
                         )
                         if (leftoverHeight > 0) {
-                            rect.offset(0, -tileSize + leftoverHeight)
+                            rect.offset(0, -effectiveTileSize + leftoverHeight)
                         }
                         rect.intersect(0, 0, width, height)
                         val subBitmap = Bitmap.createBitmap(
@@ -240,6 +172,8 @@ class GLPicture(bitmap: Bitmap) {
     }
 
     fun draw(
+        handles: PictureHandles,
+        tileSize: Int,
         mvpMatrix: FloatArray, alpha: Float,
         duotone: Duotone = Duotone(),
         enableBlending: Boolean = true
@@ -255,16 +189,16 @@ class GLPicture(bitmap: Bitmap) {
             GLES20.glDisable(GLES20.GL_BLEND)
         }
 
-        GLES20.glUseProgram(PROGRAM_HANDLE)
+        GLES20.glUseProgram(handles.program)
 
-        GLES20.glUniformMatrix4fv(UNIFORM_MVP_MATRIX_HANDLE, 1, false, mvpMatrix, 0)
+        GLES20.glUniformMatrix4fv(handles.uniformMvpMatrix, 1, false, mvpMatrix, 0)
         GLUtil.checkGlError("glUniformMatrix4fv")
 
-        GLES20.glEnableVertexAttribArray(ATTRIB_POSITION_HANDLE)
-        GLES20.glEnableVertexAttribArray(ATTRIB_TEXTURE_COORDS_HANDLE)
+        GLES20.glEnableVertexAttribArray(handles.attribPosition)
+        GLES20.glEnableVertexAttribArray(handles.attribTexCoords)
 
         GLES20.glVertexAttribPointer(
-            ATTRIB_TEXTURE_COORDS_HANDLE,
+            handles.attribTexCoords,
             COORDS_PER_TEXTURE_VERTEX,
             GLES20.GL_FLOAT,
             false,
@@ -272,39 +206,39 @@ class GLPicture(bitmap: Bitmap) {
             textureCoordsBuffer
         )
 
-        GLES20.glUniform1f(UNIFORM_ALPHA_HANDLE, alpha)
+        GLES20.glUniform1f(handles.uniformAlpha, alpha)
 
         // Set duotone uniforms
         GLES20.glUniform3f(
-            UNIFORM_DUOTONE_LIGHT_HANDLE,
+            handles.uniformDuotoneLight,
             android.graphics.Color.red(duotone.lightColor) / 255f,
             android.graphics.Color.green(duotone.lightColor) / 255f,
             android.graphics.Color.blue(duotone.lightColor) / 255f
         )
         GLES20.glUniform3f(
-            UNIFORM_DUOTONE_DARK_HANDLE,
+            handles.uniformDuotoneDark,
             android.graphics.Color.red(duotone.darkColor) / 255f,
             android.graphics.Color.green(duotone.darkColor) / 255f,
             android.graphics.Color.blue(duotone.darkColor) / 255f
         )
-        GLES20.glUniform1f(UNIFORM_DUOTONE_OPACITY_HANDLE, duotone.opacity)
+        GLES20.glUniform1f(handles.uniformDuotoneOpacity, duotone.opacity)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glUniform1i(UNIFORM_TEXTURE_HANDLE, 0)
+        GLES20.glUniform1i(handles.uniformTexture, 0)
 
         var tileIndex = 0
         for (y in 0 until numRows) {
             for (x in 0 until numColumns) {
-                vertices[9] = min(-1f + 2f * x * TILE_SIZE / width, 1f)
+                vertices[9] = min(-1f + 2f * x * tileSize / width, 1f)
                 vertices[3] = vertices[9]
                 vertices[0] = vertices[3]
-                vertices[16] = min(-1f + 2f * (y + 1) * TILE_SIZE / height, 1f)
+                vertices[16] = min(-1f + 2f * (y + 1) * tileSize / height, 1f)
                 vertices[10] = vertices[16]
                 vertices[1] = vertices[10]
-                vertices[15] = min(-1f + 2f * (x + 1) * TILE_SIZE / width, 1f)
+                vertices[15] = min(-1f + 2f * (x + 1) * tileSize / width, 1f)
                 vertices[12] = vertices[15]
                 vertices[6] = vertices[12]
-                vertices[13] = min(-1f + 2f * y * TILE_SIZE / height, 1f)
+                vertices[13] = min(-1f + 2f * y * tileSize / height, 1f)
                 vertices[7] = vertices[13]
                 vertices[4] = vertices[7]
 
@@ -312,7 +246,7 @@ class GLPicture(bitmap: Bitmap) {
                 vertexBuffer.position(0)
 
                 GLES20.glVertexAttribPointer(
-                    ATTRIB_POSITION_HANDLE,
+                    handles.attribPosition,
                     COORDS_PER_VERTEX,
                     GLES20.GL_FLOAT,
                     false,
@@ -327,8 +261,8 @@ class GLPicture(bitmap: Bitmap) {
             }
         }
 
-        GLES20.glDisableVertexAttribArray(ATTRIB_POSITION_HANDLE)
-        GLES20.glDisableVertexAttribArray(ATTRIB_TEXTURE_COORDS_HANDLE)
+        GLES20.glDisableVertexAttribArray(handles.attribPosition)
+        GLES20.glDisableVertexAttribArray(handles.attribTexCoords)
     }
 
     fun destroy() {
@@ -344,3 +278,5 @@ fun Int.divideRoundUp(divisor: Int): Int {
     }
     return (this + divisor - 1) / divisor
 }
+
+

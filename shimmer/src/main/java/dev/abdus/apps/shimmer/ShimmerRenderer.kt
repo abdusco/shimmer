@@ -84,9 +84,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     private val modelMatrix = FloatArray(16)
 
     // OpenGL resources
+    private lateinit var pictureHandles: PictureHandles
+    private lateinit var colorOverlayHandles: ColorOverlayHandles
     private var pictureSet: GLPictureSet? = null
     private var previousPictureSet: GLPictureSet? = null
     private lateinit var colorOverlay: GLColorOverlay
+    private var tileSize: Int = 0
 
     // Animation state
     /** Number of blur keyframes (equals the number of blur levels provided) */
@@ -263,16 +266,101 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         )
     }
 
+    companion object {
+        //language=c
+        private const val PICTURE_VERTEX_SHADER_CODE = """
+            uniform mat4 uMVPMatrix;
+            attribute vec4 aPosition;
+            attribute vec2 aTexCoords;
+            varying vec2 vTexCoords;
+
+            void main() {
+                vTexCoords = aTexCoords;
+                gl_Position = uMVPMatrix * aPosition;
+            }
+        """
+
+        //language=glsl
+        private const val PICTURE_FRAGMENT_SHADER_CODE = """
+            precision mediump float;
+            uniform sampler2D uTexture;
+            uniform float uAlpha;
+            uniform vec3 uDuotoneLightColor;
+            uniform vec3 uDuotoneDarkColor;
+            uniform float uDuotoneOpacity;
+            varying vec2 vTexCoords;
+
+            void main() {
+                vec4 color = texture2D(uTexture, vTexCoords);
+                float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+                vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
+                vec3 finalColor = mix(color.rgb, duotone, uDuotoneOpacity);
+                gl_FragColor = vec4(finalColor, color.a * uAlpha);
+            }
+        """
+
+        // language=glsl
+        private const val COLOR_OVERLAY_VERTEX_SHADER_CODE = """
+            uniform mat4 uMVPMatrix;
+            attribute vec4 aPosition;
+            void main(){
+                gl_Position = uMVPMatrix * aPosition;
+            }
+        """
+
+        // language=glsl
+        private const val COLOR_OVERLAY_FRAGMENT_SHADER_CODE = """
+            precision mediump float;
+            uniform vec4 uColor;
+            void main(){
+                gl_FragColor = uColor;
+            }
+        """
+    }
+
+
     override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
         surfaceCreated = true
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         GLES20.glClearColor(0f, 0f, 0f, 1f)
 
+        // Picture shader
+        val pictureVertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, PICTURE_VERTEX_SHADER_CODE)
+        val pictureFragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, PICTURE_FRAGMENT_SHADER_CODE)
+        val pictureProgram = GLUtil.createAndLinkProgram(pictureVertexShader, pictureFragmentShader)
+        pictureHandles = PictureHandles(
+            program = pictureProgram,
+            attribPosition = GLES20.glGetAttribLocation(pictureProgram, "aPosition"),
+            attribTexCoords = GLES20.glGetAttribLocation(pictureProgram, "aTexCoords"),
+            uniformMvpMatrix = GLES20.glGetUniformLocation(pictureProgram, "uMVPMatrix"),
+            uniformTexture = GLES20.glGetUniformLocation(pictureProgram, "uTexture"),
+            uniformAlpha = GLES20.glGetUniformLocation(pictureProgram, "uAlpha"),
+            uniformDuotoneLight = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneLightColor"),
+            uniformDuotoneDark = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneDarkColor"),
+            uniformDuotoneOpacity = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneOpacity")
+        )
+
+        // Color overlay shader
+        val colorVertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, COLOR_OVERLAY_VERTEX_SHADER_CODE)
+        val colorFragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, COLOR_OVERLAY_FRAGMENT_SHADER_CODE)
+        val colorProgram = GLUtil.createAndLinkProgram(colorVertexShader, colorFragmentShader)
+        colorOverlayHandles = ColorOverlayHandles(
+            program = colorProgram,
+            attribPosition = GLES20.glGetAttribLocation(colorProgram, "aPosition"),
+            uniformMvpMatrix = GLES20.glGetUniformLocation(colorProgram, "uMVPMatrix"),
+            uniformColor = GLES20.glGetUniformLocation(colorProgram, "uColor")
+        )
+
+        val maxTextureSize = IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, maxTextureSize, 0)
+        tileSize = kotlin.math.min(512, maxTextureSize[0])
+        if (tileSize == 0) {
+            tileSize = 512
+        }
+
         Matrix.setLookAtM(viewMatrix, 0, 0f, 0f, 1f, 0f, 0f, -1f, 0f, 1f, 0f)
 
-        GLColorOverlay.initGl()
-        GLPicture.initGl()
         colorOverlay = GLColorOverlay()
         recomputeProjectionMatrix()
 
@@ -351,19 +439,19 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         // Draw previous image (fade out during transition)
         previousPictureSet?.drawFrame(
-            previousMvpMatrix, blurFrameAnimator.currentValue, 1f - imageAlpha, duotone
+            pictureHandles, tileSize, previousMvpMatrix, blurFrameAnimator.currentValue, 1f - imageAlpha, duotone
         )
 
         // Draw current image (fade in during transition)
         currentPictureSet.drawFrame(
-            mvpMatrix, blurFrameAnimator.currentValue, imageAlpha, duotone
+            pictureHandles, tileSize, mvpMatrix, blurFrameAnimator.currentValue, imageAlpha, duotone
         )
 
         // Draw dim overlay (fades with blur progress)
         val overlayAlpha = (dimAmount * blurProgress * 255).toInt().coerceIn(0, 255)
         colorOverlay.color = Color.argb(overlayAlpha, 0, 0, 0)
         Matrix.setIdentityM(modelMatrix, 0)
-        colorOverlay.draw(modelMatrix)
+        colorOverlay.draw(colorOverlayHandles, modelMatrix)
 
         // Clean up previous picture set after fade completes
         if (!imageStillAnimating && imageAlpha >= 1f) {
@@ -398,7 +486,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
 
         pictureSet = GLPictureSet().apply {
-            load(bitmapList)
+            load(bitmapList, tileSize)
         }
 
         // For first image, start from 0 (fade in from black)
