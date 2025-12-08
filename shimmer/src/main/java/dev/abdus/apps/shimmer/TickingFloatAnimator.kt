@@ -28,6 +28,8 @@ class TickingFloatAnimator(
     var currentValue: Float = 0f
     var isRunning = false
         private set
+    var progress: Float = 0f
+        private set
 
     fun start(startValue: Float = currentValue, endValue: Float, onEnd: () -> Unit = {}) {
         this.startValue = startValue
@@ -38,24 +40,13 @@ class TickingFloatAnimator(
         tick()
     }
 
-    fun snapTo(value: Float) {
-        isRunning = false
-        currentValue = value
-    }
-
-    fun finish() {
-        if (isRunning) {
-            isRunning = false
-            currentValue = endValue.also { onEnd() }
-        }
-    }
-
     fun tick(): Boolean {
         if (!isRunning) {
             return false
         }
 
         val t = min((SystemClock.elapsedRealtime() - startTime).toFloat() / durationMillis, 1f)
+        progress = t // Set the progress property
         isRunning = t < 1f
         currentValue = if (isRunning) {
             startValue + interpolator.getInterpolation(t) * (endValue - startValue)
@@ -63,5 +54,10 @@ class TickingFloatAnimator(
             endValue.also { onEnd() }
         }
         return isRunning
+    }
+
+    fun reset() {
+        isRunning = false
+        progress = 1f
     }
 }

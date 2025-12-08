@@ -54,7 +54,8 @@ class GLPictureSet {
         handles: PictureHandles,
         tileSize: Int,
         mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
-        duotone: Duotone = Duotone()
+        duotone: Duotone = Duotone(),
+        dimAmount: Float = 0f
     ) {
         if (pictures.all { it == null }) {
             return
@@ -71,7 +72,7 @@ class GLPictureSet {
 
             lo == hi -> {
                 // Single blur level - just draw it normally
-                pictures[lo]?.draw(handles, tileSize, mvpMatrix, globalAlpha, duotone)
+                pictures[lo]?.draw(handles, tileSize, mvpMatrix, globalAlpha, duotone, dimAmount)
             }
 
             else -> {
@@ -82,8 +83,8 @@ class GLPictureSet {
 
                 // Draw first blur level without blending (replaces background)
                 // Then draw second blur level with blending (adds on top)
-                pictures[lo]?.draw(handles, tileSize, mvpMatrix, loAlpha, duotone, enableBlending = false)
-                pictures[hi]?.draw(handles, tileSize, mvpMatrix, hiAlpha, duotone, enableBlending = true)
+                pictures[lo]?.draw(handles, tileSize, mvpMatrix, loAlpha, duotone, dimAmount, enableBlending = false)
+                pictures[hi]?.draw(handles, tileSize, mvpMatrix, hiAlpha, duotone, dimAmount, enableBlending = true)
             }
         }
     }
@@ -176,9 +177,11 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
         tileSize: Int,
         mvpMatrix: FloatArray, alpha: Float,
         duotone: Duotone = Duotone(),
+        dimAmount: Float = 0f,
         enableBlending: Boolean = true
     ) {
         if (textureHandles.isEmpty()) {
+            android.util.Log.w("GLPicture", "draw: No texture handles available.")
             return
         }
 
@@ -222,6 +225,7 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
             android.graphics.Color.blue(duotone.darkColor) / 255f
         )
         GLES20.glUniform1f(handles.uniformDuotoneOpacity, duotone.opacity)
+        GLES20.glUniform1f(handles.uniformDimAmount, dimAmount)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glUniform1i(handles.uniformTexture, 0)

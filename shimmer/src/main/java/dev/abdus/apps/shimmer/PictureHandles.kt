@@ -9,5 +9,6 @@ data class PictureHandles(
     val uniformAlpha: Int,
     val uniformDuotoneLight: Int,
     val uniformDuotoneDark: Int,
-    val uniformDuotoneOpacity: Int
+    val uniformDuotoneOpacity: Int,
+    val uniformDimAmount: Int
 )

@@ -6,7 +6,6 @@ import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.opengl.Matrix
-import android.view.animation.DecelerateInterpolator
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -26,7 +25,7 @@ import kotlin.math.max
  */
 data class ImageSet(
     val original: Bitmap,
-    val blurred: List<Bitmap> = emptyList()
+    val blurred: List<Bitmap> = emptyList(),
 )
 
 /**
@@ -38,7 +37,7 @@ data class ImageSet(
 data class Duotone(
     val lightColor: Int = Color.WHITE,
     val darkColor: Int = Color.BLACK,
-    val opacity: Float = 0f
+    val opacity: Float = 0f,
 )
 
 /**
@@ -54,24 +53,25 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     interface Callbacks {
         /** Request a new frame to be rendered */
         fun requestRender()
+
+        /** Notifies when the renderer has finished its initial setup and is ready to receive commands. */
+        fun onRendererReady()
+
+        /** Notifies when all animations (blur, image fade) have completed and renderer is ready to accept a new image. */
+        fun onReadyForNextImage()
     }
 
     // Effect transition duration (for blur, duotone, and image fade animations)
     private var effectTransitionDurationMillis = 1500
 
     // Image state
-    private var originalBitmap: Bitmap? = null
-    private var blurLevels: List<Bitmap>? = null
-    private var pendingImage: ImageSet? = null
+    // Managed by RenderState
 
     // Surface state
     private var surfaceCreated = false
     private var surfaceAspect = 1f
     private var bitmapAspect = 1f
     private var previousBitmapAspect: Float? = null
-
-    /** Parallax offset (0.0 = left, 0.5 = center, 1.0 = right) */
-    private var normalOffsetX = 0.5f
 
     // Transformation matrices
     private val mvpMatrix = FloatArray(16)
@@ -85,62 +85,41 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // OpenGL resources
     private lateinit var pictureHandles: PictureHandles
-    private lateinit var colorOverlayHandles: ColorOverlayHandles
     private var pictureSet: GLPictureSet? = null
     private var previousPictureSet: GLPictureSet? = null
-    private lateinit var colorOverlay: GLColorOverlay
     private var tileSize: Int = 0
 
     // Animation state
-    /** Number of blur keyframes (equals the number of blur levels provided) */
-    private var blurKeyframes = 0
-    private val blurFrameAnimator =
-        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
-    private val imageFadeAnimator =
-        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator()).apply {
-            snapTo(0f)
-        }
-    private val duotoneAnimator =
-        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
-    private val dimAnimator =
-        TickingFloatAnimator(effectTransitionDurationMillis, DecelerateInterpolator())
+    private val animationController = AnimationController(effectTransitionDurationMillis)
 
-    // Visual effects state
-    private var currentDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
-    private var targetDimAmount = WallpaperPreferences.DEFAULT_DIM_AMOUNT
-    private var isBlurred = false
+    private var isInitialPreferenceLoad = true
 
-    // Duotone effect state
-    private var duotoneAlwaysOn = false
-    private var currentDuotone = Duotone(
-        lightColor = WallpaperPreferences.DEFAULT_DUOTONE_LIGHT,
-        darkColor = WallpaperPreferences.DEFAULT_DUOTONE_DARK,
-        opacity = 0f
-    )
-    private var targetDuotone = currentDuotone
+    // Track when image is set to fire callback when all animations complete
+    private var pendingReadyCallback = false
+
 
     /**
      * Sets the wallpaper image with pre-processed blur levels.
      * @param imageSet Image payload containing original and blur level bitmaps
      */
     fun setImage(imageSet: ImageSet) {
-        if (!surfaceCreated) {
-            pendingImage = imageSet
-            return
-        }
-        val bitmap = imageSet.original
-        originalBitmap = bitmap
+        android.util.Log.d("ImageChange", "setImage: called, ${imageSet.original.width}x${imageSet.original.height}, blurred=${imageSet.blurred.size}")
+        val baseState = animationController.targetRenderState
+        val newTargetState = baseState.copy(imageSet = imageSet)
+
         if (pictureSet != null) {
             previousBitmapAspect = bitmapAspect
         }
-        bitmapAspect = if (bitmap.height == 0) 1f else bitmap.width.toFloat() / bitmap.height
+        bitmapAspect = if (imageSet.original.height == 0) 1f else imageSet.original.width.toFloat() / imageSet.original.height
 
-        blurLevels = imageSet.blurred
-        // Calculate keyframes from the number of blur levels provided
-        blurKeyframes = imageSet.blurred.size
+        updatePictureSet(imageSet)
 
-        updatePictureSet()
+        animationController.updateTargetState(newTargetState)
         recomputeProjectionMatrix()
+
+        // Mark that we need to call callback when all animations complete
+        pendingReadyCallback = true
+        android.util.Log.d("ImageChange", "setImage: pendingReadyCallback=true")
     }
 
     /**
@@ -149,32 +128,36 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun setEffectTransitionDuration(durationMillis: Long) {
         effectTransitionDurationMillis = durationMillis.toInt()
-        blurFrameAnimator.durationMillis = effectTransitionDurationMillis
-        imageFadeAnimator.durationMillis = effectTransitionDurationMillis
-        duotoneAnimator.durationMillis = effectTransitionDurationMillis
-        dimAnimator.durationMillis = effectTransitionDurationMillis
+        animationController.setDuration(effectTransitionDurationMillis)
     }
 
     /**
      * Toggles the blur effect on/off with animation.
      */
     fun toggleBlur() {
-        isBlurred = !isBlurred
-        // When blurKeyframes > 0: animate to keyframe count
-        // When blurKeyframes = 0: animate to 1.0 for smooth duotone/dim transitions
-        val target = if (isBlurred) {
-            if (blurKeyframes > 0) blurKeyframes.toFloat() else 1f
-        } else {
-            0f
-        }
-        blurFrameAnimator.start(startValue = blurFrameAnimator.currentValue, endValue = target)
+        val baseState = animationController.targetRenderState
+        val newTargetState = baseState.copy(
+            blurAmount = if (baseState.blurAmount > 0f) 0f else 1f
+        )
+        animationController.updateTargetState(newTargetState)
         callbacks.requestRender()
     }
 
     fun enableBlur(enable: Boolean = true) {
-        if (isBlurred != enable) {
-            toggleBlur()
+        val baseState = animationController.targetRenderState
+        val targetBlurAmount = if (enable) 1f else 0f
+
+        if (baseState.blurAmount != targetBlurAmount) {
+            val newTargetState = baseState.copy(blurAmount = targetBlurAmount)
+            if (isInitialPreferenceLoad) {
+                animationController.setRenderStateImmediately(newTargetState)
+                animationController.blurAmountAnimator.reset()
+            } else {
+                animationController.updateTargetState(newTargetState)
+            }
+            callbacks.requestRender()
         }
+        isInitialPreferenceLoad = false
     }
 
     /**
@@ -183,20 +166,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun setUserDimAmount(amount: Float) {
         val newAmount = amount.coerceIn(0f, 1f)
-        if (newAmount != targetDimAmount) {
-            currentDimAmount = if (dimAnimator.isRunning) {
-                val t = dimAnimator.currentValue
-                currentDimAmount + (targetDimAmount - currentDimAmount) * t
-            } else {
-                targetDimAmount
-            }
-            targetDimAmount = newAmount
-            dimAnimator.start(startValue = 0f, endValue = 1f)
-        } else {
-            currentDimAmount = newAmount
-            targetDimAmount = newAmount
+        val baseState = animationController.targetRenderState
+        if (baseState.dimAmount != newAmount) {
+            val newTargetState = baseState.copy(dimAmount = newAmount)
+            animationController.updateTargetState(newTargetState)
+            callbacks.requestRender()
         }
-        callbacks.requestRender()
     }
 
     /**
@@ -210,29 +185,20 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         alwaysOn: Boolean,
         duotone: Duotone,
     ) {
-        duotoneAlwaysOn = alwaysOn
-        val newTarget = Duotone(
+        val newTargetDuotone = Duotone(
             lightColor = duotone.lightColor,
             darkColor = duotone.darkColor,
             opacity = if (enabled) 1f else 0f
         )
-
-        val shouldAnimate = newTarget != targetDuotone
-        if (shouldAnimate) {
-            currentDuotone = if (duotoneAnimator.isRunning) {
-                lerpDuotone(currentDuotone, targetDuotone, duotoneAnimator.currentValue)
-            } else {
-                targetDuotone
-            }
-            targetDuotone = newTarget
-            duotoneAnimator.start(startValue = 0f, endValue = 1f)
-        } else {
-            duotoneAnimator.snapTo(0f)
-            currentDuotone = newTarget
-            targetDuotone = newTarget
+        val baseState = animationController.targetRenderState
+        if (baseState.duotone != newTargetDuotone || baseState.duotoneAlwaysOn != alwaysOn) {
+            val newTargetState = baseState.copy(
+                duotone = newTargetDuotone,
+                duotoneAlwaysOn = alwaysOn
+            )
+            animationController.updateTargetState(newTargetState)
+            callbacks.requestRender()
         }
-
-        callbacks.requestRender()
     }
 
     /**
@@ -257,15 +223,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         return Color.rgb(r, g, b)
     }
 
-    private fun lerpDuotone(from: Duotone, to: Duotone, t: Float): Duotone {
-        val clampedT = t.coerceIn(0f, 1f)
-        return Duotone(
-            lightColor = interpolateColor(from.lightColor, to.lightColor, clampedT),
-            darkColor = interpolateColor(from.darkColor, to.darkColor, clampedT),
-            opacity = from.opacity + (to.opacity - from.opacity) * clampedT
-        )
-    }
-
     companion object {
         //language=c
         private const val PICTURE_VERTEX_SHADER_CODE = """
@@ -288,34 +245,19 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniform vec3 uDuotoneLightColor;
             uniform vec3 uDuotoneDarkColor;
             uniform float uDuotoneOpacity;
+            uniform float uDimAmount;
             varying vec2 vTexCoords;
 
             void main() {
                 vec4 color = texture2D(uTexture, vTexCoords);
                 float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
                 vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-                vec3 finalColor = mix(color.rgb, duotone, uDuotoneOpacity);
-                gl_FragColor = vec4(finalColor, color.a * uAlpha);
+                vec3 duotonedColor = mix(color.rgb, duotone, uDuotoneOpacity);
+                vec3 dimmedColor = mix(duotonedColor, vec3(0.0), uDimAmount);
+                gl_FragColor = vec4(dimmedColor, color.a * uAlpha);
             }
         """
 
-        // language=glsl
-        private const val COLOR_OVERLAY_VERTEX_SHADER_CODE = """
-            uniform mat4 uMVPMatrix;
-            attribute vec4 aPosition;
-            void main(){
-                gl_Position = uMVPMatrix * aPosition;
-            }
-        """
-
-        // language=glsl
-        private const val COLOR_OVERLAY_FRAGMENT_SHADER_CODE = """
-            precision mediump float;
-            uniform vec4 uColor;
-            void main(){
-                gl_FragColor = uColor;
-            }
-        """
     }
 
 
@@ -338,18 +280,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniformAlpha = GLES20.glGetUniformLocation(pictureProgram, "uAlpha"),
             uniformDuotoneLight = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneLightColor"),
             uniformDuotoneDark = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneDarkColor"),
-            uniformDuotoneOpacity = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneOpacity")
-        )
-
-        // Color overlay shader
-        val colorVertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, COLOR_OVERLAY_VERTEX_SHADER_CODE)
-        val colorFragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, COLOR_OVERLAY_FRAGMENT_SHADER_CODE)
-        val colorProgram = GLUtil.createAndLinkProgram(colorVertexShader, colorFragmentShader)
-        colorOverlayHandles = ColorOverlayHandles(
-            program = colorProgram,
-            attribPosition = GLES20.glGetAttribLocation(colorProgram, "aPosition"),
-            uniformMvpMatrix = GLES20.glGetUniformLocation(colorProgram, "uMVPMatrix"),
-            uniformColor = GLES20.glGetUniformLocation(colorProgram, "uColor")
+            uniformDuotoneOpacity = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneOpacity"),
+            uniformDimAmount = GLES20.glGetUniformLocation(pictureProgram, "uDimAmount")
         )
 
         val maxTextureSize = IntArray(1)
@@ -361,17 +293,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         Matrix.setLookAtM(viewMatrix, 0, 0f, 0f, 1f, 0f, 0f, -1f, 0f, 1f, 0f)
 
-        colorOverlay = GLColorOverlay()
-        recomputeProjectionMatrix()
+        // pendingImage is handled above, so these calls are no longer needed
+        // The originalBitmap is also removed, so this check is obsolete
 
-        val hadPendingImage = pendingImage != null
-        pendingImage?.let {
-            setImage(it)
-            pendingImage = null
-        }
-        if (!hadPendingImage && originalBitmap != null) {
-            updatePictureSet()
-        }
+        callbacks.onRendererReady()
     }
 
     override fun onSurfaceChanged(gl: GL10, width: Int, height: Int) {
@@ -383,7 +308,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     override fun onDrawFrame(gl: GL10) {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
-        val currentPictureSet = pictureSet ?: return
+        val currentRenderState = animationController.currentRenderState
 
         // Compute transformation matrices
         Matrix.setIdentityM(modelMatrix, 0)
@@ -392,89 +317,68 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         Matrix.multiplyMM(mvpMatrix, 0, projectionMatrix, 0, viewModelMatrix, 0)
 
         // Update animations
-        val stillAnimating = blurFrameAnimator.tick()
-        val imageStillAnimating = imageFadeAnimator.tick()
-        val duotoneStillAnimating = duotoneAnimator.tick()
-        val dimStillAnimating = dimAnimator.tick()
+        val isAnimating = animationController.tick()
+
+        // blurAmount is normalized 0-1, convert to actual keyframe count for rendering
+        val imageBlurKeyframes = currentRenderState.imageSet.blurred.size
+        val normalizedBlurAmount = currentRenderState.blurAmount.coerceIn(0f, 1f)
+        val blurKeyframeIndex = normalizedBlurAmount * imageBlurKeyframes
 
         // Calculate blur progress (0 = no blur visible, 1 = full blur)
-        // When blurKeyframes > 0: normalize animator value by keyframe count
-        // When blurKeyframes = 0: use animator value directly (animates 0->1 or 1->0)
-        val blurProgress = if (blurKeyframes > 0) {
-            (blurFrameAnimator.currentValue / blurKeyframes).coerceIn(0f, 1f)
-        } else {
-            // No blur levels, but animate blur progress for smooth duotone/dim transitions
-            blurFrameAnimator.currentValue.coerceIn(0f, 1f)
-        }
+        val blurProgress = normalizedBlurAmount
 
-        // Update duotone colors and opacity with animation
-        val blendedDuotone = if (duotoneStillAnimating) {
-            lerpDuotone(currentDuotone, targetDuotone, duotoneAnimator.currentValue)
-        } else {
-            currentDuotone = targetDuotone
-            targetDuotone
-        }
-
-        val duotone = Duotone(
-            lightColor = blendedDuotone.lightColor,
-            darkColor = blendedDuotone.darkColor,
-            opacity = if (duotoneAlwaysOn) blendedDuotone.opacity else (blendedDuotone.opacity * blurProgress)
+        val duotone = currentRenderState.duotone.copy(
+            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurProgress)
         )
 
-        // Update dim amount with animation
-        val dimAmount: Float = if (dimStillAnimating) {
-            val t = dimAnimator.currentValue
-            currentDimAmount + (targetDimAmount - currentDimAmount) * t
-        } else {
-            currentDimAmount = targetDimAmount
-            targetDimAmount
-        }
+        val finalDimAmount = currentRenderState.dimAmount * blurProgress
 
-        val imageAlpha = imageFadeAnimator.currentValue.coerceIn(0f, 1f)
-
-
-        // Calculate final duotone opacity:
-        // - If alwaysOn: use animated opacity (smoothly transitions between 0 and 1)
-        // - If not alwaysOn: multiply by blur progress (fade in/out with blur)
+        // val imageAlpha = 1f - animationController.imageTransitionAnimator.currentValue // imageTransitionAnimator animates from 0 to 1 as new image appears, so alpha for old image is 1-value and new is value
+        val currentImageAlpha = animationController.imageTransitionAnimator.currentValue
+        val previousImageAlpha = 1f - animationController.imageTransitionAnimator.currentValue
 
         // Draw previous image (fade out during transition)
         previousPictureSet?.drawFrame(
-            pictureHandles, tileSize, previousMvpMatrix, blurFrameAnimator.currentValue, 1f - imageAlpha, duotone
+            pictureHandles, tileSize, previousMvpMatrix, blurKeyframeIndex, previousImageAlpha, duotone, finalDimAmount
         )
 
         // Draw current image (fade in during transition)
-        currentPictureSet.drawFrame(
-            pictureHandles, tileSize, mvpMatrix, blurFrameAnimator.currentValue, imageAlpha, duotone
+        pictureSet?.drawFrame(
+            pictureHandles, tileSize, mvpMatrix, blurKeyframeIndex, currentImageAlpha, duotone, finalDimAmount
         )
 
-        // Draw dim overlay (fades with blur progress)
-        val overlayAlpha = (dimAmount * blurProgress * 255).toInt().coerceIn(0, 255)
-        colorOverlay.color = Color.argb(overlayAlpha, 0, 0, 0)
-        Matrix.setIdentityM(modelMatrix, 0)
-        colorOverlay.draw(colorOverlayHandles, modelMatrix)
-
         // Clean up previous picture set after fade completes
-        if (!imageStillAnimating && imageAlpha >= 1f) {
+        if (!animationController.imageTransitionAnimator.isRunning && previousImageAlpha <= 0f) {
             previousPictureSet?.destroyPictures()
             previousPictureSet = null
             previousBitmapAspect = null
         }
 
+        // Notify when all animations complete and ready for next image
+        val isImageAnimating = animationController.blurAmountAnimator.isRunning || animationController.imageTransitionAnimator.isRunning
+        if (!isImageAnimating && pendingReadyCallback) {
+            android.util.Log.d("ImageChange", "onDrawFrame: animations complete, calling onReadyForNextImage")
+            pendingReadyCallback = false
+            callbacks.onReadyForNextImage()
+        }
+
         // Request another frame if any animation is still running
-        if (stillAnimating || imageStillAnimating || duotoneStillAnimating || dimStillAnimating) {
+        if (isAnimating) {
             callbacks.requestRender()
         }
     }
 
     /**
-     * Updates the OpenGL picture set with current bitmaps and initiates crossfade animation.
+     * Updates the OpenGL picture set with bitmaps and initiates crossfade animation.
+     * @param imageSet The image set to load
      * @param preserveAspect If true, preserves the aspect ratio for smooth color-only transitions
      */
-    private fun updatePictureSet(preserveAspect: Boolean = false) {
-        val baseOriginal = originalBitmap ?: return
-        val levels = blurLevels ?: return
+    private fun updatePictureSet(imageSet: ImageSet, preserveAspect: Boolean = false) {
+        val baseOriginal = imageSet.original
+        val levels = imageSet.blurred
 
-        val isFirstImage = pictureSet == null
+        // Note: previousBitmapAspect is set in setImage before calling this method
+        bitmapAspect = if (baseOriginal.height == 0) 1f else baseOriginal.width.toFloat() / baseOriginal.height
 
         previousPictureSet?.destroyPictures()
         previousPictureSet = pictureSet
@@ -489,17 +393,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             load(bitmapList, tileSize)
         }
 
-        // For first image, start from 0 (fade in from black)
-        // For subsequent images, crossfade from current alpha
-        if (isFirstImage) {
-            imageFadeAnimator.start(startValue = 0f, endValue = 1f)
-        } else {
-            imageFadeAnimator.start(startValue = 0f, endValue = 1f)
-        }
 
         // When preserving aspect (color changes only), ensure we use the same projection matrix
         if (preserveAspect) {
-            previousBitmapAspect = bitmapAspect
             recomputeProjectionMatrix()
         }
 
@@ -507,14 +403,31 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
+     * Checks if any image-relevant animations (blur or image fade) are currently running.
+     * @return true if blur or image fade animation is in progress
+     */
+    fun isAnimating(): Boolean {
+        val blurRunning = animationController.blurAmountAnimator.isRunning
+        val imageRunning = animationController.imageTransitionAnimator.isRunning
+        val result = blurRunning || imageRunning
+        android.util.Log.d("ImageChange", "isAnimating: blur=$blurRunning, image=$imageRunning, result=$result")
+        return result
+    }
+
+    /**
      * Sets the parallax scroll offset for the wallpaper.
      * @param offset Normalized offset (0.0 = leftmost, 0.5 = center, 1.0 = rightmost)
      */
     fun setParallaxOffset(offset: Float) {
-        normalOffsetX = offset.coerceIn(0f, 1f)
-        recomputeProjectionMatrix()
-        if (surfaceCreated) {
-            callbacks.requestRender()
+        val newOffset = offset.coerceIn(0f, 1f)
+        val baseState = animationController.targetRenderState
+        if (baseState.parallaxOffset != newOffset) {
+            val newTargetState = baseState.copy(parallaxOffset = newOffset)
+            animationController.updateTargetState(newTargetState)
+            recomputeProjectionMatrix() // Recalculate immediately as parallax is not animated
+            if (surfaceCreated) {
+                callbacks.requestRender()
+            }
         }
     }
 
@@ -523,17 +436,18 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * Handles aspect ratio matching and parallax offset.
      */
     private fun recomputeProjectionMatrix() {
+        val parallaxOffset = animationController.currentRenderState.parallaxOffset
         val safeSurfaceAspect = surfaceAspect.takeIf { it.isFinite() && it > 0f } ?: 1f
         val safeBitmapAspect = bitmapAspect.takeIf { it.isFinite() && it > 0f } ?: 1f
         val aspectRatio = safeSurfaceAspect / safeBitmapAspect
 
-        buildProjectionMatrix(tempProjectionMatrix, aspectRatio)
+        buildProjectionMatrix(tempProjectionMatrix, aspectRatio, parallaxOffset)
         System.arraycopy(tempProjectionMatrix, 0, projectionMatrix, 0, tempProjectionMatrix.size)
 
         val prevAspect = previousBitmapAspect?.takeIf { it.isFinite() && it > 0f }
         if (prevAspect != null) {
             val prevAspectRatio = safeSurfaceAspect / prevAspect
-            buildProjectionMatrix(previousProjectionMatrix, prevAspectRatio)
+            buildProjectionMatrix(previousProjectionMatrix, prevAspectRatio, parallaxOffset)
         } else {
             System.arraycopy(
                 projectionMatrix,
@@ -549,8 +463,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * Builds an orthographic projection matrix with parallax scrolling support.
      * @param target Output array for the projection matrix
      * @param aspectRatio Ratio of screen aspect to bitmap aspect
+     * @param parallaxOffset Parallax offset (0.0 = left, 0.5 = center, 1.0 = right)
      */
-    private fun buildProjectionMatrix(target: FloatArray, aspectRatio: Float) {
+    private fun buildProjectionMatrix(target: FloatArray, aspectRatio: Float, parallaxOffset: Float) {
         if (aspectRatio == 0f) {
             Matrix.orthoM(target, 0, -1f, 1f, -1f, 1f, 0f, 1f)
             return
@@ -566,7 +481,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         // Calculate pan range
         val minPan = (1f - maxPanScreenWidths / scaledAspect) / 2f
         val maxPan = (1f + (maxPanScreenWidths - 2f) / scaledAspect) / 2f
-        val panFraction = minPan + (maxPan - minPan) * normalOffsetX
+        val panFraction = minPan + (maxPan - minPan) * parallaxOffset
 
         // Calculate orthographic projection bounds
         val left = -1f + 2f * panFraction
@@ -616,7 +531,7 @@ object GLUtil {
     fun createAndLinkProgram(
         vertexShader: Int,
         fragmentShader: Int,
-        attributes: Array<String>? = null
+        attributes: Array<String>? = null,
     ): Int {
         val program = GLES20.glCreateProgram()
         checkGlError("glCreateProgram")

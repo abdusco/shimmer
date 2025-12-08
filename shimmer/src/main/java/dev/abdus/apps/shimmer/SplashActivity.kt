@@ -52,13 +52,15 @@ class SplashActivity : ComponentActivity() {
                 onCreateRenderer = { renderer, surfaceView ->
                     previewRenderer = renderer
                     previewSurfaceView = surfaceView
-                    loadPreviewImage()
-                    duotoneRotationHandler.postDelayed({ startDuotoneRotation() }, 4000)
                 },
                 onDestroyRenderer = {
                     stopDuotoneRotation()
                     previewRenderer = null
                     previewSurfaceView = null
+                },
+                onRendererReady = {
+                    loadPreviewImage()
+                    duotoneRotationHandler.postDelayed({ startDuotoneRotation() }, 4000)
                 }
             )
         }
@@ -138,7 +140,8 @@ class SplashActivity : ComponentActivity() {
 private fun SplashScreen(
     onSetWallpaper: () -> Unit,
     onCreateRenderer: (ShimmerRenderer, PreviewSurfaceView) -> Unit,
-    onDestroyRenderer: () -> Unit
+    onDestroyRenderer: () -> Unit,
+    onRendererReady: () -> Unit
 ) {
     DisposableEffect(Unit) {
         onDispose {
@@ -156,6 +159,14 @@ private fun SplashScreen(
                     val renderer = ShimmerRenderer(object : ShimmerRenderer.Callbacks {
                         override fun requestRender() {
                             this@apply.requestRender()
+                        }
+
+                        override fun onRendererReady() {
+                            onRendererReady()
+                        }
+
+                        override fun onReadyForNextImage() {
+                            // Not used in preview
                         }
                     })
                     renderer.setEffectTransitionDuration(2000)

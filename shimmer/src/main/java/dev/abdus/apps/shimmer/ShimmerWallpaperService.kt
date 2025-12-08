@@ -10,9 +10,9 @@ import android.net.Uri
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.widget.Toast
+import androidx.core.net.toUri
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService
 import java.util.concurrent.Executors
-import kotlin.concurrent.thread
 
 class ShimmerWallpaperService : GLWallpaperService() {
     override fun onCreateEngine(): Engine {
@@ -21,18 +21,70 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
     inner class ShimmerWallpaperEngine : GLEngine(), ShimmerRenderer.Callbacks {
 
-        private lateinit var renderer: ShimmerRenderer
+        private var renderer: ShimmerRenderer? = null
         private var surfaceAvailable = false
         private var engineVisible = true
-        private val folderScheduler = Executors.newSingleThreadScheduledExecutor()
+        private val imageLoadExecutor = Executors.newSingleThreadScheduledExecutor()
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
         private val transitionScheduler =
-            ImageTransitionScheduler(folderScheduler) { handleScheduledAdvance() }
+            ImageTransitionScheduler(imageLoadExecutor) { handleScheduledAdvance() }
 
-        // Track current image for reprocessing when settings change
-        private var currentImageBitmap: Bitmap? = null
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
         private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
+
+        // Queue for actions that need to be run on the GL thread when the renderer is available
+        // This list will hold the actual actions, not just their lambdas.
+        private val deferredRendererActions = mutableListOf<(ShimmerRenderer) -> Unit>()
+
+        // Image change state management (accessed only on folderScheduler thread)
+        private var pendingImageUri: Uri? = null
+
+        // Track current image URI for re-blurring when blur amount changes
+        private var currentImageUri: Uri? = null
+
+        // Track initial load to prevent double-blur
+        private var isInitialLoad = true
+
+        override fun onRendererReady() {
+            val r = renderer ?: return
+
+            // Execute any deferred actions
+            deferredRendererActions.forEach { action -> action(r) }
+            deferredRendererActions.clear()
+
+            applyPreferences() // Apply preferences now that renderer is ready
+            isInitialLoad = false // Mark that initial load is complete
+            super.requestRender() // Request render after applying preferences
+        }
+
+        override fun onReadyForNextImage() {
+            android.util.Log.d("ImageChange", "onReadyForNextImage called on ${Thread.currentThread().name}")
+            imageLoadExecutor.execute {
+                android.util.Log.d("ImageChange", "onReadyForNextImage executing: pendingUri=$pendingImageUri")
+                pendingImageUri?.let { uri ->
+                    // Process the pending request
+                    android.util.Log.d("ImageChange", "  → Processing pending image: $uri")
+                    pendingImageUri = null
+                    android.util.Log.d("ImageChange", "  → pendingUri cleared, calling loadImage")
+                    loadImage(uri)
+                } ?: android.util.Log.d("ImageChange", "  → No pending requests")
+            }
+        }
+        
+        // Helper function to safely execute actions on the renderer on the GL thread
+        private fun withRenderer(allowWhenSurfaceUnavailable: Boolean = false, action: (ShimmerRenderer) -> Unit) {
+            val r = renderer
+            if (r == null) {
+                // If renderer is not yet available, defer this action.
+                // This typically happens if a preference change occurs before onSurfaceCreated has completed
+                // and renderer is assigned.
+                deferredRendererActions.add(action)
+                return
+            }
+            // If renderer is available, queue to GL thread
+            queueRendererEvent(allowWhenSurfaceUnavailable) { action(r) }
+        }
+
 
         // BroadcastReceiver for handling shortcut actions
         private val shortcutReceiver = object : BroadcastReceiver() {
@@ -45,7 +97,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             preferences.setBlurAmount(action.percent)
                         }
                     }
-                    Actions.ACTION_ENABLE_BLUR -> enableBlur()
+                    Actions.ACTION_ENABLE_BLUR -> withRenderer { it.enableBlur() }
                 }
             }
         }
@@ -84,16 +136,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
-            // Apply all preferences now that surface is ready
-            applyPreferences()
+            // applyPreferences will be called by onRendererReady callback
             super.requestRender()
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             surfaceAvailable = false
-            queueRendererEvent(allowWhenSurfaceUnavailable = true) {
-                renderer.setParallaxOffset(0.5f)
-            }
+            withRenderer(allowWhenSurfaceUnavailable = true) { it.setParallaxOffset(0.5f) }
             super.onSurfaceDestroyed(holder)
         }
 
@@ -116,7 +165,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 // Receiver was not registered, ignore
             }
             transitionScheduler.cancel()
-            folderScheduler.shutdownNow()
+            imageLoadExecutor.shutdownNow()
             super.onDestroy()
         }
 
@@ -126,7 +175,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     advanceToNextImage()
                 }
                 TapEvent.TRIPLE_TAP -> {
-                    queueRendererEvent { renderer.toggleBlur() }
+                    withRenderer { it.toggleBlur() }
                 }
                 TapEvent.NONE -> {
                     // No gesture detected, continue with default handling
@@ -147,7 +196,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             xOffsetStep: Float,
             yOffsetStep: Float,
             xPixelOffset: Int,
-            yPixelOffset: Int
+            yPixelOffset: Int,
         ) {
             super.onOffsetsChanged(
                 xOffset,
@@ -157,40 +206,39 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 xPixelOffset,
                 yPixelOffset
             )
-            queueRendererEvent { renderer.setParallaxOffset(xOffset) }
+            withRenderer { it.setParallaxOffset(xOffset) }
         }
 
         private fun loadDefaultImage() {
+            // Called on folderScheduler thread
             if (folderRepository.hasFolders()) {
                 return
             }
-            thread {
-                try {
-                    // Load embedded default wallpaper from drawable resources
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = 2
-                    }
-                    val bitmap = BitmapFactory.decodeResource(
-                        resources,
-                        R.drawable.default_wallpaper,
-                        options
-                    )
-                    bitmap?.let {
-                        currentImageBitmap = it
-                        val blurAmount = preferences.getBlurAmount()
-                        val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
-                        val blurLevels = it.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
-                        val imageSet = ImageSet(
-                            original = it,
-                            blurred = blurLevels
-                        )
-                        queueRendererEvent(allowWhenSurfaceUnavailable = true) {
-                            renderer.setImage(imageSet)
-                        }
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            try {
+                // Load embedded default wallpaper from drawable resources
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = 2
                 }
+                val bitmap = BitmapFactory.decodeResource(
+                    resources,
+                    R.drawable.default_wallpaper,
+                    options
+                )
+
+                val blurAmount = preferences.getBlurAmount()
+                val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
+                val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
+                val imageSet = ImageSet(
+                    original = bitmap,
+                    blurred = blurLevels
+                )
+
+                // Mark that we're using the default image (no URI means default)
+                currentImageUri = null
+
+                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
+            } catch (e: Exception) {
+                android.util.Log.e("ShimmerWallpaperService", "Error loading default image: ${e.message}", e)
             }
         }
 
@@ -202,18 +250,28 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun applyBlurPreference() {
-            reprocessCurrentImage()
+            val blurAmount = preferences.getBlurAmount()
+
+            // If not initial load and we have a current image, re-blur it with the new amount
+            if (!isInitialLoad && currentImageUri != null) {
+                imageLoadExecutor.execute {
+                    reBlurCurrentImage()
+                }
+            } else {
+                // On initial load or when no image is loaded, just update the blur state
+                withRenderer { it.enableBlur(blurAmount > 0f) }
+            }
         }
 
         private fun applyDimPreference() {
             val dimAmount = preferences.getDimAmount()
-            queueRendererEvent { renderer.setUserDimAmount(dimAmount) }
+            withRenderer { it.setUserDimAmount(dimAmount) }
         }
 
         private fun applyDuotoneSettingsPreference() {
             val settings = preferences.getDuotoneSettings()
-            queueRendererEvent {
-                renderer.setDuotoneSettings(
+            withRenderer {
+                it.setDuotoneSettings(
                     enabled = settings.enabled,
                     alwaysOn = settings.alwaysOn,
                     duotone = Duotone(
@@ -227,9 +285,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyEffectTransitionDurationPreference() {
             val duration = preferences.getEffectTransitionDurationMillis()
-            queueRendererEvent {
-                renderer.setEffectTransitionDuration(duration)
-            }
+            withRenderer { it.setEffectTransitionDuration(duration) }
         }
 
         private fun applyImageFolderPreference() {
@@ -237,10 +293,14 @@ class ShimmerWallpaperService : GLWallpaperService() {
             setImageFolders(folderUris)
         }
 
+        // Renamed and moved to the class body
+        // private val pendingActions = mutableListOf<() -> Unit>()
+
         private fun queueRendererEvent(
             allowWhenSurfaceUnavailable: Boolean = false,
-            action: () -> Unit
+            action: () -> Unit,
         ) {
+            // No longer checking isRendererReady here, it's handled by withRenderer
             if ((!surfaceAvailable && !allowWhenSurfaceUnavailable) || !engineVisible) {
                 return
             }
@@ -253,18 +313,57 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun setImageFolders(uris: List<String>) {
             transitionScheduler.cancel()
             folderRepository.updateFolders(uris)
+
             if (!folderRepository.hasFolders()) {
-                loadDefaultImage()
+                // If no folders are set, try to load the last image. If that fails, load default.
+                imageLoadExecutor.execute {
+                    if (!loadLastImage()) {
+                        loadDefaultImage()
+                    }
+                }
                 return
             }
-            folderScheduler.execute {
-                if (!loadNextImageFromFolders()) {
+
+            imageLoadExecutor.execute {
+                // Try to load last image, otherwise next, otherwise default
+                var loaded = loadLastImage()
+                if (!loaded) {
+                    val nextUri = folderRepository.nextImageUri()
+                    if (nextUri != null) {
+                        android.util.Log.d("ImageChange", "setImageFolders: loading initial image from repo")
+                        loadImage(nextUri)
+                        loaded = true
+                    }
+                }
+                if (!loaded) {
+                    android.util.Log.d("ImageChange", "setImageFolders: loading default image")
                     loadDefaultImage()
-                    return@execute
                 }
                 // Only start scheduler if we successfully loaded an image
-                transitionScheduler.start()
+                if (loaded) {
+                    transitionScheduler.start()
+                }
             }
+        }
+
+        private fun loadLastImage(): Boolean {
+            val lastImageUriString = preferences.getLastImageUri() ?: return false
+
+            try {
+                val lastImageUri = lastImageUriString.toUri()
+                val payload = prepareRendererImage(lastImageUri)
+                if (payload != null) {
+                    withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(payload) }
+                    return true
+                } else {
+                    // If payload is null, image couldn't be prepared (e.g., file not found). Clear preference.
+                    preferences.setLastImageUri(null)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ShimmerWallpaperService", "Error loading last image URI: $lastImageUriString", e)
+                preferences.setLastImageUri(null) // Clear invalid URI
+            }
+            return false
         }
 
         private fun applyTransitionIntervalPreference() {
@@ -277,8 +376,38 @@ class ShimmerWallpaperService : GLWallpaperService() {
             transitionScheduler.updateEnabled(enabled)
         }
 
+        private fun requestImageChange() {
+            imageLoadExecutor.execute {
+                android.util.Log.d("ImageChange", "requestImageChange START: pendingUri=$pendingImageUri")
+
+                // Check if renderer is currently animating
+                val isAnimating = renderer?.isAnimating() ?: false
+                android.util.Log.d("ImageChange", "  isAnimating=$isAnimating, pendingUri!=null=${pendingImageUri != null}")
+
+                if (isAnimating) {
+                    // Animation is running - queue/replace this request
+                    val next = folderRepository.nextImageUri()
+                    android.util.Log.d("ImageChange", "  → QUEUING/REPLACING as pending (animating): old=$pendingImageUri, new=$next")
+                    pendingImageUri = next
+                    return@execute
+                }
+
+                // No animation running - load immediately
+                // Prioritize pending request if it exists, otherwise get next image
+                val uriToLoad = pendingImageUri ?: folderRepository.nextImageUri()
+                pendingImageUri = null  // Clear pending since we're about to load
+                android.util.Log.d("ImageChange", "  → NOT animating, loading: $uriToLoad")
+                if (uriToLoad != null) {
+                    android.util.Log.d("ImageChange", "  → EXECUTING load immediately")
+                    loadImage(uriToLoad)
+                } else {
+                    android.util.Log.d("ImageChange", "  → No image to load")
+                }
+            }
+        }
+
         fun advanceToNextImage() {
-            folderScheduler.execute { handleManualAdvance() }
+            requestImageChange()
         }
 
         fun applyNextDuotonePreset() {
@@ -299,37 +428,39 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         fun enableBlur() {
-            queueRendererEvent { renderer.enableBlur() }
+            withRenderer { it.enableBlur() }
+        }
+
+        private fun loadImage(uri: Uri) {
+            // Called on folderScheduler thread to load a specific image
+            android.util.Log.d("ImageChange", "loadImage: START loading from $uri")
+            val imageSet = prepareRendererImage(uri)
+            if (imageSet != null) {
+                android.util.Log.d("ImageChange", "loadImage: imageSet prepared, calling setImage")
+                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
+                preferences.setLastImageUri(uri.toString())
+                android.util.Log.d("ImageChange", "loadImage: COMPLETE")
+            } else {
+                android.util.Log.d("ImageChange", "loadImage: Failed to prepare image")
+            }
         }
 
         private fun handleScheduledAdvance() {
-            performAdvance()
+            requestImageChange()
         }
 
         private fun handleManualAdvance() {
-            performAdvance()
+            requestImageChange()
             // Restart scheduler to reset the timer after manual advance
             transitionScheduler.restartAfterManualAdvance()
-        }
-
-        private fun performAdvance(): Boolean {
-            val loaded = loadNextImageFromFolders()
-            if (!loaded && !folderRepository.hasFolders()) {
-                loadDefaultImage()
-                return false
-            }
-            return loaded
         }
 
         private fun loadNextImageFromFolders(): Boolean {
             val nextUri = folderRepository.nextImageUri() ?: return false
             val payload = prepareRendererImage(nextUri) ?: return false
 
-            queueRendererEvent(allowWhenSurfaceUnavailable = true) {
-                renderer.setImage(payload)
-            }
-            // Track current image for reprocessing
-            currentImageBitmap = payload.original
+            withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(payload) }
+            preferences.setLastImageUri(nextUri.toString())
             return true
         }
 
@@ -341,10 +472,19 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
 
+            // Store the current image URI for potential re-blurring
+            currentImageUri = uri
+
             return ImageSet(
                 original = bitmap,
                 blurred = blurLevels
             )
+        }
+
+        private fun reBlurCurrentImage() {
+            val uri = currentImageUri ?: return
+            val imageSet = prepareRendererImage(uri) ?: return
+            withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
         }
 
         private fun decodeBitmapFromUri(uri: Uri): Bitmap? {
@@ -358,24 +498,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
-            }
-        }
-
-        private fun reprocessCurrentImage() {
-            val bitmap = currentImageBitmap ?: return
-            folderScheduler.execute {
-                val blurAmount = preferences.getBlurAmount()
-
-                val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
-                val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
-
-                val payload = ImageSet(
-                    original = bitmap,
-                    blurred = blurLevels
-                )
-                queueRendererEvent(allowWhenSurfaceUnavailable = true) {
-                    renderer.setImage(payload)
-                }
             }
         }
     }

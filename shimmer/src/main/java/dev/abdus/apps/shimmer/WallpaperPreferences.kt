@@ -29,6 +29,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_TRANSITION_INTERVAL = "wallpaper_transition_interval"
         const val KEY_TRANSITION_ENABLED = "wallpaper_transition_enabled"
         const val KEY_EFFECT_TRANSITION_DURATION = "wallpaper_effect_transition_duration"
+        const val KEY_LAST_IMAGE_URI = "wallpaper_last_image_uri"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -191,6 +192,19 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setEffectTransitionDurationMillis(durationMillis: Long) {
         prefs.edit {
             putLong(KEY_EFFECT_TRANSITION_DURATION, durationMillis.coerceIn(0L, 3000L))
+        }
+    }
+
+    fun getLastImageUri(): String? =
+        prefs.getString(KEY_LAST_IMAGE_URI, null)
+
+    fun setLastImageUri(uri: String?) {
+        prefs.edit {
+            if (uri != null) {
+                putString(KEY_LAST_IMAGE_URI, uri)
+            } else {
+                remove(KEY_LAST_IMAGE_URI)
+            }
         }
     }
 
