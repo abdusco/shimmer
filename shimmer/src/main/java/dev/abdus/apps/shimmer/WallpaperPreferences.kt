@@ -30,6 +30,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_TRANSITION_ENABLED = "wallpaper_transition_enabled"
         const val KEY_EFFECT_TRANSITION_DURATION = "wallpaper_effect_transition_duration"
         const val KEY_LAST_IMAGE_URI = "wallpaper_last_image_uri"
+        const val KEY_BLUR_ON_SCREEN_LOCK = "wallpaper_blur_on_screen_lock"
+        const val KEY_BLUR_ON_APP_SWITCH = "wallpaper_blur_on_app_switch"
+        const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -215,5 +218,32 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
 
     fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         prefs.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun isBlurOnScreenLockEnabled(): Boolean =
+        prefs.getBoolean(KEY_BLUR_ON_SCREEN_LOCK, false)
+
+    fun setBlurOnScreenLock(enabled: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_BLUR_ON_SCREEN_LOCK, enabled)
+        }
+    }
+
+    fun isBlurOnAppSwitchEnabled(): Boolean =
+        prefs.getBoolean(KEY_BLUR_ON_APP_SWITCH, false)
+
+    fun setBlurOnAppSwitch(enabled: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_BLUR_ON_APP_SWITCH, enabled)
+        }
+    }
+
+    fun getLastSelectedTab(): Int =
+        prefs.getInt(KEY_LAST_SELECTED_TAB, 0)
+
+    fun setLastSelectedTab(tabIndex: Int) {
+        prefs.edit {
+            putInt(KEY_LAST_SELECTED_TAB, tabIndex)
+        }
     }
 }

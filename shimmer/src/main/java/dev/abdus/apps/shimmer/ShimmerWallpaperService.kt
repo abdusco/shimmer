@@ -79,14 +79,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onRendererReady() {
             Log.d(TAG, "onRendererReady called")
-            val r = renderer ?: return
 
-            // Execute any deferred actions
-            deferredRendererActions.forEach { action -> action(r) }
-            deferredRendererActions.clear()
+            executeDeferredActions()
 
-            applyPreferences() // Apply preferences now that renderer is ready
-            isInitialLoad = false // Mark that initial load is complete
+            applyPreferences()
+            isInitialLoad = false
             super.requestRender() // Request render after applying preferences
         }
 
@@ -106,17 +103,41 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         // Helper function to safely execute actions on the renderer on the GL thread
+        // Handles renderer nullability, surface availability, and visibility checks
         private fun withRenderer(allowWhenSurfaceUnavailable: Boolean = false, action: (ShimmerRenderer) -> Unit) {
             val r = renderer
             if (r == null) {
                 // If renderer is not yet available, defer this action.
                 // This typically happens if a preference change occurs before onSurfaceCreated has completed
                 // and renderer is assigned.
+                Log.d(TAG, "withRenderer: Renderer not available, deferring action")
                 deferredRendererActions.add(action)
                 return
             }
-            // If renderer is available, queue to GL thread
-            queueRendererEvent(allowWhenSurfaceUnavailable) { action(r) }
+
+            // If surface is unavailable, defer the action regardless of allowWhenSurfaceUnavailable
+            // We can't execute GL commands without a valid GL context
+            if (!surfaceAvailable) {
+                if (allowWhenSurfaceUnavailable) {
+                    Log.d(TAG, "withRenderer: Surface unavailable, deferring action for next surface creation")
+                    deferredRendererActions.add(action)
+                } else {
+                    Log.d(TAG, "withRenderer: Surface unavailable, skipping action")
+                }
+                return
+            }
+
+            // Check visibility - allowWhenSurfaceUnavailable also bypasses visibility check
+            if (!allowWhenSurfaceUnavailable && !engineVisible) {
+                Log.d(TAG, "withRenderer: Engine not visible, skipping action")
+                return
+            }
+
+            Log.d(TAG, "withRenderer: Queueing action on GL thread")
+            queueEvent { action(r) }
+            if (engineVisible) {
+                super.requestRender()
+            }
         }
 
 
@@ -132,7 +153,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         }
                     }
 
-                    Actions.ACTION_ENABLE_BLUR -> withRenderer { it.enableBlur() }
+                    Actions.ACTION_ENABLE_BLUR -> enableBlur()
                 }
             }
         }
@@ -146,6 +167,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference,
             WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION to ::applyEffectTransitionDurationPreference
         )
+
         private val preferenceListener =
             SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
                 preferenceHandlers[key]?.invoke()
@@ -173,7 +195,19 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onSurfaceCreated called")
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
+
+            executeDeferredActions()
+
             super.requestRender()
+        }
+
+        private fun executeDeferredActions() {
+            renderer?.let { r ->
+                if (surfaceAvailable && deferredRendererActions.isNotEmpty()) {
+                    deferredRendererActions.forEach { queueEvent { it(r) } }
+                    deferredRendererActions.clear()
+                }
+            }
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
@@ -187,6 +221,28 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onVisibilityChanged: $visible")
             super.onVisibilityChanged(visible)
             engineVisible = visible
+
+            // To distinguish app switch from screen lock, check multiple signals
+            val keyguardManager = getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager
+            val isOnLockScreen = keyguardManager?.isKeyguardLocked ?: false
+
+            // Check if screen is actually on
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val isScreenOn = powerManager?.isInteractive ?: true
+
+            // Apply app switch blur only when:
+            // - Wallpaper becomes invisible
+            // - Screen is ON (not turning off/locked)
+            // - Keyguard is NOT showing
+            // This combination indicates an app opened over the wallpaper
+            if (!visible && isScreenOn && !isOnLockScreen && preferences.isBlurOnAppSwitchEnabled()) {
+                Log.d(TAG, "  → Applying blur due to app switch")
+                enableBlur()
+            } else if (visible && isScreenOn && isOnLockScreen && preferences.isBlurOnScreenLockEnabled()) {
+                Log.d(TAG, "  → Applying blur due to screen lock (visibility change)")
+                enableBlur()
+            }
+
             if (engineVisible) {
                 tapGestureDetector.reset()
                 if (surfaceAvailable) {
@@ -273,8 +329,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 val options = BitmapFactory.Options().apply {
                     inSampleSize = sampleSize
                 }
-                Log.d(TAG, "loadDefaultImage: Decoding default image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
-                    "inSampleSize=$sampleSize (target height=$targetHeight)")
+                Log.d(
+                    TAG, "loadDefaultImage: Decoding default image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
+                            "inSampleSize=$sampleSize (target height=$targetHeight)"
+                )
                 val bitmap = BitmapFactory.decodeResource(
                     resources,
                     R.drawable.default_wallpaper,
@@ -302,9 +360,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyPreferences() {
             Log.d(TAG, "applyPreferences: Applying wallpaper preferences")
-            if (isInitialLoad) {
-                applyImageFolderPreference()
+            if (!isInitialLoad) {
+                return
             }
+            applyImageFolderPreference()
             applyBlurPreference()
             applyDimPreference()
             applyDuotoneSettingsPreference()
@@ -316,6 +375,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun applyBlurPreference() {
             val blurAmount = preferences.getBlurAmount()
             withRenderer { it.enableBlur(blurAmount > 0f) }
+        }
+
+        private fun enableBlur() {
+            withRenderer(allowWhenSurfaceUnavailable = true) { it.enableBlur(true) }
         }
 
         private fun onBlurPreferenceChanged() {
@@ -352,22 +415,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             setImageFolders(folderUris)
         }
 
-        // Renamed and moved to the class body
-        // private val pendingActions = mutableListOf<() -> Unit>()
-
-        private fun queueRendererEvent(
-            allowWhenSurfaceUnavailable: Boolean = false,
-            action: () -> Unit,
-        ) {
-            // No longer checking isRendererReady here, it's handled by withRenderer
-            if ((!surfaceAvailable && !allowWhenSurfaceUnavailable) || !engineVisible) {
-                return
-            }
-            queueEvent(action)
-            if (surfaceAvailable && engineVisible) {
-                super.requestRender()
-            }
-        }
 
         private fun setImageFolders(uris: List<String>) {
             Log.d(TAG, "setImageFolders: Updating image folders to $uris")
@@ -375,6 +422,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             folderRepository.updateFolders(uris)
 
             if (!folderRepository.hasFolders()) {
+                Log.d(TAG, "setImageFolders: No folders set, loading last or default image")
                 // If no folders are set, try to load the last image. If that fails, load default.
                 imageLoadExecutor.execute {
                     if (!loadLastImage()) {
@@ -386,29 +434,27 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             imageLoadExecutor.execute {
                 // Try to load last image, otherwise next, otherwise default
-                var loaded = loadLastImage()
-                if (!loaded) {
-                    val nextUri = folderRepository.nextImageUri()
-                    if (nextUri != null) {
-                        Log.d(TAG, "setImageFolders: loading initial image from repo")
-                        loadImage(nextUri)
-                        loaded = true
-                    }
-                }
-                if (!loaded) {
+                if (loadLastImage()) {
+                    transitionScheduler.start()
+                } else {
                     Log.d(TAG, "setImageFolders: loading default image")
                     loadDefaultImage()
-                }
-                // Only start scheduler if we successfully loaded an image
-                if (loaded) {
-                    transitionScheduler.start()
                 }
             }
         }
 
         private fun loadLastImage(): Boolean {
             Log.d(TAG, "loadLastImage: Attempting to load last image URI from preferences")
-            val lastImageUriString = preferences.getLastImageUri() ?: return false
+            var lastImageUriString = preferences.getLastImageUri()
+            if (lastImageUriString.isNullOrBlank()) {
+                val nextUri = folderRepository.nextImageUri()
+                if (nextUri != null) {
+                    Log.d(TAG, "loadLastImage: No last image URI, using next image URI from repo: $nextUri")
+                    lastImageUriString = nextUri.toString()
+                } else {
+                    return false
+                }
+            }
 
             try {
                 val lastImageUri = lastImageUriString.toUri()
@@ -507,7 +553,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun prepareRendererImage(uri: Uri): ImageSet? {
-            Log.d(TAG, "prepareRendererImage: Decoding bitmap from URI: $uri")
+            Log.d(TAG, "prepareRendererImage: Decoding bitmap")
             val bitmap = decodeBitmapFromUri(uri) ?: return null
 
             val blurAmount = preferences.getBlurAmount()
@@ -525,7 +571,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun reBlurCurrentImage() {
-            Log.d(TAG, "reBlurCurrentImage: Re-blurring current image: $currentImageUri")
+            Log.d(TAG, "reBlurCurrentImage: Re-blurring current image")
             val uri = currentImageUri ?: return
             val imageSet = prepareRendererImage(uri) ?: return
             withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }

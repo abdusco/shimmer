@@ -135,6 +135,12 @@ private fun ShimmerSettingsScreen(
     var effectTransitionDurationMillis by remember {
         mutableLongStateOf(preferences.getEffectTransitionDurationMillis())
     }
+    var blurOnScreenLock by remember {
+        mutableStateOf(preferences.isBlurOnScreenLockEnabled())
+    }
+    var blurOnAppSwitch by remember {
+        mutableStateOf(preferences.isBlurOnAppSwitchEnabled())
+    }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -177,6 +183,14 @@ private fun ShimmerSettingsScreen(
                 WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION -> {
                     effectTransitionDurationMillis = preferences.getEffectTransitionDurationMillis()
                 }
+
+                WallpaperPreferences.KEY_BLUR_ON_SCREEN_LOCK -> {
+                    blurOnScreenLock = preferences.isBlurOnScreenLockEnabled()
+                }
+
+                WallpaperPreferences.KEY_BLUR_ON_APP_SWITCH -> {
+                    blurOnAppSwitch = preferences.isBlurOnAppSwitchEnabled()
+                }
             }
         }
         preferences.registerListener(listener)
@@ -207,7 +221,16 @@ private fun ShimmerSettingsScreen(
         folderPreviews = updated
     }
 
-    var selectedTab by remember { mutableStateOf(SettingsTab.SOURCES) }
+    var selectedTab by remember { 
+        mutableStateOf(
+            SettingsTab.entries.getOrElse(preferences.getLastSelectedTab()) { SettingsTab.SOURCES }
+        )
+    }
+
+    // Save selected tab when it changes
+    LaunchedEffect(selectedTab) {
+        preferences.setLastSelectedTab(selectedTab.ordinal)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -265,6 +288,8 @@ private fun ShimmerSettingsScreen(
                     dimAmount = dimAmount,
                     duotone = duotone,
                     effectTransitionDurationMillis = effectTransitionDurationMillis,
+                    blurOnScreenLock = blurOnScreenLock,
+                    blurOnAppSwitch = blurOnAppSwitch,
                     onBlurAmountChange = {
                         preferences.setBlurAmount(it)
                     },
@@ -297,6 +322,12 @@ private fun ShimmerSettingsScreen(
                         if (presetIndex >= 0) {
                             preferences.setDuotonePresetIndex(presetIndex)
                         }
+                    },
+                    onBlurOnScreenLockChange = {
+                        preferences.setBlurOnScreenLock(it)
+                    },
+                    onBlurOnAppSwitchChange = {
+                        preferences.setBlurOnAppSwitch(it)
                     }
                 )
             }
@@ -353,6 +384,8 @@ private fun EffectsTab(
     dimAmount: Float,
     duotone: DuotoneSettings,
     effectTransitionDurationMillis: Long,
+    blurOnScreenLock: Boolean,
+    blurOnAppSwitch: Boolean,
     onBlurAmountChange: (Float) -> Unit,
     onDimAmountChange: (Float) -> Unit,
     onEffectTransitionDurationChange: (Long) -> Unit,
@@ -360,7 +393,9 @@ private fun EffectsTab(
     onDuotoneAlwaysOnChange: (Boolean) -> Unit,
     onDuotoneLightColorChange: (String) -> Unit,
     onDuotoneDarkColorChange: (String) -> Unit,
-    onDuotonePresetSelected: (DuotonePreset) -> Unit
+    onDuotonePresetSelected: (DuotonePreset) -> Unit,
+    onBlurOnScreenLockChange: (Boolean) -> Unit,
+    onBlurOnAppSwitchChange: (Boolean) -> Unit
 ) {
     // Local state for sliders to provide instant UI feedback
     var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
@@ -440,6 +475,15 @@ private fun EffectsTab(
                 onLightColorChange = onDuotoneLightColorChange,
                 onDarkColorChange = onDuotoneDarkColorChange,
                 onPresetSelected = onDuotonePresetSelected
+            )
+        }
+
+        item {
+            EventsSettings(
+                blurOnScreenLock = blurOnScreenLock,
+                blurOnAppSwitch = blurOnAppSwitch,
+                onBlurOnScreenLockChange = onBlurOnScreenLockChange,
+                onBlurOnAppSwitchChange = onBlurOnAppSwitchChange
             )
         }
     }
@@ -816,6 +860,57 @@ private fun DuotoneSettings(
                     previewColor = darkColorPreview
                 )
                 DuotonePresetDropdown(onPresetSelected = onPresetSelected)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventsSettings(
+    blurOnScreenLock: Boolean,
+    blurOnAppSwitch: Boolean,
+    onBlurOnScreenLockChange: (Boolean) -> Unit,
+    onBlurOnAppSwitchChange: (Boolean) -> Unit
+) {
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Events",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Blur when screen is locked",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(
+                    checked = blurOnScreenLock,
+                    onCheckedChange = onBlurOnScreenLockChange
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Blur when switching apps",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(
+                    checked = blurOnAppSwitch,
+                    onCheckedChange = onBlurOnAppSwitchChange
+                )
             }
         }
     }

@@ -70,6 +70,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // Image state
     // Managed by RenderState
+    
+    // Pending image to load when surface becomes available
+    private var pendingImageSet: ImageSet? = null
 
     // Surface state
     private var surfaceCreated = false
@@ -108,6 +111,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun setImage(imageSet: ImageSet) {
         Log.d(TAG, "setImage: called, ${imageSet.original.width}x${imageSet.original.height}, blurred=${imageSet.blurred.size}")
+        
+        if (!surfaceCreated) {
+            Log.w(TAG, "setImage: Surface not created, deferring image load")
+            pendingImageSet = imageSet
+            return
+        }
+        
         val baseState = animationController.targetRenderState
         val newTargetState = baseState.copy(imageSet = imageSet)
 
@@ -275,6 +285,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         Matrix.setLookAtM(viewMatrix, 0, 0f, 0f, 1f, 0f, 0f, -1f, 0f, 1f, 0f)
 
+        // Load any pending image that was deferred
+        pendingImageSet?.let { imageSet ->
+            Log.d(TAG, "onSurfaceCreated: Loading pending image")
+            pendingImageSet = null
+            setImage(imageSet)
+        }
+
         callbacks.onRendererReady()
     }
 
@@ -349,6 +366,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param imageSet The image set to load
      */
     private fun updatePictureSet(imageSet: ImageSet) {
+        // Double-check surface is still available before creating textures
+        if (!surfaceCreated) {
+            Log.w(TAG, "updatePictureSet: Surface no longer available, aborting")
+            return
+        }
+        
         previousPictureSet?.destroyPictures()
         previousPictureSet = pictureSet
 
@@ -358,11 +381,17 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             addAll(imageSet.blurred)
         }
 
-        pictureSet = GLPictureSet().apply {
-            load(bitmapList, tileSize)
+        try {
+            pictureSet = GLPictureSet().apply {
+                load(bitmapList, tileSize)
+            }
+            callbacks.requestRender()
+        } catch (e: Exception) {
+            Log.e(TAG, "updatePictureSet: Error loading textures, marking surface as unavailable", e)
+            surfaceCreated = false
+            pendingImageSet = imageSet
+            throw e
         }
-
-        callbacks.requestRender()
     }
 
     /**
@@ -529,9 +558,15 @@ object GLUtil {
      * Loads a bitmap as an OpenGL texture with linear filtering and clamped edges.
      * @param bitmap The bitmap to upload
      * @return OpenGL texture handle
-     * @throws IllegalStateException if texture creation fails
+     * @throws IllegalStateException if texture creation fails or no GL context is available
      */
     fun loadTexture(bitmap: Bitmap): Int {
+        // Check for valid GL context before attempting texture creation
+        val glError = GLES20.glGetError()
+        if (glError == GLES20.GL_INVALID_OPERATION) {
+            throw IllegalStateException("No valid GL context available for texture creation")
+        }
+        
         val textureHandle = IntArray(1)
         GLES20.glGenTextures(1, textureHandle, 0)
         checkGlError("glGenTextures")
