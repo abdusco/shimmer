@@ -53,6 +53,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // Track initial load to prevent double-blur
         private var isInitialLoad = true
 
+        // Track whether we've already applied the lock-screen blur for the current lock session
+        private var hasAppliedLockScreenBlur = false
+
         override fun onRendererReady() {
             Log.d(TAG, "onRendererReady called")
 
@@ -86,7 +89,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 // If renderer is not yet available, defer this action.
                 // This typically happens if a preference change occurs before onSurfaceCreated has completed
                 // and renderer is assigned.
-                Log.d(TAG, "withRenderer: Renderer not available, deferring action")
                 deferredRendererActions.add(action)
                 return
             }
@@ -95,21 +97,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
             // We can't execute GL commands without a valid GL context
             if (!surfaceAvailable) {
                 if (allowWhenSurfaceUnavailable) {
-                    Log.d(TAG, "withRenderer: Surface unavailable, deferring action for next surface creation")
                     deferredRendererActions.add(action)
-                } else {
-                    Log.d(TAG, "withRenderer: Surface unavailable, skipping action")
                 }
                 return
             }
 
             // Check visibility - allowWhenSurfaceUnavailable also bypasses visibility check
             if (!allowWhenSurfaceUnavailable && !engineVisible) {
-                Log.d(TAG, "withRenderer: Engine not visible, skipping action")
                 return
             }
 
-            Log.d(TAG, "withRenderer: Queueing action on GL thread")
             queueEvent { action(r) }
             if (engineVisible) {
                 super.requestRender()
@@ -138,6 +135,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val screenUnlockReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == Intent.ACTION_USER_PRESENT && preferences.isChangeImageOnUnlockEnabled()) {
+                    // User unlocked; allow lock-screen blur to trigger on next lock
+                    hasAppliedLockScreenBlur = false
                     Log.d(TAG, "Screen unlocked, changing image")
                     advanceToNextImage()
                 }
@@ -228,9 +227,21 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (!visible && isScreenOn && !isOnLockScreen && preferences.isBlurOnAppSwitchEnabled()) {
                 Log.d(TAG, "  → Applying blur due to app switch")
                 enableBlur()
-            } else if (visible && isScreenOn && isOnLockScreen && preferences.isBlurOnScreenLockEnabled()) {
+            } else if (
+                visible &&
+                isScreenOn &&
+                isOnLockScreen &&
+                preferences.isBlurOnScreenLockEnabled() &&
+                !hasAppliedLockScreenBlur
+            ) {
                 Log.d(TAG, "  → Applying blur due to screen lock (visibility change)")
+                hasAppliedLockScreenBlur = true
                 enableBlur()
+            }
+
+            // Reset lock-screen blur flag once we're visible and no longer on the keyguard
+            if (visible && !isOnLockScreen) {
+                hasAppliedLockScreenBlur = false
             }
 
             if (engineVisible) {
