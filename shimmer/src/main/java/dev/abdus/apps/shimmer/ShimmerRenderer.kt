@@ -98,8 +98,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     private var isInitialPreferenceLoad = true
 
-    // Track when image is set to fire callback when all animations complete
-    private var pendingReadyCallback = false
+    // Track animation state to detect transitions
+    private var wasAnimatingLastFrame = false
 
 
     /**
@@ -120,10 +120,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         animationController.updateTargetState(newTargetState)
         recomputeProjectionMatrix()
-
-        // Mark that we need to call callback when all animations complete
-        pendingReadyCallback = true
-        Log.d(TAG, "setImage: pendingReadyCallback=true")
     }
 
     /**
@@ -341,13 +337,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             previousBitmapAspect = null
         }
 
-        // Notify when all animations complete and ready for next image
+        // Detect state transition: was animating, now idle
         val isImageAnimating = animationController.blurAmountAnimator.isRunning || animationController.imageTransitionAnimator.isRunning
-        if (!isImageAnimating && pendingReadyCallback) {
-            Log.d(TAG, "onDrawFrame: animations complete, calling onReadyForNextImage")
-            pendingReadyCallback = false
+        if (wasAnimatingLastFrame && !isImageAnimating) {
+            Log.d(TAG, "onDrawFrame: animation completed (transition from animating to idle), calling onReadyForNextImage")
             callbacks.onReadyForNextImage()
         }
+        wasAnimatingLastFrame = isImageAnimating
 
         // Request another frame if any animation is still running
         if (isAnimating) {
