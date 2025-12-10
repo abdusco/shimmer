@@ -97,12 +97,14 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     private var tileSize: Int = 0
 
     // Animation state
-    private val animationController = AnimationController(effectTransitionDurationMillis)
+    private val animationController = AnimationController(effectTransitionDurationMillis).apply {
+        onImageAnimationComplete = {
+            Log.d(TAG, "Animation completed, notifying host")
+            callbacks.onReadyForNextImage()
+        }
+    }
 
     private var isInitialPreferenceLoad = true
-
-    // Track animation state to detect transitions
-    private var wasAnimatingLastFrame = false
 
 
     /**
@@ -346,14 +348,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             previousPictureSet = null
             previousBitmapAspect = null
         }
-
-        // Detect state transition: was animating, now idle
-        val isImageAnimating = animationController.blurAmountAnimator.isRunning || animationController.imageTransitionAnimator.isRunning
-        if (wasAnimatingLastFrame && !isImageAnimating) {
-            Log.d(TAG, "onDrawFrame: animation completed (transition from animating to idle), calling onReadyForNextImage")
-            callbacks.onReadyForNextImage()
-        }
-        wasAnimatingLastFrame = isImageAnimating
 
         // Request another frame if any animation is still running
         if (isAnimating) {

@@ -23,6 +23,12 @@ class AnimationController(private var durationMillis: Int) {
     private var currentDuotoneDarkColor: Int = 0
     private var targetDuotoneDarkColor: Int = 0
 
+    // Callback invoked when image-relevant animations complete
+    var onImageAnimationComplete: (() -> Unit)? = null
+    
+    // Track animation state to detect transitions
+    private var wasImageAnimatingLastFrame = false
+
     init {
         val defaultState = RenderState(
             imageSet = ImageSet(original = createBitmap(1, 1)), // Placeholder
@@ -178,6 +184,13 @@ class AnimationController(private var durationMillis: Int) {
             duotoneAlwaysOn = targetRenderState.duotoneAlwaysOn,
             parallaxOffset = targetRenderState.parallaxOffset // Parallax is not animated, it snaps
         )
+
+        // Detect when image-relevant animations complete and invoke callback
+        val isImageAnimating = blurAnimating || imageAnimating
+        if (wasImageAnimatingLastFrame && !isImageAnimating) {
+            onImageAnimationComplete?.invoke()
+        }
+        wasImageAnimatingLastFrame = isImageAnimating
 
         return blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating
     }
