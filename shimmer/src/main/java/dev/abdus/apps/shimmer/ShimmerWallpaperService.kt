@@ -298,7 +298,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
 
         private fun applyPreferences() {
-            preferenceHandlers.forEach { (_, handler) ->
+            preferenceHandlers.forEach { (key, handler) ->
+                if (!isInitialLoad && key == WallpaperPreferences.KEY_IMAGE_FOLDER_URIS) {
+                    // Skip image folder application on initial load - handled separately after renderer ready
+                    return@forEach
+                }
                 handler()
             }
         }
@@ -309,7 +313,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             // If not initial load and we have a current image, re-blur it with the new amount
             if (!isInitialLoad && currentImageUri != null) {
                 imageLoadExecutor.execute {
-                    reBlurCurrentImage()
+                    // reBlurCurrentImage()
                 }
             } else {
                 // On initial load or when no image is loaded, just update the blur state
