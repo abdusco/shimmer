@@ -131,13 +131,14 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             preferences.setBlurAmount(action.percent)
                         }
                     }
+
                     Actions.ACTION_ENABLE_BLUR -> withRenderer { it.enableBlur() }
                 }
             }
         }
 
         private val preferenceHandlers: Map<String, () -> Unit> = mapOf(
-            WallpaperPreferences.KEY_BLUR_AMOUNT to ::applyBlurPreference,
+            WallpaperPreferences.KEY_BLUR_AMOUNT to ::onBlurPreferenceChanged,
             WallpaperPreferences.KEY_DIM_AMOUNT to ::applyDimPreference,
             WallpaperPreferences.KEY_DUOTONE_SETTINGS to ::applyDuotoneSettingsPreference,
             WallpaperPreferences.KEY_IMAGE_FOLDER_URIS to ::applyImageFolderPreference,
@@ -212,9 +213,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 TapEvent.TWO_FINGER_DOUBLE_TAP -> {
                     advanceToNextImage()
                 }
+
                 TapEvent.TRIPLE_TAP -> {
                     withRenderer { it.toggleBlur() }
                 }
+
                 TapEvent.NONE -> {
                     // No gesture detected, continue with default handling
                 }
@@ -298,27 +301,25 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
 
         private fun applyPreferences() {
-            preferenceHandlers.forEach { (key, handler) ->
-                if (!isInitialLoad && key == WallpaperPreferences.KEY_IMAGE_FOLDER_URIS) {
-                    // Skip image folder application on initial load - handled separately after renderer ready
-                    return@forEach
-                }
-                handler()
+            Log.d(TAG, "applyPreferences: Applying wallpaper preferences")
+            if (isInitialLoad) {
+                applyImageFolderPreference()
             }
+            applyBlurPreference()
+            applyDimPreference()
+            applyDuotoneSettingsPreference()
+            applyTransitionEnabledPreference()
+            applyTransitionIntervalPreference()
+            applyEffectTransitionDurationPreference()
         }
 
         private fun applyBlurPreference() {
             val blurAmount = preferences.getBlurAmount()
+            withRenderer { it.enableBlur(blurAmount > 0f) }
+        }
 
-            // If not initial load and we have a current image, re-blur it with the new amount
-            if (!isInitialLoad && currentImageUri != null) {
-                imageLoadExecutor.execute {
-                    // reBlurCurrentImage()
-                }
-            } else {
-                // On initial load or when no image is loaded, just update the blur state
-                withRenderer { it.enableBlur(blurAmount > 0f) }
-            }
+        private fun onBlurPreferenceChanged() {
+            reBlurCurrentImage()
         }
 
         private fun applyDimPreference() {
@@ -392,7 +393,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         Log.d(TAG, "setImageFolders: loading initial image from repo")
                         loadImage(nextUri)
                         loaded = true
-                      }
+                    }
                 }
                 if (!loaded) {
                     Log.d(TAG, "setImageFolders: loading default image")
@@ -551,8 +552,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     val options = BitmapFactory.Options().apply {
                         inSampleSize = sampleSize
                     }
-                    Log.d(TAG, "decodeBitmapFromUri: Decoding image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
-                                "inSampleSize=$sampleSize (target height=$targetHeight)")
+                    Log.d(
+                        TAG, "decodeBitmapFromUri: Decoding image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
+                                "inSampleSize=$sampleSize (target height=$targetHeight)"
+                    )
                     BitmapFactory.decodeStream(stream, null, options)
                 }
             } catch (e: Exception) {
