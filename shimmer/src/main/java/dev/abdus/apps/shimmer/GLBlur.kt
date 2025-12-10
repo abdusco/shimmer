@@ -17,7 +17,7 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-const val BLUR_KEYFRAMES = 5
+const val BLUR_KEYFRAMES = 4
 const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 300
 private const val BLUR_SCALE_FACTOR = 4
 private const val LAST_FRAME_BLUR_SCALE_FACTOR = 2
