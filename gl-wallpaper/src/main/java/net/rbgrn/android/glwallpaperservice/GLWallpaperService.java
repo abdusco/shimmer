@@ -16,6 +16,14 @@
 
 package net.rbgrn.android.glwallpaperservice;
 
+import android.opengl.GLSurfaceView;
+import android.service.wallpaper.WallpaperService;
+import android.util.Log;
+import android.view.SurfaceHolder;
+
+import net.rbgrn.android.glwallpaperservice.BaseConfigChooser.ComponentSizeChooser;
+import net.rbgrn.android.glwallpaperservice.BaseConfigChooser.SimpleEGLConfigChooser;
+
 import java.io.Writer;
 import java.util.ArrayList;
 
@@ -27,13 +35,6 @@ import javax.microedition.khronos.egl.EGLDisplay;
 import javax.microedition.khronos.egl.EGLSurface;
 import javax.microedition.khronos.opengles.GL;
 import javax.microedition.khronos.opengles.GL10;
-
-import net.rbgrn.android.glwallpaperservice.BaseConfigChooser.ComponentSizeChooser;
-import net.rbgrn.android.glwallpaperservice.BaseConfigChooser.SimpleEGLConfigChooser;
-import android.opengl.GLSurfaceView;
-import android.service.wallpaper.WallpaperService;
-import android.util.Log;
-import android.view.SurfaceHolder;
 
 // Original code provided by Robert Green
 // http://www.rbgrn.net/content/354-glsurfaceview-adapted-3d-live-wallpapers
@@ -74,33 +75,28 @@ public class GLWallpaperService extends WallpaperService {
                 @Override
                 public void onCreate(SurfaceHolder surfaceHolder) {
                         super.onCreate(surfaceHolder);
-                        // Log.d(TAG, "GLEngine.onCreate()");
                 }
 
                 @Override
                 public void onDestroy() {
                         super.onDestroy();
-                        // Log.d(TAG, "GLEngine.onDestroy()");
                         mGLThread.requestExitAndWait();
                 }
 
                 @Override
                 public void onSurfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                        // Log.d(TAG, "onSurfaceChanged()");
                         mGLThread.onWindowResize(width, height);
                         super.onSurfaceChanged(holder, format, width, height);
                 }
 
                 @Override
                 public void onSurfaceCreated(SurfaceHolder holder) {
-                        Log.d(TAG, "onSurfaceCreated()");
                         mGLThread.surfaceCreated(holder);
                         super.onSurfaceCreated(holder);
                 }
 
                 @Override
                 public void onSurfaceDestroyed(SurfaceHolder holder) {
-                        Log.d(TAG, "onSurfaceDestroyed()");
                         mGLThread.surfaceDestroyed();
                         super.onSurfaceDestroyed(holder);
                 }

@@ -14,7 +14,7 @@ data class DuotoneSettings(
     val alwaysOn: Boolean,
     val lightColor: Int,
     val darkColor: Int,
-    val presetIndex: Int
+    val presetIndex: Int,
 )
 
 class WallpaperPreferences(private val prefs: SharedPreferences) {
@@ -131,7 +131,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         lightColor: Int,
         darkColor: Int,
         enabled: Boolean = true,
-        presetIndex: Int = -1
+        presetIndex: Int = -1,
     ) {
         val current = getDuotoneSettings()
         setDuotoneSettings(
@@ -165,6 +165,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
             } else {
                 remove(KEY_IMAGE_FOLDER_URIS)
             }
+            setLastImageUri(null)
         }
     }
 

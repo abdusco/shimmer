@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.opengl.EGL14
 import android.opengl.GLES20
 import android.opengl.GLUtils
+import android.util.Log
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import java.io.Closeable
@@ -22,6 +23,7 @@ const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 300
 private const val BLUR_SCALE_FACTOR = 4
 private const val LAST_FRAME_BLUR_SCALE_FACTOR = 2
 
+private const val TAG = "GLBlur"
 
 fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
     if (levels <= 0) return emptyList()
@@ -54,15 +56,13 @@ fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
             val currentScaledHeight = max(1, height / currentScaleFactor)
 
             if (currentScaledWidth == 0 || currentScaledHeight == 0) {
-                // Log what we have and return, or re-throw
-                android.util.Log.e("GaussianBlur", "Scaled dimensions became zero for radius $radius (scale: $currentScaleFactor)")
                 return emptyList()
             }
 
             val downsampledBitmap = try {
                 this.scale(currentScaledWidth, currentScaledHeight)
             } catch (e: Throwable) {
-                android.util.Log.e("GaussianBlur", "Failed to scale bitmap for radius $radius (scale: $currentScaleFactor)", e)
+                Log.e(TAG, "generateBlurLevels: Failed to scale bitmap for radius $radius (scale: $currentScaleFactor)", e)
                 return emptyList()
             }
 
@@ -76,7 +76,7 @@ fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
                     resultBitmaps.add(finalBlurred)
                     finalResultRadii.add(radius)
                 } else {
-                    android.util.Log.e("GaussianBlur", "Failed to blur for radius $radius (scale: $currentScaleFactor)")
+                    Log.e(TAG, "generateBlurLevels: Failed to blur for radius $radius (scale: $currentScaleFactor)")
                     return resultBitmaps // Return partially generated list if blur fails
                 }
             }
@@ -85,17 +85,14 @@ fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
         loggedRadiiString = finalResultRadii.joinToString(", ") { String.format("%.2f", it) }
         return resultBitmaps
     } catch (e: Throwable) {
-        android.util.Log.e("GaussianBlur", "Error during blur level generation", e)
+        Log.e(TAG, "generateBlurLevels: Error during blur level generation", e)
         return emptyList()
     } finally {
         val elapsed = System.currentTimeMillis() - startTime
         val actualLevelsGenerated = resultBitmaps.size
-        val targetLevels = maxLevels
 
-        android.util.Log.i(
-            "GaussianBlur",
-            "Generated $actualLevelsGenerated/$targetLevels blur levels in ${elapsed}ms for bitmap ${width}x${height}. " +
-                    "Radii (Original Scale): [$loggedRadiiString]"
+        Log.d(TAG, "generateBlurLevels: Generated $actualLevelsGenerated/$maxLevels blur levels in ${elapsed}ms for bitmap ${width}x${height}. " +
+                "Radii (Original Scale): [$loggedRadiiString]"
         )
     }
 }

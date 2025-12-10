@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.widget.Toast
@@ -15,6 +16,10 @@ import net.rbgrn.android.glwallpaperservice.GLWallpaperService
 import java.util.concurrent.Executors
 
 class ShimmerWallpaperService : GLWallpaperService() {
+    companion object {
+        const val TAG = "ShimmerWallpaperService"
+    }
+
     override fun onCreateEngine(): Engine {
         return ShimmerWallpaperEngine()
     }
@@ -73,6 +78,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onRendererReady() {
+            Log.d(TAG, "onRendererReady called")
             val r = renderer ?: return
 
             // Execute any deferred actions
@@ -85,22 +91,18 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onReadyForNextImage() {
-            android.util.Log.d("ImageChange", "onReadyForNextImage called on ${Thread.currentThread().name}")
+            Log.d(TAG, "onReadyForNextImage called on ${Thread.currentThread().name}")
             imageLoadExecutor.execute {
-                android.util.Log.d("ImageChange", "onReadyForNextImage executing: pendingUri=$pendingImageUri")
                 pendingImageUri?.let { uri ->
-                    // Process the pending request
-                    android.util.Log.d("ImageChange", "  → Processing pending image: $uri")
                     pendingImageUri = null
-                    android.util.Log.d("ImageChange", "  → pendingUri cleared, calling loadImage")
                     loadImage(uri)
-                } ?: android.util.Log.d("ImageChange", "  → No pending requests")
+                }
             }
         }
 
         override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
             screenHeight = height
-            android.util.Log.d("ShimmerWallpaper", "Screen dimensions: ${width}x${height}")
+            Log.d(TAG, "onSurfaceDimensionsChanged: ${width}x${height}")
         }
 
         // Helper function to safely execute actions on the renderer on the GL thread
@@ -150,6 +152,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
+            Log.d(TAG, "onCreate called")
             super.onCreate(surfaceHolder)
             renderer = ShimmerRenderer(this)
             setEGLContextClientVersion(2)
@@ -166,19 +169,21 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
+            Log.d(TAG, "onSurfaceCreated called")
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
-            // applyPreferences will be called by onRendererReady callback
             super.requestRender()
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
+            Log.d(TAG, "onSurfaceDestroyed called")
             surfaceAvailable = false
             withRenderer(allowWhenSurfaceUnavailable = true) { it.setParallaxOffset(0.5f) }
             super.onSurfaceDestroyed(holder)
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
+            Log.d(TAG, "onVisibilityChanged: $visible")
             super.onVisibilityChanged(visible)
             engineVisible = visible
             if (engineVisible) {
@@ -190,6 +195,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onDestroy() {
+            Log.d(TAG, "onDestroy called")
             preferences.unregisterListener(preferenceListener)
             try {
                 this@ShimmerWallpaperService.unregisterReceiver(shortcutReceiver)
@@ -242,6 +248,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun loadDefaultImage() {
+            Log.d(TAG, "loadDefaultImage: Loading default wallpaper image")
             // Called on folderScheduler thread
             if (folderRepository.hasFolders()) {
                 return
@@ -263,8 +270,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 val options = BitmapFactory.Options().apply {
                     inSampleSize = sampleSize
                 }
-                android.util.Log.d("ShimmerWallpaper",
-                    "Decoding default image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
+                Log.d(TAG, "loadDefaultImage: Decoding default image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
                     "inSampleSize=$sampleSize (target height=$targetHeight)")
                 val bitmap = BitmapFactory.decodeResource(
                     resources,
@@ -274,6 +280,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
                 val blurAmount = preferences.getBlurAmount()
                 val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
+                Log.d(TAG, "loadDefaultImage: Generating blur levels for default image with maxRadius=$maxRadius")
                 val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
                 val imageSet = ImageSet(
                     original = bitmap,
@@ -285,7 +292,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
                 withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
             } catch (e: Exception) {
-                android.util.Log.e("ShimmerWallpaperService", "Error loading default image: ${e.message}", e)
+                Log.e(TAG, "loadDefaultImage: Error loading default image: ${e.message}", e)
             }
         }
 
@@ -358,6 +365,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun setImageFolders(uris: List<String>) {
+            Log.d(TAG, "setImageFolders: Updating image folders to $uris")
             transitionScheduler.cancel()
             folderRepository.updateFolders(uris)
 
@@ -377,13 +385,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 if (!loaded) {
                     val nextUri = folderRepository.nextImageUri()
                     if (nextUri != null) {
-                        android.util.Log.d("ImageChange", "setImageFolders: loading initial image from repo")
+                        Log.d(TAG, "setImageFolders: loading initial image from repo")
                         loadImage(nextUri)
                         loaded = true
                       }
                 }
                 if (!loaded) {
-                    android.util.Log.d("ImageChange", "setImageFolders: loading default image")
+                    Log.d(TAG, "setImageFolders: loading default image")
                     loadDefaultImage()
                 }
                 // Only start scheduler if we successfully loaded an image
@@ -394,6 +402,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun loadLastImage(): Boolean {
+            Log.d(TAG, "loadLastImage: Attempting to load last image URI from preferences")
             val lastImageUriString = preferences.getLastImageUri() ?: return false
 
             try {
@@ -407,7 +416,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     preferences.setLastImageUri(null)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("ShimmerWallpaperService", "Error loading last image URI: $lastImageUriString", e)
+                Log.e("ShimmerWallpaperService", "Error loading last image URI: $lastImageUriString", e)
                 preferences.setLastImageUri(null) // Clear invalid URI
             }
             return false
@@ -425,16 +434,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun requestImageChange() {
             imageLoadExecutor.execute {
-                android.util.Log.d("ImageChange", "requestImageChange START: pendingUri=$pendingImageUri")
+                Log.d(TAG, "requestImageChange START: pendingUri=$pendingImageUri")
 
                 // Check if renderer is currently animating
                 val isAnimating = renderer?.isAnimating() ?: false
-                android.util.Log.d("ImageChange", "  isAnimating=$isAnimating, pendingUri!=null=${pendingImageUri != null}")
+                Log.d(TAG, "  isAnimating=$isAnimating, pendingUri!=null=${pendingImageUri != null}")
 
                 if (isAnimating) {
                     // Animation is running - queue/replace this request
                     val next = folderRepository.nextImageUri()
-                    android.util.Log.d("ImageChange", "  → QUEUING/REPLACING as pending (animating): old=$pendingImageUri, new=$next")
+                    Log.d(TAG, "  → QUEUING/REPLACING as pending (animating): old=$pendingImageUri, new=$next")
                     pendingImageUri = next
                     return@execute
                 }
@@ -443,12 +452,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 // Prioritize pending request if it exists, otherwise get next image
                 val uriToLoad = pendingImageUri ?: folderRepository.nextImageUri()
                 pendingImageUri = null  // Clear pending since we're about to load
-                android.util.Log.d("ImageChange", "  → NOT animating, loading: $uriToLoad")
+                Log.d(TAG, "  → NOT animating, loading: $uriToLoad")
                 if (uriToLoad != null) {
-                    android.util.Log.d("ImageChange", "  → EXECUTING load immediately")
+                    Log.d(TAG, "  → EXECUTING load immediately")
                     loadImage(uriToLoad)
                 } else {
-                    android.util.Log.d("ImageChange", "  → No image to load")
+                    Log.d(TAG, "  → No image to load")
                 }
             }
         }
@@ -474,21 +483,17 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Toast.makeText(this@ShimmerWallpaperService, "Duotone Preset: ${nextPreset.name}", Toast.LENGTH_SHORT).show()
         }
 
-        fun enableBlur() {
-            withRenderer { it.enableBlur() }
-        }
-
         private fun loadImage(uri: Uri) {
+            Log.d(TAG, "loadImage: Loading image from $uri")
             // Called on folderScheduler thread to load a specific image
-            android.util.Log.d("ImageChange", "loadImage: START loading from $uri")
             val imageSet = prepareRendererImage(uri)
             if (imageSet != null) {
-                android.util.Log.d("ImageChange", "loadImage: imageSet prepared, calling setImage")
+                Log.d(TAG, "loadImage: imageSet prepared, calling setImage with allowWhenSurfaceUnavailable = true")
                 withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
                 preferences.setLastImageUri(uri.toString())
-                android.util.Log.d("ImageChange", "loadImage: COMPLETE")
+                Log.d(TAG, "loadImage: COMPLETE")
             } else {
-                android.util.Log.d("ImageChange", "loadImage: Failed to prepare image")
+                Log.d(TAG, "loadImage: Failed to prepare image")
             }
         }
 
@@ -496,22 +501,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
             requestImageChange()
         }
 
-        private fun handleManualAdvance() {
-            requestImageChange()
-            // Restart scheduler to reset the timer after manual advance
-            transitionScheduler.restartAfterManualAdvance()
-        }
-
-        private fun loadNextImageFromFolders(): Boolean {
-            val nextUri = folderRepository.nextImageUri() ?: return false
-            val payload = prepareRendererImage(nextUri) ?: return false
-
-            withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(payload) }
-            preferences.setLastImageUri(nextUri.toString())
-            return true
-        }
-
         private fun prepareRendererImage(uri: Uri): ImageSet? {
+            Log.d(TAG, "prepareRendererImage: Decoding bitmap from URI: $uri")
             val bitmap = decodeBitmapFromUri(uri) ?: return null
 
             val blurAmount = preferences.getBlurAmount()
@@ -529,6 +520,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun reBlurCurrentImage() {
+            Log.d(TAG, "reBlurCurrentImage: Re-blurring current image: $currentImageUri")
             val uri = currentImageUri ?: return
             val imageSet = prepareRendererImage(uri) ?: return
             withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
@@ -555,8 +547,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     val options = BitmapFactory.Options().apply {
                         inSampleSize = sampleSize
                     }
-                    android.util.Log.d("ShimmerWallpaper",
-                        "Decoding image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
+                    Log.d(TAG, "decodeBitmapFromUri: Decoding image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
                                 "inSampleSize=$sampleSize (target height=$targetHeight)")
                     BitmapFactory.decodeStream(stream, null, options)
                 }

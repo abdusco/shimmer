@@ -6,6 +6,7 @@ import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.opengl.Matrix
+import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -106,7 +107,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param imageSet Image payload containing original and blur level bitmaps
      */
     fun setImage(imageSet: ImageSet) {
-        android.util.Log.d("ImageChange", "setImage: called, ${imageSet.original.width}x${imageSet.original.height}, blurred=${imageSet.blurred.size}")
+        Log.d(TAG, "setImage: called, ${imageSet.original.width}x${imageSet.original.height}, blurred=${imageSet.blurred.size}")
         val baseState = animationController.targetRenderState
         val newTargetState = baseState.copy(imageSet = imageSet)
 
@@ -122,7 +123,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         // Mark that we need to call callback when all animations complete
         pendingReadyCallback = true
-        android.util.Log.d("ImageChange", "setImage: pendingReadyCallback=true")
+        Log.d(TAG, "setImage: pendingReadyCallback=true")
     }
 
     /**
@@ -138,6 +139,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * Toggles the blur effect on/off with animation.
      */
     fun toggleBlur() {
+        Log.d(TAG, "toggleBlur: called")
         val baseState = animationController.targetRenderState
         val newTargetState = baseState.copy(
             blurAmount = if (baseState.blurAmount > 0f) 0f else 1f
@@ -147,6 +149,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     fun enableBlur(enable: Boolean = true) {
+        Log.d(TAG, "enableBlur: called with enable=$enable")
         val baseState = animationController.targetRenderState
         val targetBlurAmount = if (enable) 1f else 0f
 
@@ -204,29 +207,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
     }
 
-    /**
-     * Linearly interpolates between two colors.
-     * @param from Starting color
-     * @param to Target color
-     * @param t Interpolation factor (0.0 = from, 1.0 = to)
-     * @return Interpolated color
-     */
-    private fun interpolateColor(from: Int, to: Int, t: Float): Int {
-        val fromR = Color.red(from)
-        val fromG = Color.green(from)
-        val fromB = Color.blue(from)
-        val toR = Color.red(to)
-        val toG = Color.green(to)
-        val toB = Color.blue(to)
-
-        val r = (fromR + (toR - fromR) * t).toInt().coerceIn(0, 255)
-        val g = (fromG + (toG - fromG) * t).toInt().coerceIn(0, 255)
-        val b = (fromB + (toB - fromB) * t).toInt().coerceIn(0, 255)
-
-        return Color.rgb(r, g, b)
-    }
-
     companion object {
+        private const val TAG = "ShimmerRenderer"
+
         //language=c
         private const val PICTURE_VERTEX_SHADER_CODE = """
             uniform mat4 uMVPMatrix;
@@ -361,7 +344,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         // Notify when all animations complete and ready for next image
         val isImageAnimating = animationController.blurAmountAnimator.isRunning || animationController.imageTransitionAnimator.isRunning
         if (!isImageAnimating && pendingReadyCallback) {
-            android.util.Log.d("ImageChange", "onDrawFrame: animations complete, calling onReadyForNextImage")
+            Log.d(TAG, "onDrawFrame: animations complete, calling onReadyForNextImage")
             pendingReadyCallback = false
             callbacks.onReadyForNextImage()
         }
@@ -414,7 +397,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         val blurRunning = animationController.blurAmountAnimator.isRunning
         val imageRunning = animationController.imageTransitionAnimator.isRunning
         val result = blurRunning || imageRunning
-        android.util.Log.d("ImageChange", "isAnimating: blur=$blurRunning, image=$imageRunning, result=$result")
+        Log.d(TAG, "isAnimating: blur=$blurRunning, image=$imageRunning, result=$result")
         return result
     }
 
@@ -502,6 +485,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
  * Utility functions for OpenGL ES operations.
  */
 object GLUtil {
+    private const val TAG = "GLUtil"
     /** Bytes per float value */
     const val BYTES_PER_FLOAT = 4
 
@@ -520,7 +504,7 @@ object GLUtil {
         GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compileStatus, 0)
         if (compileStatus[0] == 0) {
             val log = GLES20.glGetShaderInfoLog(shader)
-            android.util.Log.e("GLUtil", "Shader compile error: $log")
+            Log.e(TAG, "Shader compile error: $log")
         }
         return shader
     }
@@ -555,7 +539,7 @@ object GLUtil {
         GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0)
         if (linkStatus[0] == 0) {
             val log = GLES20.glGetProgramInfoLog(program)
-            android.util.Log.e("GLUtil", "Program link error: $log")
+            Log.e(TAG, "Program link error: $log")
         }
 
         // Clean up shaders (program retains compiled code)
