@@ -3,6 +3,7 @@ package dev.abdus.apps.shimmer
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
@@ -133,6 +134,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
         }
 
+        // BroadcastReceiver for handling screen unlock events
+        private val screenUnlockReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == Intent.ACTION_USER_PRESENT && preferences.isChangeImageOnUnlockEnabled()) {
+                    Log.d(TAG, "Screen unlocked, changing image")
+                    advanceToNextImage()
+                }
+            }
+        }
+
         private val preferenceHandlers: Map<String, () -> Unit> = mapOf(
             WallpaperPreferences.KEY_BLUR_AMOUNT to ::onBlurPreferenceChanged,
             WallpaperPreferences.KEY_DIM_AMOUNT to ::applyDimPreference,
@@ -164,6 +175,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
             preferences.registerListener(preferenceListener)
 
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
+            
+            // Register receiver for screen unlock events
+            val screenUnlockFilter = IntentFilter(Intent.ACTION_USER_PRESENT)
+            this@ShimmerWallpaperService.registerReceiver(screenUnlockReceiver, screenUnlockFilter)
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -231,6 +246,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
             preferences.unregisterListener(preferenceListener)
             try {
                 this@ShimmerWallpaperService.unregisterReceiver(shortcutReceiver)
+            } catch (_: IllegalArgumentException) {
+                // Receiver was not registered, ignore
+            }
+            try {
+                this@ShimmerWallpaperService.unregisterReceiver(screenUnlockReceiver)
             } catch (_: IllegalArgumentException) {
                 // Receiver was not registered, ignore
             }

@@ -32,6 +32,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_LAST_IMAGE_URI = "wallpaper_last_image_uri"
         const val KEY_BLUR_ON_SCREEN_LOCK = "wallpaper_blur_on_screen_lock"
         const val KEY_BLUR_ON_APP_SWITCH = "wallpaper_blur_on_app_switch"
+        const val KEY_CHANGE_IMAGE_ON_UNLOCK = "wallpaper_change_image_on_unlock"
         const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
@@ -235,6 +236,15 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setBlurOnAppSwitch(enabled: Boolean) {
         prefs.edit {
             putBoolean(KEY_BLUR_ON_APP_SWITCH, enabled)
+        }
+    }
+
+    fun isChangeImageOnUnlockEnabled(): Boolean =
+        prefs.getBoolean(KEY_CHANGE_IMAGE_ON_UNLOCK, false)
+
+    fun setChangeImageOnUnlock(enabled: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_CHANGE_IMAGE_ON_UNLOCK, enabled)
         }
     }
 

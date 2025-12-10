@@ -104,7 +104,7 @@ enum class SettingsTab {
 fun <T> DebouncedEffect(
     value: T,
     delayMillis: Long = 500,
-    onDebounced: suspend (T) -> Unit
+    onDebounced: suspend (T) -> Unit,
 ) {
     LaunchedEffect(value) {
         delay(delayMillis)
@@ -126,7 +126,7 @@ class SettingsActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShimmerSettingsScreen(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val preferences = remember { WallpaperPreferences.create(context) }
@@ -149,6 +149,9 @@ private fun ShimmerSettingsScreen(
     }
     var blurOnAppSwitch by remember {
         mutableStateOf(preferences.isBlurOnAppSwitchEnabled())
+    }
+    var changeImageOnUnlock by remember {
+        mutableStateOf(preferences.isChangeImageOnUnlockEnabled())
     }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -200,6 +203,10 @@ private fun ShimmerSettingsScreen(
                 WallpaperPreferences.KEY_BLUR_ON_APP_SWITCH -> {
                     blurOnAppSwitch = preferences.isBlurOnAppSwitchEnabled()
                 }
+
+                WallpaperPreferences.KEY_CHANGE_IMAGE_ON_UNLOCK -> {
+                    changeImageOnUnlock = preferences.isChangeImageOnUnlockEnabled()
+                }
             }
         }
         preferences.registerListener(listener)
@@ -230,7 +237,7 @@ private fun ShimmerSettingsScreen(
         folderPreviews = updated
     }
 
-    var selectedTab by remember { 
+    var selectedTab by remember {
         mutableStateOf(
             SettingsTab.entries.getOrElse(preferences.getLastSelectedTab()) { SettingsTab.SOURCES }
         )
@@ -298,6 +305,7 @@ private fun ShimmerSettingsScreen(
                     folderPreviews = folderPreviews,
                     transitionEnabled = transitionEnabled,
                     transitionIntervalMillis = transitionIntervalMillis,
+                    changeImageOnUnlock = changeImageOnUnlock,
                     onPickFolder = { folderPickerLauncher.launch(null) },
                     onRemoveFolder = { uri ->
                         val nextList = folderUris.filter { it != uri }
@@ -309,8 +317,12 @@ private fun ShimmerSettingsScreen(
                     },
                     onTransitionDurationChange = { newDuration ->
                         preferences.setTransitionIntervalMillis(newDuration)
+                    },
+                    onChangeImageOnUnlockChange = {
+                        preferences.setChangeImageOnUnlock(it)
                     }
                 )
+
                 SettingsTab.EFFECTS -> EffectsTab(
                     modifier = Modifier.padding(paddingValues),
                     blurAmount = blurAmount,
@@ -371,10 +383,12 @@ private fun SourcesTab(
     folderPreviews: Map<String, Uri>,
     transitionEnabled: Boolean,
     transitionIntervalMillis: Long,
+    changeImageOnUnlock: Boolean,
     onPickFolder: () -> Unit,
     onRemoveFolder: (String) -> Unit,
     onTransitionEnabledChange: (Boolean) -> Unit,
-    onTransitionDurationChange: (Long) -> Unit
+    onTransitionDurationChange: (Long) -> Unit,
+    onChangeImageOnUnlockChange: (Boolean) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -399,8 +413,10 @@ private fun SourcesTab(
             TransitionDurationSetting(
                 enabled = transitionEnabled,
                 durationMillis = transitionIntervalMillis,
+                changeImageOnUnlock = changeImageOnUnlock,
                 onEnabledChange = onTransitionEnabledChange,
-                onDurationChange = onTransitionDurationChange
+                onDurationChange = onTransitionDurationChange,
+                onChangeImageOnUnlockChange = onChangeImageOnUnlockChange
             )
         }
     }
@@ -424,7 +440,7 @@ private fun EffectsTab(
     onDuotoneDarkColorChange: (String) -> Unit,
     onDuotonePresetSelected: (DuotonePreset) -> Unit,
     onBlurOnScreenLockChange: (Boolean) -> Unit,
-    onBlurOnAppSwitchChange: (Boolean) -> Unit
+    onBlurOnAppSwitchChange: (Boolean) -> Unit,
 ) {
     // Local state for sliders to provide instant UI feedback
     var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
@@ -535,7 +551,7 @@ private fun FolderSelection(
     folderUris: List<String>,
     folderPreviews: Map<String, Uri>,
     onPickFolder: () -> Unit,
-    onRemoveFolder: (String) -> Unit
+    onRemoveFolder: (String) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -605,7 +621,7 @@ private fun FolderSelection(
 private fun FolderCard(
     folderUri: String,
     previewUri: Uri?,
-    onRemove: (String) -> Unit
+    onRemove: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val folderName = remember(folderUri) {
@@ -657,7 +673,7 @@ private fun FolderCard(
 @Composable
 private fun FolderThumbnail(
     previewUri: Uri?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier.size(80.dp),
@@ -692,7 +708,7 @@ private fun FolderThumbnail(
 
 private suspend fun getFolderThumbnailUri(
     context: Context,
-    folderUri: String
+    folderUri: String,
 ): Uri? {
     return withContext(Dispatchers.IO) {
         try {
@@ -741,7 +757,7 @@ private fun SliderSetting(
     title: String,
     value: Float,
     onValueChange: (Float) -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -776,7 +792,7 @@ private fun formatPercent(value: Float): String = "${(value * 100).roundToInt()}
 @Composable
 private fun EffectTransitionDurationSlider(
     durationMillis: Long,
-    onDurationChange: (Long) -> Unit
+    onDurationChange: (Long) -> Unit,
 ) {
     // Range: 0ms to 3000ms in 250ms steps = 13 steps (0, 250, 500, ..., 3000)
     val steps = 12 // 13 values means 12 steps between them
@@ -833,8 +849,10 @@ private fun formatDurationMs(millis: Long): String {
 private fun TransitionDurationSetting(
     enabled: Boolean,
     durationMillis: Long,
+    changeImageOnUnlock: Boolean,
     onEnabledChange: (Boolean) -> Unit,
-    onDurationChange: (Long) -> Unit
+    onDurationChange: (Long) -> Unit,
+    onChangeImageOnUnlockChange: (Boolean) -> Unit,
 ) {
     val options = TRANSITION_DURATION_OPTIONS
     val sliderIndex = options.indexOfFirst { it.millis == durationMillis }.takeIf { it >= 0 } ?: 0
@@ -859,7 +877,7 @@ private fun TransitionDurationSetting(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Transition between images",
+                        text = "Change images automatically",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -880,7 +898,7 @@ private fun TransitionDurationSetting(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Interval between image swaps",
+                        text = "Change every",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -898,10 +916,37 @@ private fun TransitionDurationSetting(
                     enabled = enabled
                 )
                 Text(
-                    text = if (enabled) "Next change in ${selectedOption.label}" else "Transitions disabled",
+                    text = if (enabled) "Next change in ${selectedOption.label}" else "Auto change disabled",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+            // Change image on screen unlock toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Change when screen unlocks",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Switch(
+                    checked = changeImageOnUnlock,
+                    onCheckedChange = onChangeImageOnUnlockChange
                 )
             }
         }
@@ -935,7 +980,7 @@ private fun DuotoneSettings(
     onAlwaysOnChange: (Boolean) -> Unit,
     onLightColorChange: (String) -> Unit,
     onDarkColorChange: (String) -> Unit,
-    onPresetSelected: (DuotonePreset) -> Unit
+    onPresetSelected: (DuotonePreset) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -1007,7 +1052,7 @@ private fun EventsSettings(
     blurOnScreenLock: Boolean,
     blurOnAppSwitch: Boolean,
     onBlurOnScreenLockChange: (Boolean) -> Unit,
-    onBlurOnAppSwitchChange: (Boolean) -> Unit
+    onBlurOnAppSwitchChange: (Boolean) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -1089,7 +1134,7 @@ private fun EventsSettings(
 
 @Composable
 private fun DuotonePresetDropdown(
-    onPresetSelected: (DuotonePreset) -> Unit
+    onPresetSelected: (DuotonePreset) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -1147,7 +1192,7 @@ private fun ColorHexField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    previewColor: Color
+    previewColor: Color,
 ) {
     val normalized = value.uppercase()
     val isError = normalized.isNotEmpty() && !isValidHexColor(normalized)
