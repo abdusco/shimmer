@@ -12,6 +12,7 @@ import android.view.SurfaceHolder
 import android.widget.Toast
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService
 import java.util.concurrent.Executors
+import kotlin.reflect.KClass
 
 class ShimmerWallpaperService : GLWallpaperService() {
     companion object {
@@ -40,9 +41,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
         private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
 
-        // Queue for actions that need to be run on the GL thread when the renderer is available
-        // This list will hold the actual actions, not just their lambdas.
-        private val deferredRendererActions = mutableListOf<(ShimmerRenderer) -> Unit>()
+        private val commandQueue = RendererCommandQueue()
 
         // Image change state management (accessed only on folderScheduler thread)
         private var pendingImageUri: Uri? = null
@@ -53,15 +52,18 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // Track initial load to prevent double-blur
         private var isInitialLoad = true
 
-        // Track whether we've already applied the lock-screen blur for the current lock session
-        private var hasAppliedLockScreenBlur = false
+        private var rendererReady = false
 
         override fun onRendererReady() {
             Log.d(TAG, "onRendererReady called")
-
-            executeDeferredActions()
-
+            rendererReady = true
+            Log.d(TAG, "onRendererReady applying preferences")
             applyPreferences()
+            Log.d(TAG, "onRendererReady enqueueing replay of latest commands")
+            commandQueue.enqueueReplayOfLatest()
+            Log.d(TAG, "onRendererReady trying to drain commands")
+            tryDrainCommands()
+
             isInitialLoad = false
             super.requestRender() // Request render after applying preferences
         }
@@ -80,36 +82,52 @@ class ShimmerWallpaperService : GLWallpaperService() {
             imageLoader.setScreenHeight(height)
             Log.d(TAG, "onSurfaceDimensionsChanged: ${width}x${height}")
         }
+        private fun enqueueCommand(
+            command: RendererCommand,
+            allowWhenSurfaceUnavailable: Boolean = false,
+            allowWhenInvisible: Boolean = false,
+            replayable: Boolean = true,
+        ) {
+            if (!allowWhenSurfaceUnavailable && !surfaceAvailable) return
+            if (!allowWhenInvisible && !engineVisible) return
+            commandQueue.enqueue(command, replayable)
+            tryDrainCommands()
+        }
 
-        // Helper function to safely execute actions on the renderer on the GL thread
-        // Handles renderer nullability, surface availability, and visibility checks
-        private fun withRenderer(allowWhenSurfaceUnavailable: Boolean = false, action: (ShimmerRenderer) -> Unit) {
-            val r = renderer
-            if (r == null) {
-                // If renderer is not yet available, defer this action.
-                // This typically happens if a preference change occurs before onSurfaceCreated has completed
-                // and renderer is assigned.
-                deferredRendererActions.add(action)
-                return
-            }
+        private fun tryDrainCommands() {
+            val r = renderer ?: return
+            if (!surfaceAvailable || !rendererReady || !r.isSurfaceReady()) return
 
-            // If surface is unavailable, defer the action regardless of allowWhenSurfaceUnavailable
-            // We can't execute GL commands without a valid GL context
-            if (!surfaceAvailable) {
-                if (allowWhenSurfaceUnavailable) {
-                    deferredRendererActions.add(action)
+            commandQueue.drain { command ->
+                queueEvent {
+                    try {
+                        applyCommand(r, command)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "applyCommand failed, deferring until surface is ready again", e)
+                        // Mark renderer as not ready so we stop draining until the next surface creation.
+                        rendererReady = false
+                    }
                 }
-                return
             }
 
-            // Check visibility - allowWhenSurfaceUnavailable also bypasses visibility check
-            if (!allowWhenSurfaceUnavailable && !engineVisible) {
-                return
-            }
-
-            queueEvent { action(r) }
             if (engineVisible) {
                 super.requestRender()
+            }
+        }
+
+        private fun applyCommand(renderer: ShimmerRenderer, command: RendererCommand) {
+            when (command) {
+                is RendererCommand.ApplyBlur -> renderer.enableBlur(command.enabled, command.immediate)
+                is RendererCommand.ToggleBlur -> renderer.toggleBlur()
+                is RendererCommand.SetImage -> renderer.setImage(command.imageSet)
+                is RendererCommand.SetDim -> renderer.setUserDimAmount(command.amount)
+                is RendererCommand.SetDuotone -> renderer.setDuotoneSettings(
+                    enabled = command.enabled,
+                    alwaysOn = command.alwaysOn,
+                    duotone = command.duotone
+                )
+                is RendererCommand.SetParallax -> renderer.setParallaxOffset(command.offset)
+                is RendererCommand.SetEffectDuration -> renderer.setEffectTransitionDuration(command.durationMs)
             }
         }
 
@@ -135,8 +153,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val screenUnlockReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == Intent.ACTION_USER_PRESENT && preferences.isChangeImageOnUnlockEnabled()) {
-                    // User unlocked; allow lock-screen blur to trigger on next lock
-                    hasAppliedLockScreenBlur = false
                     Log.d(TAG, "Screen unlocked, changing image")
                     advanceToNextImage()
                 }
@@ -184,25 +200,17 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onSurfaceCreated called")
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
-
-            executeDeferredActions()
+            commandQueue.enqueueReplayOfLatest()
+            tryDrainCommands()
 
             super.requestRender()
-        }
-
-        private fun executeDeferredActions() {
-            renderer?.let { r ->
-                if (surfaceAvailable && deferredRendererActions.isNotEmpty()) {
-                    deferredRendererActions.forEach { queueEvent { it(r) } }
-                    deferredRendererActions.clear()
-                }
-            }
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             Log.d(TAG, "onSurfaceDestroyed called")
             surfaceAvailable = false
-            withRenderer(allowWhenSurfaceUnavailable = true) { it.setParallaxOffset(0.5f) }
+            rendererReady = false
+            renderer?.onSurfaceDestroyed()
             super.onSurfaceDestroyed(holder)
         }
 
@@ -219,29 +227,29 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             val isScreenOn = powerManager?.isInteractive ?: true
 
+            val blurOnAppSwitch = preferences.isBlurOnAppSwitchEnabled()
+            val blurOnLock = preferences.isBlurOnScreenLockEnabled()
+            Log.d(TAG, "  isScreenOn=$isScreenOn, isOnLockScreen=$isOnLockScreen, blurOnAppSwitch=$blurOnAppSwitch, blurOnLock=$blurOnLock")
+
             // Apply app switch blur only when:
             // - Wallpaper becomes invisible
             // - Screen is ON (not turning off/locked)
             // - Keyguard is NOT showing
             // This combination indicates an app opened over the wallpaper
-            if (!visible && isScreenOn && !isOnLockScreen && preferences.isBlurOnAppSwitchEnabled()) {
-                Log.d(TAG, "  → Applying blur due to app switch")
-                enableBlur()
+            if (!visible &&
+                isScreenOn &&
+                !isOnLockScreen &&
+                blurOnAppSwitch) {
+                Log.d(TAG, "  → Applying blur due to app switch (immediate)")
+                enableBlur(immediate = true, replayable = false)
             } else if (
                 visible &&
                 isScreenOn &&
                 isOnLockScreen &&
-                preferences.isBlurOnScreenLockEnabled() &&
-                !hasAppliedLockScreenBlur
+                blurOnLock
             ) {
                 Log.d(TAG, "  → Applying blur due to screen lock (visibility change)")
-                hasAppliedLockScreenBlur = true
-                enableBlur()
-            }
-
-            // Reset lock-screen blur flag once we're visible and no longer on the keyguard
-            if (visible && !isOnLockScreen) {
-                hasAppliedLockScreenBlur = false
+                enableBlur(immediate = true, replayable = false)
             }
 
             if (engineVisible) {
@@ -273,11 +281,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onTouchEvent(event: MotionEvent) {
             when (tapGestureDetector.onTouchEvent(event)) {
                 TapEvent.TWO_FINGER_DOUBLE_TAP -> {
+                    Log.d(TAG, "TapEvent.TWO_FINGER_DOUBLE_TAP - advancing to next image")
                     advanceToNextImage()
                 }
 
                 TapEvent.TRIPLE_TAP -> {
-                    withRenderer { it.toggleBlur() }
+                    Log.d(TAG, "TapEvent.TRIPLE_TAP - toggling blur")
+                    enqueueCommand(RendererCommand.ToggleBlur)
                 }
 
                 TapEvent.NONE -> {
@@ -309,7 +319,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 xPixelOffset,
                 yPixelOffset
             )
-            withRenderer { it.setParallaxOffset(xOffset) }
+            enqueueCommand(RendererCommand.SetParallax(xOffset))
         }
 
         private fun loadDefaultImage() {
@@ -323,7 +333,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (imageSet != null) {
                 // Mark that we're using the default image (no URI means default)
                 currentImageUri = null
-                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
+                enqueueCommand(
+                    RendererCommand.SetImage(imageSet),
+                    allowWhenSurfaceUnavailable = true,
+                    allowWhenInvisible = true
+                )
             } else {
                 Log.e(TAG, "loadDefaultImage: Failed to load default image")
             }
@@ -346,11 +360,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyBlurPreference() {
             val blurAmount = preferences.getBlurAmount()
-            withRenderer { it.enableBlur(blurAmount > 0f) }
+            enqueueCommand(RendererCommand.ApplyBlur(blurAmount > 0f))
         }
 
-        private fun enableBlur() {
-            withRenderer(allowWhenSurfaceUnavailable = true) { it.enableBlur(true) }
+        private fun enableBlur(immediate: Boolean = false, replayable: Boolean = true) {
+            enqueueCommand(
+                RendererCommand.ApplyBlur(enabled = true, immediate = immediate),
+                allowWhenSurfaceUnavailable = true,
+                allowWhenInvisible = true,
+                replayable = replayable
+            )
         }
 
         private fun onBlurPreferenceChanged() {
@@ -359,27 +378,27 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyDimPreference() {
             val dimAmount = preferences.getDimAmount()
-            withRenderer { it.setUserDimAmount(dimAmount) }
+            enqueueCommand(RendererCommand.SetDim(dimAmount))
         }
 
         private fun applyDuotoneSettingsPreference() {
             val settings = preferences.getDuotoneSettings()
-            withRenderer {
-                it.setDuotoneSettings(
+            enqueueCommand(
+                RendererCommand.SetDuotone(
                     enabled = settings.enabled,
                     alwaysOn = settings.alwaysOn,
                     duotone = Duotone(
                         lightColor = settings.lightColor,
                         darkColor = settings.darkColor,
                         opacity = if (settings.enabled) 1f else 0f
-                    ),
+                    )
                 )
-            }
+            )
         }
 
         private fun applyEffectTransitionDurationPreference() {
             val duration = preferences.getEffectTransitionDurationMillis()
-            withRenderer { it.setEffectTransitionDuration(duration) }
+            enqueueCommand(RendererCommand.SetEffectDuration(duration))
         }
 
         private fun applyImageFolderPreference() {
@@ -435,7 +454,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
             
             if (imageSet != null) {
-                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
+                enqueueCommand(
+                    RendererCommand.SetImage(imageSet),
+                    allowWhenSurfaceUnavailable = true,
+                    allowWhenInvisible = true
+                )
                 return true
             }
             
@@ -510,7 +533,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (imageSet != null) {
                 Log.d(TAG, "loadImage: imageSet prepared, calling setImage with allowWhenSurfaceUnavailable = true")
                 currentImageUri = uri // Track for re-blurring
-                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
+                enqueueCommand(
+                    RendererCommand.SetImage(imageSet),
+                    allowWhenSurfaceUnavailable = true,
+                    allowWhenInvisible = true
+                )
                 preferences.setLastImageUri(uri.toString())
                 Log.d(TAG, "loadImage: COMPLETE")
             } else {
@@ -527,8 +554,72 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val uri = currentImageUri ?: return
             val imageSet = imageLoader.loadFromUri(uri)
             if (imageSet != null) {
-                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
+                enqueueCommand(
+                    RendererCommand.SetImage(imageSet),
+                    allowWhenSurfaceUnavailable = true,
+                    allowWhenInvisible = true
+                )
             }
         }
+
+    }
+}
+
+private sealed interface RendererCommand {
+    data class ApplyBlur(val enabled: Boolean, val immediate: Boolean = false) : RendererCommand
+    object ToggleBlur : RendererCommand
+    data class SetImage(val imageSet: ImageSet) : RendererCommand
+    data class SetDim(val amount: Float) : RendererCommand
+    data class SetDuotone(
+        val enabled: Boolean,
+        val alwaysOn: Boolean,
+        val duotone: Duotone,
+    ) : RendererCommand
+    data class SetParallax(val offset: Float) : RendererCommand
+    data class SetEffectDuration(val durationMs: Long) : RendererCommand
+}
+
+private class RendererCommandQueue {
+    private val replaceableTypes: Set<KClass<out RendererCommand>> = setOf(
+        RendererCommand.ApplyBlur::class,
+        RendererCommand.SetImage::class,
+        RendererCommand.SetDim::class,
+        RendererCommand.SetDuotone::class,
+        RendererCommand.SetParallax::class,
+        RendererCommand.SetEffectDuration::class
+    )
+
+    private val queue = mutableListOf<RendererCommand>()
+    private val latestReplaceable = LinkedHashMap<KClass<out RendererCommand>, RendererCommand>()
+
+    @Synchronized
+    fun enqueue(command: RendererCommand, replayable: Boolean) {
+        val type = command::class
+        if (type in replaceableTypes) {
+            queue.removeAll { it::class == type }
+            // replayable=false is used for transient, context-driven commands (e.g., blur on app switch/lock)
+            // so they are not re-applied on renderer/surface recreation. Preference-driven commands remain
+            // replayable to restore state after GL context loss.
+            if (replayable) {
+                latestReplaceable[type] = command
+            }
+        }
+        queue.add(command)
+    }
+
+    @Synchronized
+    fun enqueueReplayOfLatest() {
+        latestReplaceable.values.forEach { command ->
+            queue.removeAll { it::class == command::class }
+            queue.add(command)
+        }
+    }
+
+    @Synchronized
+    fun drain(consumer: (RendererCommand) -> Unit) {
+        if (queue.isEmpty()) return
+        val snapshot = queue.toList()
+        queue.clear()
+        snapshot.forEach(consumer)
     }
 }

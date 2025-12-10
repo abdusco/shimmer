@@ -144,6 +144,19 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
+     * Exposes whether the renderer currently has a valid surface/context.
+     * Used by the host to decide when it is safe to issue GL work.
+     */
+    fun isSurfaceReady(): Boolean = surfaceCreated
+
+    /**
+     * Marks the surface/context as lost so subsequent commands are deferred.
+     */
+    fun onSurfaceDestroyed() {
+        surfaceCreated = false
+    }
+
+    /**
      * Toggles the blur effect on/off with animation.
      */
     fun toggleBlur() {
@@ -156,14 +169,14 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         callbacks.requestRender()
     }
 
-    fun enableBlur(enable: Boolean = true) {
-        Log.d(TAG, "enableBlur: called with enable=$enable")
+    fun enableBlur(enable: Boolean = true, immediate: Boolean = false) {
+        Log.d(TAG, "enableBlur: called with enable=$enable, immediate=$immediate")
         val baseState = animationController.targetRenderState
         val targetBlurAmount = if (enable) 1f else 0f
 
         if (baseState.blurAmount != targetBlurAmount) {
             val newTargetState = baseState.copy(blurAmount = targetBlurAmount)
-            if (isInitialPreferenceLoad) {
+            if (immediate || isInitialPreferenceLoad) {
                 animationController.setRenderStateImmediately(newTargetState)
                 animationController.blurAmountAnimator.reset()
             } else {
@@ -381,10 +394,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             }
             callbacks.requestRender()
         } catch (e: Exception) {
-            Log.e(TAG, "updatePictureSet: Error loading textures, marking surface as unavailable", e)
+            Log.w(TAG, "updatePictureSet: Error loading textures, marking surface as unavailable (will retry on next surface)", e)
             surfaceCreated = false
             pendingImageSet = imageSet
-            throw e
+            // Swallow and wait for surface recreation; GL context likely lost.
+            return
         }
     }
 
@@ -558,6 +572,7 @@ object GLUtil {
         // Check for valid GL context before attempting texture creation
         val glError = GLES20.glGetError()
         if (glError == GLES20.GL_INVALID_OPERATION) {
+            Log.e(TAG, "loadTexture: No valid GL context available (glError=$glError)")
             throw IllegalStateException("No valid GL context available for texture creation")
         }
         
