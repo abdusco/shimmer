@@ -45,6 +45,33 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // Track initial load to prevent double-blur
         private var isInitialLoad = true
 
+        // Screen dimensions for optimal image downsampling
+        private var screenHeight: Int = 0
+
+        // allow up to 50% smaller than target height
+        private val DOWNSAMPLE_MARGIN_OF_ERROR = 0.50f
+
+        /**
+         * Calculate optimal inSampleSize to downsample image to fit target height.
+         * inSampleSize will be a power of 2, ensuring efficient decoding.
+         * This version allows a configurable leeway (e.g. 30%) so we still pick
+         * an inSampleSize of 2 for images that are only slightly smaller than twice
+         * the target height.
+         */
+        private fun calculateInSampleSize(imageHeight: Int, targetHeight: Int): Int {
+            var inSampleSize = 1
+            if (imageHeight > targetHeight) {
+                val halfHeight = imageHeight / 2
+                val threshold = kotlin.math.max(1, (targetHeight * (1 - DOWNSAMPLE_MARGIN_OF_ERROR)).toInt())
+                // Calculate the largest inSampleSize (power of two) whose resulting height
+                // is >= threshold. Threshold is targetHeight reduced by leeway percent.
+                while (halfHeight / inSampleSize >= threshold) {
+                    inSampleSize *= 2
+                }
+            }
+            return inSampleSize
+        }
+
         override fun onRendererReady() {
             val r = renderer ?: return
 
@@ -70,7 +97,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 } ?: android.util.Log.d("ImageChange", "  → No pending requests")
             }
         }
-        
+
+        override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
+            screenHeight = height
+            android.util.Log.d("ShimmerWallpaper", "Screen dimensions: ${width}x${height}")
+        }
+
         // Helper function to safely execute actions on the renderer on the GL thread
         private fun withRenderer(allowWhenSurfaceUnavailable: Boolean = false, action: (ShimmerRenderer) -> Unit) {
             val r = renderer
@@ -215,10 +247,25 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 return
             }
             try {
-                // Load embedded default wallpaper from drawable resources
-                val options = BitmapFactory.Options().apply {
-                    inSampleSize = 2
+                // Determine optimal sample size based on screen height
+                val targetHeight = if (screenHeight > 0) screenHeight else 1920 // Fallback
+
+                // First pass: decode bounds only
+                val boundsOptions = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
                 }
+                BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper, boundsOptions)
+
+                // Calculate optimal sample size
+                val sampleSize = calculateInSampleSize(boundsOptions.outHeight, targetHeight)
+
+                // Second pass: decode actual bitmap
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                }
+                android.util.Log.d("ShimmerWallpaper",
+                    "Decoding default image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
+                    "inSampleSize=$sampleSize (target height=$targetHeight)")
                 val bitmap = BitmapFactory.decodeResource(
                     resources,
                     R.drawable.default_wallpaper,
@@ -333,7 +380,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         android.util.Log.d("ImageChange", "setImageFolders: loading initial image from repo")
                         loadImage(nextUri)
                         loaded = true
-                    }
+                      }
                 }
                 if (!loaded) {
                     android.util.Log.d("ImageChange", "setImageFolders: loading default image")
@@ -489,10 +536,28 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun decodeBitmapFromUri(uri: Uri): Bitmap? {
             return try {
+                // Determine optimal sample size based on screen height
+                val targetHeight = if (screenHeight > 0) screenHeight else 1920 // Fallback to common resolution
+
+                // First pass: decode bounds only
+                val boundsOptions = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, boundsOptions)
+                }
+
+                // Calculate optimal sample size using the shared helper (with leeway)
+                val sampleSize = calculateInSampleSize(boundsOptions.outHeight, targetHeight)
+
+                // Second pass: decode actual bitmap with calculated sample size
                 contentResolver.openInputStream(uri)?.use { stream ->
                     val options = BitmapFactory.Options().apply {
-                        inSampleSize = 2
+                        inSampleSize = sampleSize
                     }
+                    android.util.Log.d("ShimmerWallpaper",
+                        "Decoding image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
+                                "inSampleSize=$sampleSize (target height=$targetHeight)")
                     BitmapFactory.decodeStream(stream, null, options)
                 }
             } catch (e: Exception) {

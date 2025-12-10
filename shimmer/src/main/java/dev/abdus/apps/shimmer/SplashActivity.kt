@@ -168,6 +168,10 @@ private fun SplashScreen(
                         override fun onReadyForNextImage() {
                             // Not used in preview
                         }
+
+                        override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
+                            // Not used in preview - preview doesn't load images dynamically
+                        }
                     })
                     renderer.setEffectTransitionDuration(2000)
                     setRenderer(renderer)

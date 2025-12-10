@@ -59,6 +59,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         /** Notifies when all animations (blur, image fade) have completed and renderer is ready to accept a new image. */
         fun onReadyForNextImage()
+
+        /** Notifies when surface dimensions change */
+        fun onSurfaceDimensionsChanged(width: Int, height: Int)
     }
 
     // Effect transition duration (for blur, duotone, and image fade animations)
@@ -303,6 +306,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         GLES20.glViewport(0, 0, width, height)
         surfaceAspect = if (height == 0) 1f else width.toFloat() / height
         recomputeProjectionMatrix()
+        callbacks.onSurfaceDimensionsChanged(width, height)
     }
 
     override fun onDrawFrame(gl: GL10) {
