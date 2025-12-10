@@ -73,7 +73,9 @@ class SplashActivity : ComponentActivity() {
 
         // Load default wallpaper on background thread
         Thread {
-            val bitmap = BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper)
+            val bitmap = BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper, BitmapFactory.Options().apply {
+                inSampleSize = 2
+            })
             bitmap?.let {
                 val payload = ImageSet(original = it)
                 surfaceView.queueEvent {
