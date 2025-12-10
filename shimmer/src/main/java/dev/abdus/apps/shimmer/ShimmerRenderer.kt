@@ -275,9 +275,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         Matrix.setLookAtM(viewMatrix, 0, 0f, 0f, 1f, 0f, 0f, -1f, 0f, 1f, 0f)
 
-        // pendingImage is handled above, so these calls are no longer needed
-        // The originalBitmap is also removed, so this check is obsolete
-
         callbacks.onRendererReady()
     }
 
@@ -304,19 +301,15 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         // blurAmount is normalized 0-1, convert to actual keyframe count for rendering
         val imageBlurKeyframes = currentRenderState.imageSet.blurred.size
-        val normalizedBlurAmount = currentRenderState.blurAmount.coerceIn(0f, 1f)
-        val blurKeyframeIndex = normalizedBlurAmount * imageBlurKeyframes
-
-        // Calculate blur progress (0 = no blur visible, 1 = full blur)
-        val blurProgress = normalizedBlurAmount
+        val blurAmount = currentRenderState.blurAmount.coerceIn(0f, 1f)
+        val blurKeyframeIndex = blurAmount * imageBlurKeyframes
 
         val duotone = currentRenderState.duotone.copy(
-            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurProgress)
+            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurAmount)
         )
 
-        val finalDimAmount = currentRenderState.dimAmount * blurProgress
+        val finalDimAmount = currentRenderState.dimAmount * blurAmount
 
-        // val imageAlpha = 1f - animationController.imageTransitionAnimator.currentValue // imageTransitionAnimator animates from 0 to 1 as new image appears, so alpha for old image is 1-value and new is value
         val currentImageAlpha = animationController.imageTransitionAnimator.currentValue
         val previousImageAlpha = 1f - animationController.imageTransitionAnimator.currentValue
 
@@ -354,32 +347,19 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     /**
      * Updates the OpenGL picture set with bitmaps and initiates crossfade animation.
      * @param imageSet The image set to load
-     * @param preserveAspect If true, preserves the aspect ratio for smooth color-only transitions
      */
-    private fun updatePictureSet(imageSet: ImageSet, preserveAspect: Boolean = false) {
-        val baseOriginal = imageSet.original
-        val levels = imageSet.blurred
-
-        // Note: previousBitmapAspect is set in setImage before calling this method
-        bitmapAspect = if (baseOriginal.height == 0) 1f else baseOriginal.width.toFloat() / baseOriginal.height
-
+    private fun updatePictureSet(imageSet: ImageSet) {
         previousPictureSet?.destroyPictures()
         previousPictureSet = pictureSet
 
         // Build the bitmap list: [original, ...blurLevels]
         val bitmapList = buildList {
-            add(baseOriginal)
-            addAll(levels)
+            add(imageSet.original)
+            addAll(imageSet.blurred)
         }
 
         pictureSet = GLPictureSet().apply {
             load(bitmapList, tileSize)
-        }
-
-
-        // When preserving aspect (color changes only), ensure we use the same projection matrix
-        if (preserveAspect) {
-            recomputeProjectionMatrix()
         }
 
         callbacks.requestRender()
