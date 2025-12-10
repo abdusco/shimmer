@@ -4,14 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.widget.Toast
-import androidx.core.net.toUri
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService
 import java.util.concurrent.Executors
 
@@ -33,6 +30,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
         private val transitionScheduler =
             ImageTransitionScheduler(imageLoadExecutor) { handleScheduledAdvance() }
+        private val imageLoader = ImageLoader(
+            contentResolver = contentResolver,
+            resources = resources,
+            preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
+        )
 
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
         private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
@@ -49,33 +51,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         // Track initial load to prevent double-blur
         private var isInitialLoad = true
-
-        // Screen dimensions for optimal image downsampling
-        private var screenHeight: Int = 0
-
-        // allow up to 50% smaller than target height
-        private val DOWNSAMPLE_MARGIN_OF_ERROR = 0.50f
-
-        /**
-         * Calculate optimal inSampleSize to downsample image to fit target height.
-         * inSampleSize will be a power of 2, ensuring efficient decoding.
-         * This version allows a configurable leeway (e.g. 30%) so we still pick
-         * an inSampleSize of 2 for images that are only slightly smaller than twice
-         * the target height.
-         */
-        private fun calculateInSampleSize(imageHeight: Int, targetHeight: Int): Int {
-            var inSampleSize = 1
-            if (imageHeight > targetHeight) {
-                val halfHeight = imageHeight / 2
-                val threshold = kotlin.math.max(1, (targetHeight * (1 - DOWNSAMPLE_MARGIN_OF_ERROR)).toInt())
-                // Calculate the largest inSampleSize (power of two) whose resulting height
-                // is >= threshold. Threshold is targetHeight reduced by leeway percent.
-                while (halfHeight / inSampleSize >= threshold) {
-                    inSampleSize *= 2
-                }
-            }
-            return inSampleSize
-        }
 
         override fun onRendererReady() {
             Log.d(TAG, "onRendererReady called")
@@ -98,7 +73,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
-            screenHeight = height
+            imageLoader.setScreenHeight(height)
             Log.d(TAG, "onSurfaceDimensionsChanged: ${width}x${height}")
         }
 
@@ -308,52 +283,18 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun loadDefaultImage() {
             Log.d(TAG, "loadDefaultImage: Loading default wallpaper image")
-            // Called on folderScheduler thread
+            // Called on imageLoadExecutor thread
             if (folderRepository.hasFolders()) {
                 return
             }
-            try {
-                // Determine optimal sample size based on screen height
-                val targetHeight = if (screenHeight > 0) screenHeight else 1920 // Fallback
-
-                // First pass: decode bounds only
-                val boundsOptions = BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
-                }
-                BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper, boundsOptions)
-
-                // Calculate optimal sample size
-                val sampleSize = calculateInSampleSize(boundsOptions.outHeight, targetHeight)
-
-                // Second pass: decode actual bitmap
-                val options = BitmapFactory.Options().apply {
-                    inSampleSize = sampleSize
-                }
-                Log.d(
-                    TAG, "loadDefaultImage: Decoding default image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
-                            "inSampleSize=$sampleSize (target height=$targetHeight)"
-                )
-                val bitmap = BitmapFactory.decodeResource(
-                    resources,
-                    R.drawable.default_wallpaper,
-                    options
-                )
-
-                val blurAmount = preferences.getBlurAmount()
-                val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
-                Log.d(TAG, "loadDefaultImage: Generating blur levels for default image with maxRadius=$maxRadius")
-                val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
-                val imageSet = ImageSet(
-                    original = bitmap,
-                    blurred = blurLevels
-                )
-
+            
+            val imageSet = imageLoader.loadDefault()
+            if (imageSet != null) {
                 // Mark that we're using the default image (no URI means default)
                 currentImageUri = null
-
                 withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
-            } catch (e: Exception) {
-                Log.e(TAG, "loadDefaultImage: Error loading default image: ${e.message}", e)
+            } else {
+                Log.e(TAG, "loadDefaultImage: Failed to load default image")
             }
         }
 
@@ -444,32 +385,29 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun loadLastImage(): Boolean {
-            Log.d(TAG, "loadLastImage: Attempting to load last image URI from preferences")
-            var lastImageUriString = preferences.getLastImageUri()
-            if (lastImageUriString.isNullOrBlank()) {
+            Log.d(TAG, "loadLastImage: Attempting to load last image")
+            
+            // Try to load last image from preferences
+            var imageSet = imageLoader.loadLast()
+            
+            // If no last image, try to get next image from folder repository
+            if (imageSet == null) {
                 val nextUri = folderRepository.nextImageUri()
                 if (nextUri != null) {
-                    Log.d(TAG, "loadLastImage: No last image URI, using next image URI from repo: $nextUri")
-                    lastImageUriString = nextUri.toString()
-                } else {
-                    return false
+                    Log.d(TAG, "loadLastImage: No last image, using next from folder: $nextUri")
+                    imageSet = imageLoader.loadFromUri(nextUri)
+                    if (imageSet != null) {
+                        currentImageUri = nextUri
+                        preferences.setLastImageUri(nextUri.toString())
+                    }
                 }
             }
-
-            try {
-                val lastImageUri = lastImageUriString.toUri()
-                val payload = prepareRendererImage(lastImageUri)
-                if (payload != null) {
-                    withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(payload) }
-                    return true
-                } else {
-                    // If payload is null, image couldn't be prepared (e.g., file not found). Clear preference.
-                    preferences.setLastImageUri(null)
-                }
-            } catch (e: Exception) {
-                Log.e("ShimmerWallpaperService", "Error loading last image URI: $lastImageUriString", e)
-                preferences.setLastImageUri(null) // Clear invalid URI
+            
+            if (imageSet != null) {
+                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
+                return true
             }
+            
             return false
         }
 
@@ -536,15 +474,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun loadImage(uri: Uri) {
             Log.d(TAG, "loadImage: Loading image from $uri")
-            // Called on folderScheduler thread to load a specific image
-            val imageSet = prepareRendererImage(uri)
+            // Called on imageLoadExecutor thread to load a specific image
+            val imageSet = imageLoader.loadFromUri(uri)
             if (imageSet != null) {
                 Log.d(TAG, "loadImage: imageSet prepared, calling setImage with allowWhenSurfaceUnavailable = true")
+                currentImageUri = uri // Track for re-blurring
                 withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
                 preferences.setLastImageUri(uri.toString())
                 Log.d(TAG, "loadImage: COMPLETE")
             } else {
-                Log.d(TAG, "loadImage: Failed to prepare image")
+                Log.d(TAG, "loadImage: Failed to load image")
             }
         }
 
@@ -552,61 +491,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             requestImageChange()
         }
 
-        private fun prepareRendererImage(uri: Uri): ImageSet? {
-            Log.d(TAG, "prepareRendererImage: Decoding bitmap")
-            val bitmap = decodeBitmapFromUri(uri) ?: return null
-
-            val blurAmount = preferences.getBlurAmount()
-            val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
-
-            val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
-
-            // Store the current image URI for potential re-blurring
-            currentImageUri = uri
-
-            return ImageSet(
-                original = bitmap,
-                blurred = blurLevels
-            )
-        }
-
         private fun reBlurCurrentImage() {
             Log.d(TAG, "reBlurCurrentImage: Re-blurring current image")
             val uri = currentImageUri ?: return
-            val imageSet = prepareRendererImage(uri) ?: return
-            withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
-        }
-
-        private fun decodeBitmapFromUri(uri: Uri): Bitmap? {
-            return try {
-                // Determine optimal sample size based on screen height
-                val targetHeight = if (screenHeight > 0) screenHeight else 1920 // Fallback to common resolution
-
-                // First pass: decode bounds only
-                val boundsOptions = BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
-                }
-                contentResolver.openInputStream(uri)?.use { stream ->
-                    BitmapFactory.decodeStream(stream, null, boundsOptions)
-                }
-
-                // Calculate optimal sample size using the shared helper (with leeway)
-                val sampleSize = calculateInSampleSize(boundsOptions.outHeight, targetHeight)
-
-                // Second pass: decode actual bitmap with calculated sample size
-                contentResolver.openInputStream(uri)?.use { stream ->
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = sampleSize
-                    }
-                    Log.d(
-                        TAG, "decodeBitmapFromUri: Decoding image: ${boundsOptions.outWidth}x${boundsOptions.outHeight} -> " +
-                                "inSampleSize=$sampleSize (target height=$targetHeight)"
-                    )
-                    BitmapFactory.decodeStream(stream, null, options)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
+            val imageSet = imageLoader.loadFromUri(uri)
+            if (imageSet != null) {
+                withRenderer(allowWhenSurfaceUnavailable = true) { it.setImage(imageSet) }
             }
         }
     }
