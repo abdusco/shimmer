@@ -16,15 +16,29 @@ android {
         versionName project.hasProperty('version.name') ? project.property('version.name') : '1.0.0'
     }
 
-    def keystorePath = System.getenv("KEYSTORE_FILE") ?: project.findProperty("KEYSTORE_FILE")
+    // Load keystore properties from keystore.properties file if it exists
+    def keystorePropertiesFile = rootProject.file("keystore.properties")
+    def keystoreProperties = new Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+
+    // Priority: environment variables > keystore.properties > project properties
+    def keystorePath = System.getenv("KEYSTORE_FILE") ?: keystoreProperties['storeFile'] ?: project.findProperty("KEYSTORE_FILE")
 
     signingConfigs {
         if (keystorePath) {
             release {
                 storeFile file(keystorePath)
-                storePassword System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS") ?: project.findProperty("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD")
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: keystoreProperties['storePassword'] ?: project.findProperty("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS") ?: keystoreProperties['keyAlias'] ?: project.findProperty("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD") ?: keystoreProperties['keyPassword'] ?: project.findProperty("KEY_PASSWORD")
+            }
+            debug {
+                storeFile file(keystorePath)
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: keystoreProperties['storePassword'] ?: project.findProperty("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS") ?: keystoreProperties['keyAlias'] ?: project.findProperty("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD") ?: keystoreProperties['keyPassword'] ?: project.findProperty("KEY_PASSWORD")
             }
         }
     }
@@ -35,6 +49,11 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (keystorePath) {
                 signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            if (keystorePath) {
+                signingConfig signingConfigs.debug
             }
         }
     }
