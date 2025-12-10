@@ -29,8 +29,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.outlined.Brightness4
+import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.RemoveRedEye
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -63,7 +73,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
@@ -236,7 +245,27 @@ private fun ShimmerSettingsScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Shimmer") },
+                title = {
+                    Column {
+                        Text(
+                            text = "Shimmer",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text(
+                            text = "Customize your wallpaper",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                navigationIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = null,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
             )
         },
         bottomBar = {
@@ -440,17 +469,29 @@ private fun EffectsTab(
                     modifier = Modifier.padding(horizontal = PADDING_X, vertical = PADDING_Y),
                     verticalArrangement = Arrangement.spacedBy(PADDING_Y)
                 ) {
-                    Text(
-                        text = "Image Effects",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Image Effects",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                     SliderSetting(
                         title = "Blur amount",
+                        icon = Icons.Outlined.RemoveRedEye,
                         value = localBlurAmount,
                         onValueChange = { localBlurAmount = it }
                     )
                     SliderSetting(
                         title = "Dim amount",
+                        icon = Icons.Outlined.Brightness4,
                         value = localDimAmount,
                         onValueChange = { localDimAmount = it }
                     )
@@ -496,40 +537,64 @@ private fun FolderSelection(
     onPickFolder: () -> Unit,
     onRemoveFolder: (String) -> Unit
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = PADDING_Y, horizontal = PADDING_X)
         ) {
-            Text(
-                text = "Local image folders",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Button(onClick = onPickFolder) {
-                Text(text = "Add folder")
-            }
-        }
-        if (folderUris.isEmpty()) {
-            Text(
-                text = "No folders selected",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.DarkGray
-            )
-        } else {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                folderUris.forEach { uri ->
-                    FolderCard(
-                        folderUri = uri,
-                        previewUri = folderPreviews[uri],
-                        onRemove = onRemoveFolder
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
                     )
+                    Text(
+                        text = "Local image folders",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Button(onClick = onPickFolder) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "Add")
+                }
+            }
+            if (folderUris.isEmpty()) {
+                Text(
+                    text = "No folders selected. Add a folder to display your own images.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    folderUris.forEach { uri ->
+                        FolderCard(
+                            folderUri = uri,
+                            previewUri = folderPreviews[uri],
+                            onRemove = onRemoveFolder
+                        )
+                    }
                 }
             }
         }
@@ -552,12 +617,12 @@ private fun FolderCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -565,16 +630,19 @@ private fun FolderCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(vertical = 2.dp)
+                    .padding(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = folderName,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = displayPath,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -592,10 +660,9 @@ private fun FolderThumbnail(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier
-            .size(96.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = Color.LightGray
+        modifier = modifier.size(80.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
     ) {
         if (previewUri != null) {
             AsyncImage(
@@ -607,6 +674,18 @@ private fun FolderThumbnail(
                 contentDescription = null,
                 contentScale = ContentScale.Crop
             )
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Folder,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -661,14 +740,28 @@ private fun formatTreeUriPath(uriString: String): String {
 private fun SliderSetting(
     title: String,
     value: Float,
-    onValueChange: (Float) -> Unit
+    onValueChange: (Float) -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "$title: ${formatPercent(value)}",
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = "$title: ${formatPercent(value)}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
         Slider(
             value = value,
             onValueChange = onValueChange,
@@ -692,12 +785,23 @@ private fun EffectTransitionDurationSlider(
 
     val sliderValue = (durationMillis / stepSize).toFloat()
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "Effect transition duration: ${formatDurationMs(durationMillis)}",
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Speed,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "Effect transition duration: ${formatDurationMs(durationMillis)}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
         Slider(
             value = sliderValue,
             onValueChange = { newValue ->
@@ -738,45 +842,68 @@ private fun TransitionDurationSetting(
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
         Column(
             modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Transition between images",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SwapHoriz,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Transition between images",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
                 Switch(
                     checked = enabled,
                     onCheckedChange = onEnabledChange
                 )
             }
-            Text(
-                text = "Interval between image swaps",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center
-            )
-            Slider(
-                value = sliderIndex.toFloat(),
-                onValueChange = { rawValue ->
-                    val nextIndex = rawValue.roundToInt().coerceIn(0, options.lastIndex)
-                    val nextDuration = options[nextIndex].millis
-                    if (nextDuration != durationMillis) {
-                        onDurationChange(nextDuration)
-                    }
-                },
-                valueRange = 0f..options.lastIndex.toFloat(),
-                steps = (options.size - 2).coerceAtLeast(0),
-                enabled = enabled
-            )
-            Text(
-                text = if (enabled) "Next change in ${selectedOption.label}" else "Transitions disabled",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Timer,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Interval between image swaps",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Slider(
+                    value = sliderIndex.toFloat(),
+                    onValueChange = { rawValue ->
+                        val nextIndex = rawValue.roundToInt().coerceIn(0, options.lastIndex)
+                        val nextDuration = options[nextIndex].millis
+                        if (nextDuration != durationMillis) {
+                            onDurationChange(nextDuration)
+                        }
+                    },
+                    valueRange = 0f..options.lastIndex.toFloat(),
+                    steps = (options.size - 2).coerceAtLeast(0),
+                    enabled = enabled
+                )
+                Text(
+                    text = if (enabled) "Next change in ${selectedOption.label}" else "Transitions disabled",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
         }
     }
 }
@@ -816,17 +943,27 @@ private fun DuotoneSettings(
     ) {
         Column(
             modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "Duotone effect",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Contrast,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Duotone effect",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
                 Switch(
                     checked = enabled,
                     onCheckedChange = onEnabledChange
@@ -878,21 +1015,43 @@ private fun EventsSettings(
     ) {
         Column(
             modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Events",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Event,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Events",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Blur when screen is locked",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Blur when screen is locked",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 Switch(
                     checked = blurOnScreenLock,
                     onCheckedChange = onBlurOnScreenLockChange
@@ -903,10 +1062,22 @@ private fun EventsSettings(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Blur when switching apps",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SwapHoriz,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Blur when switching apps",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 Switch(
                     checked = blurOnAppSwitch,
                     onCheckedChange = onBlurOnAppSwitchChange
