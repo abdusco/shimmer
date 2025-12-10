@@ -94,7 +94,7 @@ enum class SettingsTab {
 @Composable
 fun <T> DebouncedEffect(
     value: T,
-    delayMillis: Long = 300,
+    delayMillis: Long = 500,
     onDebounced: suspend (T) -> Unit
 ) {
     LaunchedEffect(value) {
