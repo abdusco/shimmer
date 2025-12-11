@@ -154,6 +154,21 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun onSurfaceDestroyed() {
         surfaceCreated = false
+        destroyResources()
+    }
+
+    /**
+     * Destroy GL resources. Call from GL thread.
+     */
+    fun destroyResources() {
+        try {
+            pictureSet?.destroyPictures()
+            pictureSet = null
+            previousPictureSet?.destroyPictures()
+            previousPictureSet = null
+        } catch (e: Exception) {
+            Log.w(TAG, "destroyResources: failed to release GL resources", e)
+        }
     }
 
     /**
