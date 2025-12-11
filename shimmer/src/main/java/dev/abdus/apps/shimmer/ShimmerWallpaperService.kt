@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -52,27 +54,25 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // Track initial load to prevent double-blur
         private var isInitialLoad = true
 
-        // When blur-on-lock is enabled, request an immediate blur on next render
-        @Volatile private var pendingImmediateBlur = false
+        // Blur timeout preferences/state
+        @Volatile private var blurTimeoutEnabled = preferences.isBlurTimeoutEnabled()
+        @Volatile private var blurTimeoutMillis = preferences.getBlurTimeoutMillis()
+        private val blurTimeoutHandler = Handler(Looper.getMainLooper())
+        private val blurTimeoutRunnable = Runnable {
+            if (!blurTimeoutEnabled) return@Runnable
+            if (!engineVisible) return@Runnable
+            Log.d(TAG, "Blur timeout elapsed; applying blur")
+            enableBlur(immediate = false, replayable = false)
+        }
 
         private var rendererReady = false
-        @Volatile private var lastRenderable = false
 
         private fun isRenderable(): Boolean {
             val r = renderer
             return surfaceAvailable && engineVisible && rendererReady && (r?.isSurfaceReady() == true)
         }
 
-        private fun updateRenderableState(reason: String) {
-            val renderable = isRenderable()
-            if (renderable != lastRenderable) {
-                Log.d(TAG, "renderable=$renderable (reason=$reason)")
-                lastRenderable = renderable
-            }
-        }
-
         private fun requestRenderIfRenderable(reason: String) {
-            updateRenderableState(reason)
             if (isRenderable()) {
                 super.requestRender()
             } else {
@@ -83,8 +83,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onRendererReady() {
             Log.d(TAG, "onRendererReady called")
             rendererReady = true
-            updateRenderableState("rendererReady")
-            applyPendingImmediateBlurIfNeeded()
             Log.d(TAG, "onRendererReady applying preferences")
             applyPreferences()
             Log.d(TAG, "onRendererReady enqueueing replay of latest commands")
@@ -93,11 +91,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
             tryDrainCommands()
 
             isInitialLoad = false
+            startBlurTimeoutIfUnblurred("rendererReady")
             requestRenderIfRenderable("rendererReady")
         }
 
         override fun onReadyForNextImage() {
             Log.d(TAG, "onReadyForNextImage called on ${Thread.currentThread().name}")
+            startBlurTimeoutIfUnblurred("onReadyForNextImage")
             imageLoadExecutor.execute {
                 pendingImageUri?.let { uri ->
                     pendingImageUri = null
@@ -128,7 +128,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 return
             }
             if (!isRenderable()) {
-                updateRenderableState("tryDrainCommands")
                 return
             }
 
@@ -151,16 +150,27 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyCommand(renderer: ShimmerRenderer, command: RendererCommand) {
             when (command) {
-                is RendererCommand.ApplyBlur -> renderer.enableBlur(command.enabled, command.immediate)
-                is RendererCommand.ToggleBlur -> renderer.toggleBlur()
-                is RendererCommand.SetImage -> renderer.setImage(command.imageSet)
+                is RendererCommand.ApplyBlur -> {
+                    renderer.enableBlur(command.enabled, command.immediate)
+                    updateBlurState(command.enabled, "applyCommand.ApplyBlur")
+                }
+                is RendererCommand.ToggleBlur -> {
+                    renderer.toggleBlur()
+                }
+                is RendererCommand.SetImage -> {
+                    renderer.setImage(command.imageSet)
+                    markUserInteraction("applyCommand.SetImage")
+                }
                 is RendererCommand.SetDim -> renderer.setUserDimAmount(command.amount)
                 is RendererCommand.SetDuotone -> renderer.setDuotoneSettings(
                     enabled = command.enabled,
                     alwaysOn = command.alwaysOn,
                     duotone = command.duotone
                 )
-                is RendererCommand.SetParallax -> renderer.setParallaxOffset(command.offset)
+                is RendererCommand.SetParallax -> {
+                    renderer.setParallaxOffset(command.offset)
+                    markUserInteraction("applyCommand.SetParallax")
+                }
                 is RendererCommand.SetEffectDuration -> renderer.setEffectTransitionDuration(command.durationMs)
             }
         }
@@ -200,7 +210,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
             WallpaperPreferences.KEY_IMAGE_FOLDER_URIS to ::applyImageFolderPreference,
             WallpaperPreferences.KEY_TRANSITION_ENABLED to ::applyTransitionEnabledPreference,
             WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference,
-            WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION to ::applyEffectTransitionDurationPreference
+            WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION to ::applyEffectTransitionDurationPreference,
+            WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED to ::applyBlurTimeoutPreference,
+            WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS to ::applyBlurTimeoutPreference,
         )
 
         private val preferenceListener =
@@ -234,7 +246,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onSurfaceCreated called")
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
-            updateRenderableState("surfaceCreated")
             commandQueue.enqueueReplayOfLatest()
             tryDrainCommands()
 
@@ -246,7 +257,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             surfaceAvailable = false
             rendererReady = false
             renderer?.onSurfaceDestroyed()
-            updateRenderableState("surfaceDestroyed")
             super.onSurfaceDestroyed(holder)
         }
 
@@ -254,7 +264,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onVisibilityChanged: $visible")
             super.onVisibilityChanged(visible)
             engineVisible = visible
-            updateRenderableState("visibilityChanged")
 
             // To distinguish app switch from screen lock, check multiple signals
             val keyguardManager = getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager
@@ -267,15 +276,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val blurOnLock = preferences.isBlurOnScreenLockEnabled()
             Log.d(TAG, "  isScreenOn=$isScreenOn, isOnLockScreen=$isOnLockScreen, blurOnLock=$blurOnLock")
 
-            if (
-                !visible &&
-                blurOnLock &&
-                (isOnLockScreen || !isScreenOn)
-            ) {
+            if (!visible && blurOnLock && (isOnLockScreen || !isScreenOn)) {
                 Log.d(TAG, "  → Scheduling immediate blur due to screen lock")
-                pendingImmediateBlur = true
-                enableBlur(immediate = true, replayable = false)
+                renderer?.enableBlurImmediately(true)
             }
+
+            markUserInteraction("visibilityChanged")
 
             if (engineVisible) {
                 tapGestureDetector.reset()
@@ -300,10 +306,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
             transitionScheduler.cancel()
             imageLoadExecutor.shutdownNow()
+            blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
             super.onDestroy()
         }
 
         override fun onTouchEvent(event: MotionEvent) {
+            markUserInteraction("onTouchEvent")
             when (tapGestureDetector.onTouchEvent(event)) {
                 TapEvent.TWO_FINGER_DOUBLE_TAP -> {
                     Log.d(TAG, "TapEvent.TWO_FINGER_DOUBLE_TAP - advancing to next image")
@@ -343,6 +351,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 yPixelOffset
             )
             enqueueCommand(RendererCommand.SetParallax(xOffset))
+            markUserInteraction("offsetsChanged")
         }
 
         private fun loadDefaultImage() {
@@ -379,11 +388,51 @@ class ShimmerWallpaperService : GLWallpaperService() {
             applyTransitionEnabledPreference()
             applyTransitionIntervalPreference()
             applyEffectTransitionDurationPreference()
+            applyBlurTimeoutPreference()
         }
 
         private fun applyBlurPreference() {
             val blurAmount = preferences.getBlurAmount()
             enqueueCommand(RendererCommand.ApplyBlur(blurAmount > 0f))
+        }
+
+        private fun applyBlurTimeoutPreference() {
+            blurTimeoutEnabled = preferences.isBlurTimeoutEnabled()
+            blurTimeoutMillis = preferences.getBlurTimeoutMillis()
+            if (!blurTimeoutEnabled) {
+                blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
+            } else {
+                startBlurTimeoutIfUnblurred("preferenceChange")
+            }
+        }
+
+        private fun updateBlurState(enabled: Boolean, reason: String) {
+            blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
+            if (!enabled) {
+                scheduleBlurTimeout(reason)
+            }
+        }
+
+        private fun scheduleBlurTimeout(reason: String) {
+            if (!blurTimeoutEnabled) return
+            if (!engineVisible) return
+
+            blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
+            blurTimeoutHandler.postDelayed(blurTimeoutRunnable, blurTimeoutMillis)
+            Log.d(TAG, "Scheduled blur timeout in ${blurTimeoutMillis}ms (reason=$reason)")
+        }
+
+        private fun startBlurTimeoutIfUnblurred(reason: String) {
+            renderer?.let {
+                if (!it.isBlurred()) {
+                    scheduleBlurTimeout(reason)
+                }
+            }
+        }
+
+        private fun markUserInteraction(reason: String) {
+            blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
+            scheduleBlurTimeout(reason)
         }
 
         private fun enableBlur(immediate: Boolean = false, replayable: Boolean = true) {
@@ -402,20 +451,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun applyDimPreference() {
             val dimAmount = preferences.getDimAmount()
             enqueueCommand(RendererCommand.SetDim(dimAmount))
-        }
-
-        private fun applyPendingImmediateBlurIfNeeded() {
-            if (!pendingImmediateBlur) return
-            if (!preferences.isBlurOnScreenLockEnabled()) {
-                pendingImmediateBlur = false
-                return
-            }
-
-            renderer?.let { r ->
-                Log.d(TAG, "Applying pending immediate blur before draining commands")
-                r.enableBlur(enable = true, immediate = true)
-            }
-            pendingImmediateBlur = false
         }
 
         private fun applyDuotoneSettingsPreference() {

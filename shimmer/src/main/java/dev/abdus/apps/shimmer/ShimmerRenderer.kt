@@ -104,9 +104,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
     }
 
-    private var isInitialPreferenceLoad = true
-
-
     /**
      * Sets the wallpaper image with pre-processed blur levels.
      * @param imageSet Image payload containing original and blur level bitmaps
@@ -191,7 +188,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         if (baseState.blurAmount != targetBlurAmount) {
             val newTargetState = baseState.copy(blurAmount = targetBlurAmount)
-            if (immediate || isInitialPreferenceLoad) {
+            if (immediate) {
                 animationController.setRenderStateImmediately(newTargetState)
                 animationController.blurAmountAnimator.reset()
             } else {
@@ -199,7 +196,18 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             }
             callbacks.requestRender()
         }
-        isInitialPreferenceLoad = false
+    }
+
+    /**
+     * Seeds the current render state to the desired blur without animation.
+     * Intended for first frame / context restore before any commands animate.
+     */
+    fun enableBlurImmediately(enable: Boolean) {
+        val target = animationController.targetRenderState.copy(
+            blurAmount = if (enable) 1f else 0f
+        )
+        animationController.setRenderStateImmediately(target)
+        animationController.blurAmountAnimator.reset()
     }
 
     /**
@@ -428,6 +436,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             // Swallow and wait for surface recreation; GL context likely lost.
             return
         }
+    }
+
+    fun isBlurred(): Boolean {
+        val blurAmount = animationController.blurAmountAnimator.currentValue
+        return blurAmount > 0f
     }
 
     /**

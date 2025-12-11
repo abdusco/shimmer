@@ -32,6 +32,8 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_LAST_IMAGE_URI = "wallpaper_last_image_uri"
         const val KEY_BLUR_ON_SCREEN_LOCK = "wallpaper_blur_on_screen_lock"
         const val KEY_CHANGE_IMAGE_ON_UNLOCK = "wallpaper_change_image_on_unlock"
+        const val KEY_BLUR_TIMEOUT_ENABLED = "wallpaper_blur_timeout_enabled"
+        const val KEY_BLUR_TIMEOUT_MILLIS = "wallpaper_blur_timeout_millis"
         const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
@@ -42,6 +44,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val DEFAULT_DUOTONE_ALWAYS_ON = false
         const val DEFAULT_TRANSITION_INTERVAL_MILLIS = 30_000L
         const val DEFAULT_EFFECT_TRANSITION_DURATION_MILLIS = 1500L
+        const val DEFAULT_BLUR_TIMEOUT_MILLIS = 30_000L
+        const val MIN_BLUR_TIMEOUT_MILLIS = 5_000L
+        const val MAX_BLUR_TIMEOUT_MILLIS = 60_000L
 
         fun create(context: Context): WallpaperPreferences {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -235,6 +240,26 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setChangeImageOnUnlock(enabled: Boolean) {
         prefs.edit {
             putBoolean(KEY_CHANGE_IMAGE_ON_UNLOCK, enabled)
+        }
+    }
+
+    fun isBlurTimeoutEnabled(): Boolean =
+        prefs.getBoolean(KEY_BLUR_TIMEOUT_ENABLED, false)
+
+    fun setBlurTimeoutEnabled(enabled: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_BLUR_TIMEOUT_ENABLED, enabled)
+        }
+    }
+
+    fun getBlurTimeoutMillis(): Long =
+        prefs.getLong(KEY_BLUR_TIMEOUT_MILLIS, DEFAULT_BLUR_TIMEOUT_MILLIS)
+            .coerceIn(MIN_BLUR_TIMEOUT_MILLIS, MAX_BLUR_TIMEOUT_MILLIS)
+
+    fun setBlurTimeoutMillis(durationMillis: Long) {
+        val clamped = durationMillis.coerceIn(MIN_BLUR_TIMEOUT_MILLIS, MAX_BLUR_TIMEOUT_MILLIS)
+        prefs.edit {
+            putLong(KEY_BLUR_TIMEOUT_MILLIS, clamped)
         }
     }
 

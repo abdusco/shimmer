@@ -147,6 +147,12 @@ private fun ShimmerSettingsScreen(
     var blurOnScreenLock by remember {
         mutableStateOf(preferences.isBlurOnScreenLockEnabled())
     }
+    var blurTimeoutEnabled by remember {
+        mutableStateOf(preferences.isBlurTimeoutEnabled())
+    }
+    var blurTimeoutMillis by remember {
+        mutableLongStateOf(preferences.getBlurTimeoutMillis())
+    }
     var changeImageOnUnlock by remember {
         mutableStateOf(preferences.isChangeImageOnUnlockEnabled())
     }
@@ -199,6 +205,14 @@ private fun ShimmerSettingsScreen(
 
                 WallpaperPreferences.KEY_CHANGE_IMAGE_ON_UNLOCK -> {
                     changeImageOnUnlock = preferences.isChangeImageOnUnlockEnabled()
+                }
+
+                WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED -> {
+                    blurTimeoutEnabled = preferences.isBlurTimeoutEnabled()
+                }
+
+                WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS -> {
+                    blurTimeoutMillis = preferences.getBlurTimeoutMillis()
                 }
             }
         }
@@ -323,6 +337,8 @@ private fun ShimmerSettingsScreen(
                     duotone = duotone,
                     effectTransitionDurationMillis = effectTransitionDurationMillis,
                     blurOnScreenLock = blurOnScreenLock,
+                    blurTimeoutEnabled = blurTimeoutEnabled,
+                    blurTimeoutMillis = blurTimeoutMillis,
                     onBlurAmountChange = {
                         preferences.setBlurAmount(it)
                     },
@@ -358,6 +374,12 @@ private fun ShimmerSettingsScreen(
                     },
                     onBlurOnScreenLockChange = {
                         preferences.setBlurOnScreenLock(it)
+                },
+                onBlurTimeoutEnabledChange = {
+                    preferences.setBlurTimeoutEnabled(it)
+                },
+                onBlurTimeoutMillisChange = {
+                    preferences.setBlurTimeoutMillis(it)
                     }
                 )
             }
@@ -419,6 +441,8 @@ private fun EffectsTab(
     duotone: DuotoneSettings,
     effectTransitionDurationMillis: Long,
     blurOnScreenLock: Boolean,
+    blurTimeoutEnabled: Boolean,
+    blurTimeoutMillis: Long,
     onBlurAmountChange: (Float) -> Unit,
     onDimAmountChange: (Float) -> Unit,
     onEffectTransitionDurationChange: (Long) -> Unit,
@@ -428,6 +452,8 @@ private fun EffectsTab(
     onDuotoneDarkColorChange: (String) -> Unit,
     onDuotonePresetSelected: (DuotonePreset) -> Unit,
     onBlurOnScreenLockChange: (Boolean) -> Unit,
+    onBlurTimeoutEnabledChange: (Boolean) -> Unit,
+    onBlurTimeoutMillisChange: (Long) -> Unit,
 ) {
     // Local state for sliders to provide instant UI feedback
     var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
@@ -525,7 +551,11 @@ private fun EffectsTab(
         item {
             EventsSettings(
                 blurOnScreenLock = blurOnScreenLock,
-                onBlurOnScreenLockChange = onBlurOnScreenLockChange
+                blurTimeoutEnabled = blurTimeoutEnabled,
+                blurTimeoutMillis = blurTimeoutMillis,
+                onBlurOnScreenLockChange = onBlurOnScreenLockChange,
+                onBlurTimeoutEnabledChange = onBlurTimeoutEnabledChange,
+                onBlurTimeoutMillisChange = onBlurTimeoutMillisChange
             )
         }
     }
@@ -1035,7 +1065,11 @@ private fun DuotoneSettings(
 @Composable
 private fun EventsSettings(
     blurOnScreenLock: Boolean,
+    blurTimeoutEnabled: Boolean,
+    blurTimeoutMillis: Long,
     onBlurOnScreenLockChange: (Boolean) -> Unit,
+    onBlurTimeoutEnabledChange: (Boolean) -> Unit,
+    onBlurTimeoutMillisChange: (Long) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -1085,7 +1119,77 @@ private fun EventsSettings(
                     onCheckedChange = onBlurOnScreenLockChange
                 )
             }
+
+            BlurTimeoutSetting(
+                enabled = blurTimeoutEnabled,
+                timeoutMillis = blurTimeoutMillis,
+                onEnabledChange = onBlurTimeoutEnabledChange,
+                onTimeoutChange = onBlurTimeoutMillisChange
+            )
         }
+    }
+}
+
+@Composable
+private fun BlurTimeoutSetting(
+    enabled: Boolean,
+    timeoutMillis: Long,
+    onEnabledChange: (Boolean) -> Unit,
+    onTimeoutChange: (Long) -> Unit,
+) {
+    val min = WallpaperPreferences.MIN_BLUR_TIMEOUT_MILLIS
+    val max = WallpaperPreferences.MAX_BLUR_TIMEOUT_MILLIS
+    val step = 5_000L
+    val steps = ((max - min) / step).toInt()
+    val sliderValue = ((timeoutMillis - min) / step).coerceIn(0, steps.toLong()).toFloat()
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Timer,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column {
+                    Text(
+                        text = "Blur after timeout",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = if (enabled) "After ${timeoutMillis / 1000}s" else "Off",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange
+            )
+        }
+        Slider(
+            value = sliderValue,
+            onValueChange = { raw ->
+                val nextIndex = raw.roundToInt().coerceIn(0, steps)
+                val nextTimeout = min + (nextIndex * step)
+                if (nextTimeout != timeoutMillis) {
+                    onTimeoutChange(nextTimeout)
+                }
+            },
+            valueRange = 0f..steps.toFloat(),
+            steps = (steps - 1).coerceAtLeast(0),
+            enabled = enabled
+        )
     }
 }
 
