@@ -255,13 +255,22 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniform float uDimAmount;
             varying vec2 vTexCoords;
 
+            // Simple pseudo-random noise based on fragment position
+            float random(vec2 st) {
+                return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+            }
+
             void main() {
                 vec4 color = texture2D(uTexture, vTexCoords);
                 float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
                 vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
                 vec3 duotonedColor = mix(color.rgb, duotone, uDuotoneOpacity);
                 vec3 dimmedColor = mix(duotonedColor, vec3(0.0), uDimAmount);
-                gl_FragColor = vec4(dimmedColor, color.a * uAlpha);
+
+                // Apply dithering to prevent banding in gradients (especially when dimmed)
+                float noise = (random(gl_FragCoord.xy) - 0.5) / 64.0;
+
+                gl_FragColor = vec4(dimmedColor + noise, color.a * uAlpha);
             }
         """
 
