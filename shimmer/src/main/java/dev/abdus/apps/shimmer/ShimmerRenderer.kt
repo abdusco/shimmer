@@ -327,6 +327,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     override fun onDrawFrame(gl: GL10) {
+        if (!surfaceCreated) {
+            Log.d(TAG, "onDrawFrame: surface not created, skipping")
+            return
+        }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
         val currentRenderState = animationController.currentRenderState

@@ -26,8 +26,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
     inner class ShimmerWallpaperEngine : GLEngine(), ShimmerRenderer.Callbacks {
 
         private var renderer: ShimmerRenderer? = null
-        private var surfaceAvailable = false
-        private var engineVisible = true
+        @Volatile private var surfaceAvailable = false
+        @Volatile private var engineVisible = true
         private val imageLoadExecutor = Executors.newSingleThreadScheduledExecutor()
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
         private val transitionScheduler =
@@ -53,10 +53,34 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private var isInitialLoad = true
 
         private var rendererReady = false
+        @Volatile private var lastRenderable = false
+
+        private fun isRenderable(): Boolean {
+            val r = renderer
+            return surfaceAvailable && engineVisible && rendererReady && (r?.isSurfaceReady() == true)
+        }
+
+        private fun updateRenderableState(reason: String) {
+            val renderable = isRenderable()
+            if (renderable != lastRenderable) {
+                Log.d(TAG, "renderable=$renderable (reason=$reason)")
+                lastRenderable = renderable
+            }
+        }
+
+        private fun requestRenderIfRenderable(reason: String) {
+            updateRenderableState(reason)
+            if (isRenderable()) {
+                super.requestRender()
+            } else {
+                Log.d(TAG, "requestRender skipped; renderable=false (reason=$reason)")
+            }
+        }
 
         override fun onRendererReady() {
             Log.d(TAG, "onRendererReady called")
             rendererReady = true
+            updateRenderableState("rendererReady")
             Log.d(TAG, "onRendererReady applying preferences")
             applyPreferences()
             Log.d(TAG, "onRendererReady enqueueing replay of latest commands")
@@ -65,7 +89,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             tryDrainCommands()
 
             isInitialLoad = false
-            super.requestRender() // Request render after applying preferences
+            requestRenderIfRenderable("rendererReady")
         }
 
         override fun onReadyForNextImage() {
@@ -96,7 +120,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun tryDrainCommands() {
             val r = renderer ?: return
-            if (!surfaceAvailable || !rendererReady || !r.isSurfaceReady()) return
+            if (!surfaceAvailable || !rendererReady || !r.isSurfaceReady()) {
+                return
+            }
+            if (!isRenderable()) {
+                updateRenderableState("tryDrainCommands")
+                return
+            }
 
             commandQueue.drain { command ->
                 queueEvent {
@@ -200,10 +230,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onSurfaceCreated called")
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
+            updateRenderableState("surfaceCreated")
             commandQueue.enqueueReplayOfLatest()
             tryDrainCommands()
 
-            super.requestRender()
+            requestRenderIfRenderable("surfaceCreated")
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
@@ -211,6 +242,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             surfaceAvailable = false
             rendererReady = false
             renderer?.onSurfaceDestroyed()
+            updateRenderableState("surfaceDestroyed")
             super.onSurfaceDestroyed(holder)
         }
 
@@ -218,6 +250,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onVisibilityChanged: $visible")
             super.onVisibilityChanged(visible)
             engineVisible = visible
+            updateRenderableState("visibilityChanged")
 
             // To distinguish app switch from screen lock, check multiple signals
             val keyguardManager = getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager
@@ -255,7 +288,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (engineVisible) {
                 tapGestureDetector.reset()
                 if (surfaceAvailable) {
-                    super.requestRender()
+                    requestRenderIfRenderable("visibilityChanged")
                 }
             }
         }
@@ -298,9 +331,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun requestRender() {
-            if (surfaceAvailable && engineVisible) {
-                super.requestRender()
-            }
+            requestRenderIfRenderable("explicitRequest")
         }
 
         override fun onOffsetsChanged(
