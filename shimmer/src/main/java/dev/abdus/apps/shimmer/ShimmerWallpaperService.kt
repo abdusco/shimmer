@@ -260,22 +260,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             val isScreenOn = powerManager?.isInteractive ?: true
 
-            val blurOnAppSwitch = preferences.isBlurOnAppSwitchEnabled()
             val blurOnLock = preferences.isBlurOnScreenLockEnabled()
-            Log.d(TAG, "  isScreenOn=$isScreenOn, isOnLockScreen=$isOnLockScreen, blurOnAppSwitch=$blurOnAppSwitch, blurOnLock=$blurOnLock")
+            Log.d(TAG, "  isScreenOn=$isScreenOn, isOnLockScreen=$isOnLockScreen, blurOnLock=$blurOnLock")
 
-            // Apply app switch blur only when:
-            // - Wallpaper becomes invisible
-            // - Screen is ON (not turning off/locked)
-            // - Keyguard is NOT showing
-            // This combination indicates an app opened over the wallpaper
-            if (!visible &&
-                isScreenOn &&
-                !isOnLockScreen &&
-                blurOnAppSwitch) {
-                Log.d(TAG, "  → Applying blur due to app switch (immediate)")
-                enableBlur(immediate = true, replayable = false)
-            } else if (
+            if (
                 visible &&
                 isScreenOn &&
                 isOnLockScreen &&
@@ -628,7 +616,7 @@ private class RendererCommandQueue {
         val type = command::class
         if (type in replaceableTypes) {
             queue.removeAll { it::class == type }
-            // replayable=false is used for transient, context-driven commands (e.g., blur on app switch/lock)
+            // replayable=false is used for transient, context-driven commands (e.g., blur on lock)
             // so they are not re-applied on renderer/surface recreation. Preference-driven commands remain
             // replayable to restore state after GL context loss.
             if (replayable) {

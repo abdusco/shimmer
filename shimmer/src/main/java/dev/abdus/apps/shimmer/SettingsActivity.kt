@@ -147,9 +147,6 @@ private fun ShimmerSettingsScreen(
     var blurOnScreenLock by remember {
         mutableStateOf(preferences.isBlurOnScreenLockEnabled())
     }
-    var blurOnAppSwitch by remember {
-        mutableStateOf(preferences.isBlurOnAppSwitchEnabled())
-    }
     var changeImageOnUnlock by remember {
         mutableStateOf(preferences.isChangeImageOnUnlockEnabled())
     }
@@ -198,10 +195,6 @@ private fun ShimmerSettingsScreen(
 
                 WallpaperPreferences.KEY_BLUR_ON_SCREEN_LOCK -> {
                     blurOnScreenLock = preferences.isBlurOnScreenLockEnabled()
-                }
-
-                WallpaperPreferences.KEY_BLUR_ON_APP_SWITCH -> {
-                    blurOnAppSwitch = preferences.isBlurOnAppSwitchEnabled()
                 }
 
                 WallpaperPreferences.KEY_CHANGE_IMAGE_ON_UNLOCK -> {
@@ -330,7 +323,6 @@ private fun ShimmerSettingsScreen(
                     duotone = duotone,
                     effectTransitionDurationMillis = effectTransitionDurationMillis,
                     blurOnScreenLock = blurOnScreenLock,
-                    blurOnAppSwitch = blurOnAppSwitch,
                     onBlurAmountChange = {
                         preferences.setBlurAmount(it)
                     },
@@ -366,9 +358,6 @@ private fun ShimmerSettingsScreen(
                     },
                     onBlurOnScreenLockChange = {
                         preferences.setBlurOnScreenLock(it)
-                    },
-                    onBlurOnAppSwitchChange = {
-                        preferences.setBlurOnAppSwitch(it)
                     }
                 )
             }
@@ -430,7 +419,6 @@ private fun EffectsTab(
     duotone: DuotoneSettings,
     effectTransitionDurationMillis: Long,
     blurOnScreenLock: Boolean,
-    blurOnAppSwitch: Boolean,
     onBlurAmountChange: (Float) -> Unit,
     onDimAmountChange: (Float) -> Unit,
     onEffectTransitionDurationChange: (Long) -> Unit,
@@ -440,7 +428,6 @@ private fun EffectsTab(
     onDuotoneDarkColorChange: (String) -> Unit,
     onDuotonePresetSelected: (DuotonePreset) -> Unit,
     onBlurOnScreenLockChange: (Boolean) -> Unit,
-    onBlurOnAppSwitchChange: (Boolean) -> Unit,
 ) {
     // Local state for sliders to provide instant UI feedback
     var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
@@ -538,9 +525,7 @@ private fun EffectsTab(
         item {
             EventsSettings(
                 blurOnScreenLock = blurOnScreenLock,
-                blurOnAppSwitch = blurOnAppSwitch,
-                onBlurOnScreenLockChange = onBlurOnScreenLockChange,
-                onBlurOnAppSwitchChange = onBlurOnAppSwitchChange
+                onBlurOnScreenLockChange = onBlurOnScreenLockChange
             )
         }
     }
@@ -1050,9 +1035,7 @@ private fun DuotoneSettings(
 @Composable
 private fun EventsSettings(
     blurOnScreenLock: Boolean,
-    blurOnAppSwitch: Boolean,
     onBlurOnScreenLockChange: (Boolean) -> Unit,
-    onBlurOnAppSwitchChange: (Boolean) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -1100,32 +1083,6 @@ private fun EventsSettings(
                 Switch(
                     checked = blurOnScreenLock,
                     onCheckedChange = onBlurOnScreenLockChange
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.SwapHoriz,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Blur when switching apps",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                Switch(
-                    checked = blurOnAppSwitch,
-                    onCheckedChange = onBlurOnAppSwitchChange
                 )
             }
         }
