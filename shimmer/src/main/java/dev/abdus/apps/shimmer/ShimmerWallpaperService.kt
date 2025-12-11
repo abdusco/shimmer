@@ -52,6 +52,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // Track initial load to prevent double-blur
         private var isInitialLoad = true
 
+        // When blur-on-lock is enabled, request an immediate blur on next render
+        @Volatile private var pendingImmediateBlur = false
+
         private var rendererReady = false
         @Volatile private var lastRenderable = false
 
@@ -81,6 +84,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "onRendererReady called")
             rendererReady = true
             updateRenderableState("rendererReady")
+            applyPendingImmediateBlurIfNeeded()
             Log.d(TAG, "onRendererReady applying preferences")
             applyPreferences()
             Log.d(TAG, "onRendererReady enqueueing replay of latest commands")
@@ -264,12 +268,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "  isScreenOn=$isScreenOn, isOnLockScreen=$isOnLockScreen, blurOnLock=$blurOnLock")
 
             if (
-                visible &&
-                isScreenOn &&
-                isOnLockScreen &&
-                blurOnLock
+                !visible &&
+                blurOnLock &&
+                (isOnLockScreen || !isScreenOn)
             ) {
-                Log.d(TAG, "  → Applying blur due to screen lock (visibility change)")
+                Log.d(TAG, "  → Scheduling immediate blur due to screen lock")
+                pendingImmediateBlur = true
                 enableBlur(immediate = true, replayable = false)
             }
 
@@ -398,6 +402,20 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun applyDimPreference() {
             val dimAmount = preferences.getDimAmount()
             enqueueCommand(RendererCommand.SetDim(dimAmount))
+        }
+
+        private fun applyPendingImmediateBlurIfNeeded() {
+            if (!pendingImmediateBlur) return
+            if (!preferences.isBlurOnScreenLockEnabled()) {
+                pendingImmediateBlur = false
+                return
+            }
+
+            renderer?.let { r ->
+                Log.d(TAG, "Applying pending immediate blur before draining commands")
+                r.enableBlur(enable = true, immediate = true)
+            }
+            pendingImmediateBlur = false
         }
 
         private fun applyDuotoneSettingsPreference() {
