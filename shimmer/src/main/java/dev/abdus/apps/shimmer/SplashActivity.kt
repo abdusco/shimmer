@@ -2,6 +2,7 @@ package dev.abdus.apps.shimmer
 
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -27,6 +28,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.abdus.apps.shimmer.components.PreviewSurfaceView
+import dev.abdus.apps.shimmer.components.WallpaperPreview
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService
 import kotlin.random.Random
 
@@ -49,9 +52,9 @@ class SplashActivity : ComponentActivity() {
         setContent {
             SplashScreen(
                 onSetWallpaper = { WallpaperUtil.openWallpaperPicker(this) },
-                onCreateRenderer = { renderer, surfaceView ->
+                onRendererCreated = { renderer, surfaceView ->
                     previewRenderer = renderer
-                    previewSurfaceView = surfaceView
+                    previewSurfaceView = surfaceView as? PreviewSurfaceView
                 },
                 onDestroyRenderer = {
                     stopDuotoneRotation()
@@ -141,7 +144,7 @@ class SplashActivity : ComponentActivity() {
 @Composable
 private fun SplashScreen(
     onSetWallpaper: () -> Unit,
-    onCreateRenderer: (ShimmerRenderer, PreviewSurfaceView) -> Unit,
+    onRendererCreated: (ShimmerRenderer, GLSurfaceView) -> Unit,
     onDestroyRenderer: () -> Unit,
     onRendererReady: () -> Unit
 ) {
@@ -153,37 +156,11 @@ private fun SplashScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         // OpenGL preview in background
-        AndroidView(
-            factory = { context ->
-                PreviewSurfaceView(context).apply {
-                    setEGLContextClientVersion(2)
-                    setEGLConfigChooser(8, 8, 8, 0, 0, 0)
-                    val renderer = ShimmerRenderer(object : ShimmerRenderer.Callbacks {
-                        override fun requestRender() {
-                            this@apply.requestRender()
-                        }
-
-                        override fun onRendererReady() {
-                            onRendererReady()
-                        }
-
-                        override fun onReadyForNextImage() {
-                            // Not used in preview
-                        }
-
-                        override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
-                            // Not used in preview - preview doesn't load images dynamically
-                        }
-                    })
-                    renderer.setEffectTransitionDuration(2000)
-                    setRenderer(renderer)
-                    renderMode = GLWallpaperService.GLEngine.RENDERMODE_WHEN_DIRTY
-                    onCreateRenderer(renderer, this)
-                }
-            },
-            modifier = Modifier.fillMaxSize()
+        WallpaperPreview(
+            modifier = Modifier.fillMaxSize(),
+            onRendererCreated = onRendererCreated,
+            onRendererReady = onRendererReady
         )
-
 
         // UI overlay
         Surface(
@@ -228,5 +205,3 @@ private fun SplashScreen(
         }
     }
 }
-
-private class PreviewSurfaceView(context: android.content.Context) : android.opengl.GLSurfaceView(context)
