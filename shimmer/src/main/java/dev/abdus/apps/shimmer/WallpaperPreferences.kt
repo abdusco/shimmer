@@ -50,9 +50,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_BLUR_TIMEOUT_ENABLED = "wallpaper_blur_timeout_enabled"
         const val KEY_BLUR_TIMEOUT_MILLIS = "wallpaper_blur_timeout_millis"
         const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
-        const val KEY_GRAIN_ENABLED = "wallpaper_grain_enabled"
-        const val KEY_GRAIN_AMOUNT = "wallpaper_grain_amount"
-        const val KEY_GRAIN_SCALE = "wallpaper_grain_scale"
+        const val KEY_GRAIN_SETTINGS = "wallpaper_grain_settings"
         const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
@@ -85,14 +83,53 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun getDimAmount(): Float =
         prefs.getFloat(KEY_DIM_AMOUNT, DEFAULT_DIM_AMOUNT)
 
-    fun isGrainEnabled(): Boolean =
-        prefs.getBoolean(KEY_GRAIN_ENABLED, DEFAULT_GRAIN_ENABLED)
+    /**
+     * Get grain settings as a single object.
+     */
+    fun getGrainSettings(): GrainSettings {
+        val json = prefs.getString(KEY_GRAIN_SETTINGS, null)
+        return if (json != null) {
+            try {
+                Json.decodeFromString<GrainSettings>(json)
+            } catch (e: Exception) {
+                getDefaultGrainSettings()
+            }
+        } else {
+            getDefaultGrainSettings()
+        }
+    }
 
-    fun getGrainAmount(): Float =
-        prefs.getFloat(KEY_GRAIN_AMOUNT, DEFAULT_GRAIN_AMOUNT)
+    /**
+     * Set grain settings as a single atomic operation.
+     * This triggers only ONE SharedPreferences change notification.
+     */
+    fun setGrainSettings(settings: GrainSettings) {
+        val json = Json.encodeToString(settings)
+        prefs.edit {
+            putString(KEY_GRAIN_SETTINGS, json)
+        }
+    }
 
-    fun getGrainScale(): Float =
-        prefs.getFloat(KEY_GRAIN_SCALE, DEFAULT_GRAIN_SCALE)
+    private fun getDefaultGrainSettings() = GrainSettings(
+        enabled = DEFAULT_GRAIN_ENABLED,
+        amount = DEFAULT_GRAIN_AMOUNT,
+        scale = DEFAULT_GRAIN_SCALE
+    )
+
+    fun setGrainEnabled(enabled: Boolean) {
+        val current = getGrainSettings()
+        setGrainSettings(current.copy(enabled = enabled))
+    }
+
+    fun setGrainAmount(amount: Float) {
+        val current = getGrainSettings()
+        setGrainSettings(current.copy(amount = amount.coerceIn(0f, 1f)))
+    }
+
+    fun setGrainScale(scale: Float) {
+        val current = getGrainSettings()
+        setGrainSettings(current.copy(scale = scale.coerceIn(0f, 1f)))
+    }
 
     fun setBlurAmount(amount: Float) {
         prefs.edit {
@@ -103,24 +140,6 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setDimAmount(amount: Float) {
         prefs.edit {
             putFloat(KEY_DIM_AMOUNT, amount.coerceIn(0f, 1f))
-        }
-    }
-
-    fun setGrainEnabled(enabled: Boolean) {
-        prefs.edit {
-            putBoolean(KEY_GRAIN_ENABLED, enabled)
-        }
-    }
-
-    fun setGrainAmount(amount: Float) {
-        prefs.edit {
-            putFloat(KEY_GRAIN_AMOUNT, amount.coerceIn(0f, 1f))
-        }
-    }
-
-    fun setGrainScale(scale: Float) {
-        prefs.edit {
-            putFloat(KEY_GRAIN_SCALE, scale.coerceIn(0f, 1f))
         }
     }
 
@@ -374,3 +393,4 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 }
+

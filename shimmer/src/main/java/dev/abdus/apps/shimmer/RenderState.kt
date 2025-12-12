@@ -1,5 +1,7 @@
 package dev.abdus.apps.shimmer
 
+import kotlinx.serialization.Serializable
+
 /**
  * Represents the target state of the wallpaper.
  * All user-configurable properties should be here.
@@ -28,6 +30,7 @@ data class RenderState(
  * @property amount Strength of the grain (0.0 = off, 1.0 = strong)
  * @property scale Normalized grain size slider (0.0 = fine, 1.0 = coarse)
  */
+@Serializable
 data class GrainSettings(
     val enabled: Boolean = false,
     val amount: Float = 0.18f,

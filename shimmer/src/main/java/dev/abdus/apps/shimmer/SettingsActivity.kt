@@ -132,9 +132,7 @@ private fun ShimmerSettingsScreen(
     val preferences = remember { WallpaperPreferences.create(context) }
     var blurAmount by remember { mutableFloatStateOf(preferences.getBlurAmount()) }
     var dimAmount by remember { mutableFloatStateOf(preferences.getDimAmount()) }
-    var grainEnabled by remember { mutableStateOf(preferences.isGrainEnabled()) }
-    var grainAmount by remember { mutableFloatStateOf(preferences.getGrainAmount()) }
-    var grainScale by remember { mutableFloatStateOf(preferences.getGrainScale()) }
+    var grainSettings by remember { mutableStateOf(preferences.getGrainSettings()) }
     var duotone by remember { mutableStateOf(preferences.getDuotoneSettings()) }
     var chromaticAberration by remember { mutableStateOf(preferences.getChromaticAberrationSettings()) }
     var imageFolders by remember { mutableStateOf(preferences.getImageFolders()) }
@@ -183,16 +181,8 @@ private fun ShimmerSettingsScreen(
 
                 WallpaperPreferences.KEY_DIM_AMOUNT -> dimAmount = preferences.getDimAmount()
 
-                WallpaperPreferences.KEY_GRAIN_ENABLED -> {
-                    grainEnabled = preferences.isGrainEnabled()
-                }
-
-                WallpaperPreferences.KEY_GRAIN_AMOUNT -> {
-                    grainAmount = preferences.getGrainAmount()
-                }
-
-                WallpaperPreferences.KEY_GRAIN_SCALE -> {
-                    grainScale = preferences.getGrainScale()
+                WallpaperPreferences.KEY_GRAIN_SETTINGS -> {
+                    grainSettings = preferences.getGrainSettings()
                 }
 
                 WallpaperPreferences.KEY_DUOTONE_SETTINGS -> {
@@ -357,9 +347,7 @@ private fun ShimmerSettingsScreen(
                     modifier = Modifier.padding(paddingValues),
                     blurAmount = blurAmount,
                     dimAmount = dimAmount,
-                    grainEnabled = grainEnabled,
-                    grainAmount = grainAmount,
-                    grainScale = grainScale,
+                    grainSettings = grainSettings,
                     duotone = duotone,
                     chromaticAberration = chromaticAberration,
                     effectTransitionDurationMillis = effectTransitionDurationMillis,
@@ -481,9 +469,7 @@ private fun EffectsTab(
     modifier: Modifier = Modifier,
     blurAmount: Float,
     dimAmount: Float,
-    grainEnabled: Boolean,
-    grainAmount: Float,
-    grainScale: Float,
+    grainSettings: GrainSettings,
     duotone: DuotoneSettings,
     chromaticAberration: ChromaticAberrationSettings,
     effectTransitionDurationMillis: Long,
@@ -511,9 +497,9 @@ private fun EffectsTab(
     // Local state for sliders to provide instant UI feedback
     var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
     var localDimAmount by remember { mutableFloatStateOf(dimAmount) }
-    var localGrainEnabled by remember { mutableStateOf(grainEnabled) }
-    var localGrainAmount by remember { mutableFloatStateOf(grainAmount) }
-    var localGrainScale by remember { mutableFloatStateOf(grainScale) }
+    var localGrainEnabled by remember { mutableStateOf(grainSettings.enabled) }
+    var localGrainAmount by remember { mutableFloatStateOf(grainSettings.amount) }
+    var localGrainScale by remember { mutableFloatStateOf(grainSettings.scale) }
     var localChromaticAberrationIntensity by remember { mutableFloatStateOf(chromaticAberration.intensity) }
     var localChromaticAberrationFadeDuration by remember { mutableLongStateOf(chromaticAberration.fadeDurationMillis) }
 
@@ -526,16 +512,16 @@ private fun EffectsTab(
         localDimAmount = dimAmount
     }
 
-    LaunchedEffect(grainEnabled) {
-        localGrainEnabled = grainEnabled
+    LaunchedEffect(grainSettings.enabled) {
+        localGrainEnabled = grainSettings.enabled
     }
 
-    LaunchedEffect(grainAmount) {
-        localGrainAmount = grainAmount
+    LaunchedEffect(grainSettings.amount) {
+        localGrainAmount = grainSettings.amount
     }
 
-    LaunchedEffect(grainScale) {
-        localGrainScale = grainScale
+    LaunchedEffect(grainSettings.scale) {
+        localGrainScale = grainSettings.scale
     }
 
     LaunchedEffect(chromaticAberration.intensity) {
@@ -561,13 +547,13 @@ private fun EffectsTab(
     }
 
     DebouncedEffect(localGrainAmount, delayMillis = 300) { newValue ->
-        if (newValue != grainAmount) {
+        if (newValue != grainSettings.amount) {
             onGrainAmountChange(newValue)
         }
     }
 
     DebouncedEffect(localGrainScale, delayMillis = 300) { newValue ->
-        if (newValue != grainScale) {
+        if (newValue != grainSettings.scale) {
             onGrainScaleChange(newValue)
         }
     }

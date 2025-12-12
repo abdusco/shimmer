@@ -243,9 +243,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             WallpaperPreferences.KEY_TRANSITION_ENABLED to ::applyTransitionEnabledPreference,
             WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference,
             WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION to ::applyEffectTransitionDurationPreference,
-            WallpaperPreferences.KEY_GRAIN_ENABLED to ::applyGrainPreference,
-            WallpaperPreferences.KEY_GRAIN_AMOUNT to ::applyGrainPreference,
-            WallpaperPreferences.KEY_GRAIN_SCALE to ::applyGrainPreference,
+            WallpaperPreferences.KEY_GRAIN_SETTINGS to ::applyGrainPreference,
             WallpaperPreferences.KEY_CHROMATIC_ABERRATION_SETTINGS to ::applyChromaticAberrationPreference,
             WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED to ::applyBlurTimeoutPreference,
             WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS to ::applyBlurTimeoutPreference,
@@ -597,14 +595,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun applyGrainPreference() {
-            val enabled = preferences.isGrainEnabled()
-            val amount = preferences.getGrainAmount()
-            val scale = preferences.getGrainScale()
+            val settings = preferences.getGrainSettings()
             enqueueCommand(
                 RendererCommand.SetGrain(
-                    enabled = enabled,
-                    amount = amount,
-                    scale = scale
+                    enabled = settings.enabled,
+                    amount = settings.amount,
+                    scale = settings.scale
                 )
             )
         }
