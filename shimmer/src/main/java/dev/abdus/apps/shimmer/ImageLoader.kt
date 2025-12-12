@@ -39,7 +39,7 @@ class ImageLoader(
      */
     fun loadFromUri(uri: Uri, blurAmount: Float): ImageSet? {
         val bitmap = decodeBitmapFromUri(uri) ?: return null
-        return prepareImageSet(bitmap, blurAmount)
+        return prepareImageSet(bitmap, blurAmount, id = uri.toString())
     }
 
     /**
@@ -70,7 +70,7 @@ class ImageLoader(
             )
             val bitmap = BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper, options)
 
-            return prepareImageSet(bitmap, blurAmount)
+            return prepareImageSet(bitmap, blurAmount, id="default")
         } catch (e: Exception) {
             Log.e(TAG, "loadDefault: Error loading default image: ${e.message}", e)
             return null
@@ -108,14 +108,16 @@ class ImageLoader(
     /**
      * Prepares an ImageSet with blur levels from a bitmap.
      */
-    private fun prepareImageSet(bitmap: Bitmap, blurAmount: Float): ImageSet {
+    private fun prepareImageSet(bitmap: Bitmap, blurAmount: Float, id: String): ImageSet {
         val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
         Log.d(TAG, "prepareImageSet: Generating blur levels with maxRadius=$maxRadius")
-        val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
+        val blurResult = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
         
         return ImageSet(
+            id = id,
             original = bitmap,
-            blurred = blurLevels
+            blurred = blurResult.bitmaps,
+            blurRadii = blurResult.radii,
         )
     }
 

@@ -25,13 +25,18 @@ private const val LAST_FRAME_BLUR_SCALE_FACTOR = 2
 
 private const val TAG = "GLBlur"
 
-fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
-    if (levels <= 0) return emptyList()
+data class BlurLevelResult(
+    val bitmaps: List<Bitmap>,
+    val radii: List<Float>
+)
+
+fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): BlurLevelResult {
+    if (levels <= 0) return BlurLevelResult(emptyList(), emptyList())
 
     val pixelsPerLevel = 80
     // Calculate maxLevels based on BLUR_SCALE_FACTOR initially, as this is the default for most frames.
     val maxLevels = min(levels, ceil(maxRadius / (pixelsPerLevel / BLUR_SCALE_FACTOR)).toInt())
-    if (maxLevels == 0) return emptyList()
+    if (maxLevels == 0) return BlurLevelResult(emptyList(), emptyList())
 
     val radii = mutableListOf<Float>()
     val power = 2
@@ -43,12 +48,11 @@ fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
     }
 
     val resultBitmaps = mutableListOf<Bitmap>()
+    val finalResultRadii = mutableListOf<Float>()
     val startTime = System.currentTimeMillis()
     var loggedRadiiString = ""
 
     try {
-        val finalResultRadii = mutableListOf<Float>() // To track radii for which blur was successful
-
         for ((index, radius) in radii.withIndex()) {
             val currentScaleFactor = if (index == radii.lastIndex) LAST_FRAME_BLUR_SCALE_FACTOR else BLUR_SCALE_FACTOR
 
@@ -56,14 +60,14 @@ fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
             val currentScaledHeight = max(1, height / currentScaleFactor)
 
             if (currentScaledWidth == 0 || currentScaledHeight == 0) {
-                return emptyList()
+                return BlurLevelResult(emptyList(), emptyList())
             }
 
             val downsampledBitmap = try {
                 this.scale(currentScaledWidth, currentScaledHeight)
             } catch (e: Throwable) {
                 Log.e(TAG, "generateBlurLevels: Failed to scale bitmap for radius $radius (scale: $currentScaleFactor)", e)
-                return emptyList()
+                return BlurLevelResult(emptyList(), emptyList())
             }
 
             GLGaussianRenderer(currentScaledWidth, currentScaledHeight).use { renderer ->
@@ -77,16 +81,16 @@ fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): List<Bitmap> {
                     finalResultRadii.add(radius)
                 } else {
                     Log.e(TAG, "generateBlurLevels: Failed to blur for radius $radius (scale: $currentScaleFactor)")
-                    return resultBitmaps // Return partially generated list if blur fails
+                    return BlurLevelResult(resultBitmaps, finalResultRadii) // Return partial results
                 }
             }
             downsampledBitmap.recycle() // Recycle intermediate bitmap as it's no longer needed
         }
         loggedRadiiString = finalResultRadii.joinToString(", ") { String.format("%.2f", it) }
-        return resultBitmaps
+        return BlurLevelResult(resultBitmaps, finalResultRadii)
     } catch (e: Throwable) {
         Log.e(TAG, "generateBlurLevels: Error during blur level generation", e)
-        return emptyList()
+        return BlurLevelResult(emptyList(), emptyList())
     } finally {
         val elapsed = System.currentTimeMillis() - startTime
         val actualLevelsGenerated = resultBitmaps.size

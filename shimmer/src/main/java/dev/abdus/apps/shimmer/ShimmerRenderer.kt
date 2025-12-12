@@ -23,10 +23,16 @@ import kotlin.math.max
  *                   - 0 levels: No blur animation (just original)
  *                   - 1 level: [100% blur] → 2 states (original, blurred)
  *                   - 2 levels: [50% blur, 100% blur] → 3 states (original, 50%, 100%)
+ * @property blurRadii List of blur radii corresponding to each blurred bitmap (in pixels).
+ *                     Size must match blurred.size. Used to map between different blur amounts.
+ * @property id Optional URI identifying the source image. Used to detect when the same
+ *                     image is reloaded with different blur settings.
  */
 data class ImageSet(
     val original: Bitmap,
     val blurred: List<Bitmap> = emptyList(),
+    val blurRadii: List<Float> = emptyList(),
+    val id: String = "",
 )
 
 /**
