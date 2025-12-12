@@ -19,6 +19,12 @@ data class DuotoneSettings(
     val presetIndex: Int,
 )
 
+@Serializable
+data class ImageFolder(
+    val uri: String,
+    val thumbnailUri: String? = null,
+)
+
 class WallpaperPreferences(private val prefs: SharedPreferences) {
 
     companion object {
@@ -27,7 +33,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_BLUR_AMOUNT = "wallpaper_blur_amount"
         const val KEY_DIM_AMOUNT = "wallpaper_dim_amount"
         const val KEY_DUOTONE_SETTINGS = "wallpaper_duotone_settings"
-        const val KEY_IMAGE_FOLDER_URIS = "wallpaper_image_folder_uris"
+        const val KEY_IMAGE_FOLDERS = "wallpaper_image_folders"
         const val KEY_TRANSITION_INTERVAL = "wallpaper_transition_interval"
         const val KEY_TRANSITION_ENABLED = "wallpaper_transition_enabled"
         const val KEY_EFFECT_TRANSITION_DURATION = "wallpaper_effect_transition_duration"
@@ -187,26 +193,28 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         )
     }
 
-    fun getImageFolderUris(): List<String> {
-        val serialized = prefs.getString(KEY_IMAGE_FOLDER_URIS, null)
+    fun getImageFolders(): List<ImageFolder> {
+        val serialized = prefs.getString(KEY_IMAGE_FOLDERS, null)
         if (serialized.isNullOrBlank()) {
             return emptyList()
         }
         return try {
-            Json.decodeFromString<List<String>>(serialized)
-                .filter { it.isNotBlank() }
+            Json.decodeFromString<List<ImageFolder>>(serialized)
+                .filter { it.uri.isNotBlank() }
         } catch (e: SerializationException) {
             emptyList()
         }
     }
 
-    fun setImageFolderUris(uris: List<String>) {
-        val cleaned = uris.filter { it.isNotBlank() }.distinct()
+    fun setImageFolders(folders: List<ImageFolder>) {
+        val cleaned = folders
+            .filter { it.uri.isNotBlank() }
+            .distinctBy { it.uri }
         prefs.edit {
             if (cleaned.isNotEmpty()) {
-                putString(KEY_IMAGE_FOLDER_URIS, Json.encodeToString(cleaned))
+                putString(KEY_IMAGE_FOLDERS, Json.encodeToString(cleaned))
             } else {
-                remove(KEY_IMAGE_FOLDER_URIS)
+                remove(KEY_IMAGE_FOLDERS)
             }
             setLastImageUri(null)
         }

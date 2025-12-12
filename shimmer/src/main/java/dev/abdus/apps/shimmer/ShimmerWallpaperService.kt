@@ -225,7 +225,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             WallpaperPreferences.KEY_BLUR_AMOUNT to ::onBlurPreferenceChanged,
             WallpaperPreferences.KEY_DIM_AMOUNT to ::applyDimPreference,
             WallpaperPreferences.KEY_DUOTONE_SETTINGS to ::applyDuotoneSettingsPreference,
-            WallpaperPreferences.KEY_IMAGE_FOLDER_URIS to ::applyImageFolderPreference,
+            WallpaperPreferences.KEY_IMAGE_FOLDERS to ::applyImageFolderPreference,
             WallpaperPreferences.KEY_TRANSITION_ENABLED to ::applyTransitionEnabledPreference,
             WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference,
             WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION to ::applyEffectTransitionDurationPreference,
@@ -509,7 +509,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun applyImageFolderPreference() {
-            val folderUris = preferences.getImageFolderUris()
+            val folders = preferences.getImageFolders()
+            val folderUris = folders.map { it.uri }
             setImageFolders(folderUris)
         }
 

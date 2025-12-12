@@ -136,8 +136,7 @@ private fun ShimmerSettingsScreen(
     var grainAmount by remember { mutableFloatStateOf(preferences.getGrainAmount()) }
     var grainScale by remember { mutableFloatStateOf(preferences.getGrainScale()) }
     var duotone by remember { mutableStateOf(preferences.getDuotoneSettings()) }
-    var folderUris by remember { mutableStateOf(preferences.getImageFolderUris()) }
-    var folderPreviews by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
+    var imageFolders by remember { mutableStateOf(preferences.getImageFolders()) }
     var transitionIntervalMillis by remember {
         mutableLongStateOf(preferences.getTransitionIntervalMillis())
     }
@@ -168,9 +167,10 @@ private fun ShimmerSettingsScreen(
                     it,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-                val nextList = (folderUris + it.toString()).distinct()
-                folderUris = nextList
-                preferences.setImageFolderUris(nextList)
+                val newFolder = ImageFolder(uri = it.toString(), thumbnailUri = null)
+                val nextList = (imageFolders + newFolder).distinctBy { folder -> folder.uri }
+                imageFolders = nextList
+                preferences.setImageFolders(nextList)
             }
         }
     )
@@ -198,8 +198,8 @@ private fun ShimmerSettingsScreen(
                     duotone = preferences.getDuotoneSettings()
                 }
 
-                WallpaperPreferences.KEY_IMAGE_FOLDER_URIS -> {
-                    folderUris = preferences.getImageFolderUris()
+                WallpaperPreferences.KEY_IMAGE_FOLDERS -> {
+                    imageFolders = preferences.getImageFolders()
                 }
 
                 WallpaperPreferences.KEY_TRANSITION_INTERVAL -> {
@@ -237,26 +237,30 @@ private fun ShimmerSettingsScreen(
         }
     }
 
-    LaunchedEffect(folderUris) {
-        // Keep existing previews for folders still in the list
-        val updated = folderPreviews.filterKeys { it in folderUris }.toMutableMap()
+    LaunchedEffect(imageFolders) {
+        // Load/validate thumbnails for folders that need them
+        val foldersNeedingThumbnails = imageFolders.filter { folder ->
+            folder.thumbnailUri == null || !isValidThumbnailUri(context, folder.thumbnailUri)
+        }
 
-        // Load missing thumbnails IN PARALLEL
-        val missingUris = folderUris.filter { !updated.containsKey(it) }
-        val newPreviews = missingUris.map { folderUri ->
+        if (foldersNeedingThumbnails.isEmpty()) return@LaunchedEffect
+
+        // Load thumbnails in parallel
+        val updatedFolders = foldersNeedingThumbnails.map { folder ->
             async(Dispatchers.IO) {
-                folderUri to getFolderThumbnailUri(context, folderUri)
+                val thumbnailUri = getFolderThumbnailUri(context, folder.uri, folder.thumbnailUri)
+                folder.copy(thumbnailUri = thumbnailUri?.toString())
             }
         }.awaitAll()
 
-        // Add successfully loaded previews
-        newPreviews.forEach { (uri, preview) ->
-            if (preview != null) {
-                updated[uri] = preview
-            }
+        // Create the complete updated list
+        val folderMap = updatedFolders.associateBy { it.uri }
+        val finalList = imageFolders.map { folder ->
+            folderMap[folder.uri] ?: folder
         }
 
-        folderPreviews = updated
+        imageFolders = finalList
+        preferences.setImageFolders(finalList)
     }
 
     var selectedTab by remember {
@@ -323,16 +327,15 @@ private fun ShimmerSettingsScreen(
             when (selectedTab) {
                 SettingsTab.SOURCES -> SourcesTab(
                     modifier = Modifier.padding(paddingValues),
-                    folderUris = folderUris,
-                    folderPreviews = folderPreviews,
+                    imageFolders = imageFolders,
                     transitionEnabled = transitionEnabled,
                     transitionIntervalMillis = transitionIntervalMillis,
                     changeImageOnUnlock = changeImageOnUnlock,
                     onPickFolder = { folderPickerLauncher.launch(null) },
-                    onRemoveFolder = { uri ->
-                        val nextList = folderUris.filter { it != uri }
-                        folderUris = nextList
-                        preferences.setImageFolderUris(nextList)
+                    onRemoveFolder = { folderUri ->
+                        val nextList = imageFolders.filter { it.uri != folderUri }
+                        imageFolders = nextList
+                        preferences.setImageFolders(nextList)
                     },
                     onTransitionEnabledChange = {
                         preferences.setTransitionEnabled(it)
@@ -417,8 +420,7 @@ private fun ShimmerSettingsScreen(
 @Composable
 private fun SourcesTab(
     modifier: Modifier = Modifier,
-    folderUris: List<String>,
-    folderPreviews: Map<String, Uri>,
+    imageFolders: List<ImageFolder>,
     transitionEnabled: Boolean,
     transitionIntervalMillis: Long,
     changeImageOnUnlock: Boolean,
@@ -440,8 +442,7 @@ private fun SourcesTab(
     ) {
         item {
             FolderSelection(
-                folderUris = folderUris,
-                folderPreviews = folderPreviews,
+                imageFolders = imageFolders,
                 onPickFolder = onPickFolder,
                 onRemoveFolder = onRemoveFolder
             )
@@ -686,8 +687,7 @@ private fun EffectsTab(
 
 @Composable
 private fun FolderSelection(
-    folderUris: List<String>,
-    folderPreviews: Map<String, Uri>,
+    imageFolders: List<ImageFolder>,
     onPickFolder: () -> Unit,
     onRemoveFolder: (String) -> Unit,
 ) {
@@ -730,7 +730,7 @@ private fun FolderSelection(
                     Text(text = "Add")
                 }
             }
-            if (folderUris.isEmpty()) {
+            if (imageFolders.isEmpty()) {
                 Text(
                     text = "No folders selected. Add a folder to display your own images.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -742,10 +742,9 @@ private fun FolderSelection(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    folderUris.forEach { uri ->
+                    imageFolders.forEach { folder ->
                         FolderCard(
-                            folderUri = uri,
-                            previewUri = folderPreviews[uri],
+                            imageFolder = folder,
                             onRemove = onRemoveFolder
                         )
                     }
@@ -757,16 +756,18 @@ private fun FolderSelection(
 
 @Composable
 private fun FolderCard(
-    folderUri: String,
-    previewUri: Uri?,
+    imageFolder: ImageFolder,
     onRemove: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    val folderName = remember(folderUri) {
-        DocumentFile.fromTreeUri(context, folderUri.toUri())?.name ?: folderUri
+    val folderName = remember(imageFolder.uri) {
+        DocumentFile.fromTreeUri(context, imageFolder.uri.toUri())?.name ?: imageFolder.uri
     }
-    val displayPath = remember(folderUri) {
-        formatTreeUriPath(folderUri)
+    val displayPath = remember(imageFolder.uri) {
+        formatTreeUriPath(imageFolder.uri)
+    }
+    val previewUri = remember(imageFolder.thumbnailUri) {
+        imageFolder.thumbnailUri?.toUri()
     }
 
     Card(
@@ -801,7 +802,7 @@ private fun FolderCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            TextButton(onClick = { onRemove(folderUri) }) {
+            TextButton(onClick = { onRemove(imageFolder.uri) }) {
                 Text(text = "Remove")
             }
         }
@@ -847,15 +848,38 @@ private fun FolderThumbnail(
 private suspend fun getFolderThumbnailUri(
     context: Context,
     folderUri: String,
+    existingThumbnailUri: String? = null,
 ): Uri? {
     return withContext(Dispatchers.IO) {
         try {
+            // Validate existing thumbnail if provided
+            if (existingThumbnailUri != null) {
+                val existingUri = existingThumbnailUri.toUri()
+                val existingFile = DocumentFile.fromSingleUri(context, existingUri)
+                if (existingFile?.exists() == true && existingFile.canRead()) {
+                    return@withContext existingUri
+                }
+            }
+
+            // Existing thumbnail invalid or missing, scan folder for new image
             val folder =
                 DocumentFile.fromTreeUri(context, folderUri.toUri()) ?: return@withContext null
             folder.listFiles().firstOrNull { it.isFile && (it.type?.startsWith("image/") == true) }
                 ?.uri
         } catch (_: SecurityException) {
             null
+        }
+    }
+}
+
+private suspend fun isValidThumbnailUri(context: Context, thumbnailUri: String): Boolean {
+    return withContext(Dispatchers.IO) {
+        try {
+            val uri = thumbnailUri.toUri()
+            val file = DocumentFile.fromSingleUri(context, uri)
+            file?.exists() == true && file.canRead()
+        } catch (_: Exception) {
+            false
         }
     }
 }
