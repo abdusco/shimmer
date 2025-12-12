@@ -67,6 +67,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -600,6 +601,11 @@ private fun EffectsTab(
                             style = MaterialTheme.typography.titleMedium,
                         )
                     }
+                    Text(
+                        text = "Adjust blur and dim effects applied to the wallpaper images",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     SliderSetting(
                         title = "Blur amount",
                         icon = Icons.Outlined.RemoveRedEye,
@@ -616,71 +622,34 @@ private fun EffectsTab(
                         durationMillis = effectTransitionDurationMillis,
                         onDurationChange = onEffectTransitionDurationChange
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Contrast,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Film grain",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            Switch(
-                                checked = localGrainEnabled,
-                                onCheckedChange = {
-                                    localGrainEnabled = it
-                                    onGrainEnabledChange(it)
-                                }
-                            )
-                        }
-                        SliderSetting(
-                            title = "Grain amount",
-                            icon = Icons.Outlined.RemoveRedEye,
-                            value = localGrainAmount,
-                            onValueChange = {
-                                localGrainAmount = it
-                                if (!localGrainEnabled) {
-                                    localGrainEnabled = true
-                                    onGrainEnabledChange(true)
-                                }
-                            },
-                            enabled = localGrainEnabled
-                        )
-                        val grainPx = grainScaleToImagePx(localGrainScale)
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = "Grain size: ~${formatPx(grainPx)} image px",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Slider(
-                                value = localGrainScale,
-                                onValueChange = {
-                                    localGrainScale = it
-                                    if (!localGrainEnabled) {
-                                        localGrainEnabled = true
-                                        onGrainEnabledChange(true)
-                                    }
-                                },
-                                enabled = localGrainEnabled,
-                                steps = 19,
-                                valueRange = 0f..1f
-                            )
-                        }
-                    }
                 }
             }
+        }
+
+        item {
+            GrainSettings(
+                enabled = localGrainEnabled,
+                amount = localGrainAmount,
+                scale = localGrainScale,
+                onEnabledChange = {
+                    localGrainEnabled = it
+                    onGrainEnabledChange(it)
+                },
+                onAmountChange = {
+                    localGrainAmount = it
+                    if (!localGrainEnabled) {
+                        localGrainEnabled = true
+                        onGrainEnabledChange(true)
+                    }
+                },
+                onScaleChange = {
+                    localGrainScale = it
+                    if (!localGrainEnabled) {
+                        localGrainEnabled = true
+                        onGrainEnabledChange(true)
+                    }
+                }
+            )
         }
 
         item {
@@ -768,6 +737,11 @@ private fun FolderSelection(
                     Text(text = "Add")
                 }
             }
+            Text(
+                text = "Select folders containing images to use as wallpaper sources",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (imageFolders.isEmpty()) {
                 Text(
                     text = "No folders selected. Add a folder to display your own images.",
@@ -1096,41 +1070,47 @@ private fun TransitionDurationSetting(
                     onCheckedChange = onEnabledChange
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Timer,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+                text = "Automatically cycle through images from your selected folders at regular intervals",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            AnimatedVisibility(visible = enabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Timer,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Change every",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Slider(
+                        value = sliderIndex.toFloat(),
+                        onValueChange = { rawValue ->
+                            val nextIndex = rawValue.roundToInt().coerceIn(0, options.lastIndex)
+                            val nextDuration = options[nextIndex].millis
+                            if (nextDuration != durationMillis) {
+                                onDurationChange(nextDuration)
+                            }
+                        },
+                        valueRange = 0f..options.lastIndex.toFloat(),
+                        steps = (options.size - 2).coerceAtLeast(0)
                     )
                     Text(
-                        text = "Change every",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "Next change in ${selectedOption.label}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
-                Slider(
-                    value = sliderIndex.toFloat(),
-                    onValueChange = { rawValue ->
-                        val nextIndex = rawValue.roundToInt().coerceIn(0, options.lastIndex)
-                        val nextDuration = options[nextIndex].millis
-                        if (nextDuration != durationMillis) {
-                            onDurationChange(nextDuration)
-                        }
-                    },
-                    valueRange = 0f..options.lastIndex.toFloat(),
-                    steps = (options.size - 2).coerceAtLeast(0),
-                    enabled = enabled
-                )
-                Text(
-                    text = if (enabled) "Next change in ${selectedOption.label}" else "Auto change disabled",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
             }
             // Change image on screen unlock toggle
             Row(
@@ -1224,34 +1204,117 @@ private fun DuotoneSettings(
                     onCheckedChange = onEnabledChange
                 )
             }
-            if (enabled) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Apply when unblurred",
-                        style = MaterialTheme.typography.bodyMedium
+            Text(
+                text = "Apply a two-color gradient effect that maps image colors to light and dark tones",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            AnimatedVisibility(visible = enabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Apply when unblurred",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Switch(
+                            checked = alwaysOn,
+                            onCheckedChange = onAlwaysOnChange
+                        )
+                    }
+                    ColorHexField(
+                        label = "Light color (#RRGGBB)",
+                        value = lightColorText,
+                        onValueChange = onLightColorChange,
+                        previewColor = lightColorPreview
                     )
-                    Switch(
-                        checked = alwaysOn,
-                        onCheckedChange = onAlwaysOnChange
+                    ColorHexField(
+                        label = "Dark color (#RRGGBB)",
+                        value = darkColorText,
+                        onValueChange = onDarkColorChange,
+                        previewColor = darkColorPreview
+                    )
+                    DuotonePresetDropdown(onPresetSelected = onPresetSelected)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GrainSettings(
+    enabled: Boolean,
+    amount: Float,
+    scale: Float,
+    onEnabledChange: (Boolean) -> Unit,
+    onAmountChange: (Float) -> Unit,
+    onScaleChange: (Float) -> Unit,
+) {
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Contrast,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Film grain",
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
-                ColorHexField(
-                    label = "Light color (#RRGGBB)",
-                    value = lightColorText,
-                    onValueChange = onLightColorChange,
-                    previewColor = lightColorPreview
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange
                 )
-                ColorHexField(
-                    label = "Dark color (#RRGGBB)",
-                    value = darkColorText,
-                    onValueChange = onDarkColorChange,
-                    previewColor = darkColorPreview
-                )
-                DuotonePresetDropdown(onPresetSelected = onPresetSelected)
+            }
+            Text(
+                text = "Add a film grain texture effect to give images a vintage film look",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            AnimatedVisibility(visible = enabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SliderSetting(
+                        title = "Grain amount",
+                        icon = Icons.Outlined.RemoveRedEye,
+                        value = amount,
+                        onValueChange = onAmountChange
+                    )
+                    
+                    val grainPx = grainScaleToImagePx(scale)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Grain size: ~${formatPx(grainPx)} image px",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = scale,
+                            onValueChange = onScaleChange,
+                            steps = 19,
+                            valueRange = 0f..1f
+                        )
+                    }
+                }
             }
         }
     }
@@ -1288,6 +1351,11 @@ private fun EventsSettings(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+            Text(
+                text = "Configure how the wallpaper responds to screen lock and unlock events",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1357,7 +1425,7 @@ private fun ChromaticAberrationSettings(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Touch effect",
+                        text = "Chromatic aberration",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -1382,7 +1450,7 @@ private fun ChromaticAberrationSettings(
                         Slider(
                             value = intensity,
                             onValueChange = onIntensityChange,
-                            steps = 20 - 1,
+                            steps = 19,
                             valueRange = 0f..1f
                         )
                     }
@@ -1395,8 +1463,8 @@ private fun ChromaticAberrationSettings(
                         Slider(
                             value = fadeDurationMillis.toFloat(),
                             onValueChange = { onFadeDurationChange(it.toLong()) },
-                            steps = 10 - 1,
-                            valueRange = 500f..4000f
+                            steps = 19,
+                            valueRange = 100f..2000f
                         )
                     }
                 }
@@ -1452,19 +1520,20 @@ private fun BlurTimeoutSetting(
                 onCheckedChange = onEnabledChange
             )
         }
-        Slider(
-            value = sliderValue,
-            onValueChange = { raw ->
-                val nextIndex = raw.roundToInt().coerceIn(0, steps)
-                val nextTimeout = min + (nextIndex * step)
-                if (nextTimeout != timeoutMillis) {
-                    onTimeoutChange(nextTimeout)
-                }
-            },
-            valueRange = 0f..steps.toFloat(),
-            steps = (steps - 1).coerceAtLeast(0),
-            enabled = enabled
-        )
+        AnimatedVisibility(visible = enabled) {
+            Slider(
+                value = sliderValue,
+                onValueChange = { raw ->
+                    val nextIndex = raw.roundToInt().coerceIn(0, steps)
+                    val nextTimeout = min + (nextIndex * step)
+                    if (nextTimeout != timeoutMillis) {
+                        onTimeoutChange(nextTimeout)
+                    }
+                },
+                valueRange = 0f..steps.toFloat(),
+                steps = (steps - 1).coerceAtLeast(0)
+            )
+        }
     }
 }
 
