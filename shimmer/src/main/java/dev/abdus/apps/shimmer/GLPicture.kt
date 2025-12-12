@@ -55,7 +55,10 @@ class GLPictureSet {
         tileSize: Int,
         mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
         duotone: Duotone = Duotone(),
-        dimAmount: Float = 0f
+        dimAmount: Float = 0f,
+        grainAmount: Float = 0f,
+        grainCountX: Float = 0f,
+        grainCountY: Float = 0f,
     ) {
         if (pictures.all { it == null }) {
             return
@@ -72,7 +75,17 @@ class GLPictureSet {
 
             lo == hi -> {
                 // Single blur level - just draw it normally
-                pictures[lo]?.draw(handles, tileSize, mvpMatrix, globalAlpha, duotone, dimAmount)
+                pictures[lo]?.draw(
+                    handles,
+                    tileSize,
+                    mvpMatrix,
+                    globalAlpha,
+                    duotone,
+                    dimAmount,
+                    grainAmount,
+                    grainCountX,
+                    grainCountY,
+                )
             }
 
             else -> {
@@ -83,8 +96,30 @@ class GLPictureSet {
 
                 // Draw first blur level without blending (replaces background)
                 // Then draw second blur level with blending (adds on top)
-                pictures[lo]?.draw(handles, tileSize, mvpMatrix, loAlpha, duotone, dimAmount, enableBlending = false)
-                pictures[hi]?.draw(handles, tileSize, mvpMatrix, hiAlpha, duotone, dimAmount, enableBlending = true)
+                pictures[lo]?.draw(
+                    handles,
+                    tileSize,
+                    mvpMatrix,
+                    loAlpha,
+                    duotone,
+                    dimAmount,
+                    grainAmount,
+                    grainCountX,
+                    grainCountY,
+                    enableBlending = false
+                )
+                pictures[hi]?.draw(
+                    handles,
+                    tileSize,
+                    mvpMatrix,
+                    hiAlpha,
+                    duotone,
+                    dimAmount,
+                    grainAmount,
+                    grainCountX,
+                    grainCountY,
+                    enableBlending = true
+                )
             }
         }
     }
@@ -178,6 +213,9 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
         mvpMatrix: FloatArray, alpha: Float,
         duotone: Duotone = Duotone(),
         dimAmount: Float = 0f,
+        grainAmount: Float = 0f,
+        grainCountX: Float = 0f,
+        grainCountY: Float = 0f,
         enableBlending: Boolean = true
     ) {
         if (textureHandles.isEmpty()) {
@@ -226,6 +264,8 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
         )
         GLES20.glUniform1f(handles.uniformDuotoneOpacity, duotone.opacity)
         GLES20.glUniform1f(handles.uniformDimAmount, dimAmount)
+        GLES20.glUniform1f(handles.uniformGrainAmount, grainAmount)
+        GLES20.glUniform2f(handles.uniformGrainCount, grainCountX, grainCountY)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glUniform1i(handles.uniformTexture, 0)

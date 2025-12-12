@@ -35,6 +35,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_BLUR_TIMEOUT_ENABLED = "wallpaper_blur_timeout_enabled"
         const val KEY_BLUR_TIMEOUT_MILLIS = "wallpaper_blur_timeout_millis"
         const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
+        const val KEY_GRAIN_ENABLED = "wallpaper_grain_enabled"
+        const val KEY_GRAIN_AMOUNT = "wallpaper_grain_amount"
+        const val KEY_GRAIN_SCALE = "wallpaper_grain_scale"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -47,6 +50,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val DEFAULT_BLUR_TIMEOUT_MILLIS = 30_000L
         const val MIN_BLUR_TIMEOUT_MILLIS = 5_000L
         const val MAX_BLUR_TIMEOUT_MILLIS = 60_000L
+        const val DEFAULT_GRAIN_ENABLED = false
+        const val DEFAULT_GRAIN_AMOUNT = 0.18f
+        const val DEFAULT_GRAIN_SCALE = 0.5f
 
         fun create(context: Context): WallpaperPreferences {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -60,6 +66,15 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun getDimAmount(): Float =
         prefs.getFloat(KEY_DIM_AMOUNT, DEFAULT_DIM_AMOUNT)
 
+    fun isGrainEnabled(): Boolean =
+        prefs.getBoolean(KEY_GRAIN_ENABLED, DEFAULT_GRAIN_ENABLED)
+
+    fun getGrainAmount(): Float =
+        prefs.getFloat(KEY_GRAIN_AMOUNT, DEFAULT_GRAIN_AMOUNT)
+
+    fun getGrainScale(): Float =
+        prefs.getFloat(KEY_GRAIN_SCALE, DEFAULT_GRAIN_SCALE)
+
     fun setBlurAmount(amount: Float) {
         prefs.edit {
             putFloat(KEY_BLUR_AMOUNT, amount.coerceIn(0f, 1f))
@@ -69,6 +84,24 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setDimAmount(amount: Float) {
         prefs.edit {
             putFloat(KEY_DIM_AMOUNT, amount.coerceIn(0f, 1f))
+        }
+    }
+
+    fun setGrainEnabled(enabled: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_GRAIN_ENABLED, enabled)
+        }
+    }
+
+    fun setGrainAmount(amount: Float) {
+        prefs.edit {
+            putFloat(KEY_GRAIN_AMOUNT, amount.coerceIn(0f, 1f))
+        }
+    }
+
+    fun setGrainScale(scale: Float) {
+        prefs.edit {
+            putFloat(KEY_GRAIN_SCALE, scale.coerceIn(0f, 1f))
         }
     }
 

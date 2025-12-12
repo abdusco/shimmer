@@ -76,6 +76,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // Surface state
     private var surfaceCreated = false
+    private var surfaceWidthPx: Int = 0
+    private var surfaceHeightPx: Int = 0
     private var surfaceAspect = 1f
     private var bitmapAspect = 1f
     private var previousBitmapAspect: Float? = null
@@ -251,8 +253,39 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
     }
 
+    /**
+     * Configures the film grain overlay.
+     * @param enabled Whether grain is applied
+     * @param amount Strength of the grain (0.0 = off, 1.0 = strong)
+     * @param scale Normalized grain size slider (0.0 = fine, 1.0 = coarse)
+     */
+    fun setGrainSettings(
+        enabled: Boolean,
+        amount: Float,
+        scale: Float,
+    ) {
+        val clampedAmount = amount.coerceIn(0f, 1f)
+        val clampedScale = scale.coerceIn(0f, 1f)
+        val baseState = animationController.targetRenderState
+        val newGrain = GrainSettings(
+            enabled = enabled,
+            amount = clampedAmount,
+            scale = clampedScale
+        )
+        if (baseState.grain != newGrain) {
+            val newTargetState = baseState.copy(grain = newGrain)
+            animationController.updateTargetState(newTargetState)
+            callbacks.requestRender()
+        }
+    }
+
     companion object {
         private const val TAG = "ShimmerRenderer"
+        // Grain size in source image pixels
+        const val GRAIN_SIZE_MIN_IMAGE_PX = 1.5f
+        const val GRAIN_SIZE_MAX_IMAGE_PX = 3.5f
+        // Limit max grain intensity to avoid garish look (user slider 1.0 -> this value)
+        const val GRAIN_INTENSITY_MAX = 0.40f
 
         //language=c
         private const val PICTURE_VERTEX_SHADER_CODE = """
@@ -260,27 +293,62 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             attribute vec4 aPosition;
             attribute vec2 aTexCoords;
             varying vec2 vTexCoords;
+            varying vec2 vPosition;
 
             void main() {
                 vTexCoords = aTexCoords;
+                vPosition = aPosition.xy;
                 gl_Position = uMVPMatrix * aPosition;
             }
         """
 
         //language=glsl
         private const val PICTURE_FRAGMENT_SHADER_CODE = """
+            #ifdef GL_FRAGMENT_PRECISION_HIGH
+            precision highp float;
+            #else
             precision mediump float;
+            #endif
+            
             uniform sampler2D uTexture;
             uniform float uAlpha;
             uniform vec3 uDuotoneLightColor;
             uniform vec3 uDuotoneDarkColor;
             uniform float uDuotoneOpacity;
             uniform float uDimAmount;
+            uniform float uGrainAmount;
+            uniform vec2 uGrainCount;
             varying vec2 vTexCoords;
+            varying vec2 vPosition;
 
-            // Simple pseudo-random noise based on fragment position
-            float random(vec2 st) {
-                return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+            // Simplex 2D noise
+            // From: https://github.com/patriciogonzalezvivo/thebookofshaders/blob/master/glsl/noise/simplex_2d.glsl
+            vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
+
+            float snoise(vec2 v){
+                const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                         -0.577350269189626, 0.024390243902439);
+                vec2 i  = floor(v + dot(v, C.yy) );
+                vec2 x0 = v -   i + dot(i, C.xx);
+                vec2 i1;
+                i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+                vec4 x12 = x0.xyxy + C.xxzz;
+                x12.xy -= i1;
+                i = mod(i, 289.0);
+                vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 ))
+                + i.x + vec3(0.0, i1.x, 1.0 ));
+                vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+                m = m*m ;
+                m = m*m ;
+                vec3 x = 2.0 * fract(p * C.www) - 1.0;
+                vec3 h = abs(x) - 0.5;
+                vec3 ox = floor(x + 0.5);
+                vec3 a0 = x - ox;
+                m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+                vec3 g;
+                g.x  = a0.x  * x0.x  + h.x  * x0.y;
+                g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                return 130.0 * dot(m, g);
             }
 
             void main() {
@@ -290,10 +358,23 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                 vec3 duotonedColor = mix(color.rgb, duotone, uDuotoneOpacity);
                 vec3 dimmedColor = mix(duotonedColor, vec3(0.0), uDimAmount);
 
-                // Apply dithering to prevent banding in gradients (especially when dimmed)
-                float noise = (random(gl_FragCoord.xy) - 0.5) / 64.0;
+                // Dithering (screen space is fine for dithering to break gradients)
+                // Use a simple high-freq hash for dithering
+                float noise = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453) - 0.5) / 64.0;
 
-                gl_FragColor = vec4(dimmedColor + noise, color.a * uAlpha);
+                // Film grain in image space (attached to geometry)
+                float grain = 0.0;
+                if (uGrainAmount > 0.0) {
+                     // Map -1..1 to 0..1
+                    vec2 normPos = vPosition * 0.5 + 0.5;
+                    
+                    // Use Simplex noise which lacks the square grid artifacts of value/perlin noise
+                    vec2 noiseCoords = normPos * uGrainCount;
+                    grain = snoise(noiseCoords) * uGrainAmount;
+                }
+
+                vec3 finalColor = clamp(dimmedColor + noise + grain, 0.0, 1.0);
+                gl_FragColor = vec4(finalColor, color.a * uAlpha);
             }
         """
 
@@ -320,7 +401,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniformDuotoneLight = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneLightColor"),
             uniformDuotoneDark = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneDarkColor"),
             uniformDuotoneOpacity = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneOpacity"),
-            uniformDimAmount = GLES20.glGetUniformLocation(pictureProgram, "uDimAmount")
+            uniformDimAmount = GLES20.glGetUniformLocation(pictureProgram, "uDimAmount"),
+            uniformGrainAmount = GLES20.glGetUniformLocation(pictureProgram, "uGrainAmount"),
+            uniformGrainCount = GLES20.glGetUniformLocation(pictureProgram, "uGrainCount"),
         )
 
         val maxTextureSize = IntArray(1)
@@ -344,9 +427,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     override fun onSurfaceChanged(gl: GL10, width: Int, height: Int) {
         GLES20.glViewport(0, 0, width, height)
+        surfaceWidthPx = width
+        surfaceHeightPx = height
         surfaceAspect = if (height == 0) 1f else width.toFloat() / height
         recomputeProjectionMatrix()
         callbacks.onSurfaceDimensionsChanged(width, height)
+        callbacks.requestRender()
     }
 
     override fun onDrawFrame(gl: GL10) {
@@ -378,17 +464,52 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         val finalDimAmount = currentRenderState.dimAmount * blurAmount
 
+        val grainState = currentRenderState.grain
+        // Apply intensity scaling here so the slider (0..1) maps to useful range (0..GRAIN_INTENSITY_MAX)
+        val grainAmount = if (grainState.enabled) grainState.amount * GRAIN_INTENSITY_MAX else 0f
+        
+        var grainCountX = 0f
+        var grainCountY = 0f
+        if (grainAmount > 0f) {
+            val imageWidth = currentRenderState.imageSet.original.width.toFloat()
+            val imageHeight = currentRenderState.imageSet.original.height.toFloat()
+            if (imageWidth > 0 && imageHeight > 0) {
+                val clampedScale = grainState.scale.coerceIn(0f, 1f)
+                val grainSizePx = GRAIN_SIZE_MIN_IMAGE_PX + (GRAIN_SIZE_MAX_IMAGE_PX - GRAIN_SIZE_MIN_IMAGE_PX) * clampedScale
+                grainCountX = imageWidth / grainSizePx
+                grainCountY = imageHeight / grainSizePx
+            }
+        }
+
         val currentImageAlpha = animationController.imageTransitionAnimator.currentValue
         val previousImageAlpha = 1f - animationController.imageTransitionAnimator.currentValue
 
         // Draw previous image (fade out during transition)
         previousPictureSet?.drawFrame(
-            pictureHandles, tileSize, previousMvpMatrix, blurKeyframeIndex, previousImageAlpha, duotone, finalDimAmount
+            pictureHandles,
+            tileSize,
+            previousMvpMatrix,
+            blurKeyframeIndex,
+            previousImageAlpha,
+            duotone,
+            finalDimAmount,
+            grainAmount,
+            grainCountX,
+            grainCountY,
         )
 
         // Draw current image (fade in during transition)
         pictureSet?.drawFrame(
-            pictureHandles, tileSize, mvpMatrix, blurKeyframeIndex, currentImageAlpha, duotone, finalDimAmount
+            pictureHandles,
+            tileSize,
+            mvpMatrix,
+            blurKeyframeIndex,
+            currentImageAlpha,
+            duotone,
+            finalDimAmount,
+            grainAmount,
+            grainCountX,
+            grainCountY,
         )
 
         // Clean up previous picture set after fade completes

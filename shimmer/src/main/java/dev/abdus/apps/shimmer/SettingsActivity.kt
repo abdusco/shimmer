@@ -132,6 +132,9 @@ private fun ShimmerSettingsScreen(
     val preferences = remember { WallpaperPreferences.create(context) }
     var blurAmount by remember { mutableFloatStateOf(preferences.getBlurAmount()) }
     var dimAmount by remember { mutableFloatStateOf(preferences.getDimAmount()) }
+    var grainEnabled by remember { mutableStateOf(preferences.isGrainEnabled()) }
+    var grainAmount by remember { mutableFloatStateOf(preferences.getGrainAmount()) }
+    var grainScale by remember { mutableFloatStateOf(preferences.getGrainScale()) }
     var duotone by remember { mutableStateOf(preferences.getDuotoneSettings()) }
     var folderUris by remember { mutableStateOf(preferences.getImageFolderUris()) }
     var folderPreviews by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
@@ -178,6 +181,18 @@ private fun ShimmerSettingsScreen(
                 WallpaperPreferences.KEY_BLUR_AMOUNT -> blurAmount = preferences.getBlurAmount()
 
                 WallpaperPreferences.KEY_DIM_AMOUNT -> dimAmount = preferences.getDimAmount()
+
+                WallpaperPreferences.KEY_GRAIN_ENABLED -> {
+                    grainEnabled = preferences.isGrainEnabled()
+                }
+
+                WallpaperPreferences.KEY_GRAIN_AMOUNT -> {
+                    grainAmount = preferences.getGrainAmount()
+                }
+
+                WallpaperPreferences.KEY_GRAIN_SCALE -> {
+                    grainScale = preferences.getGrainScale()
+                }
 
                 WallpaperPreferences.KEY_DUOTONE_SETTINGS -> {
                     duotone = preferences.getDuotoneSettings()
@@ -334,6 +349,9 @@ private fun ShimmerSettingsScreen(
                     modifier = Modifier.padding(paddingValues),
                     blurAmount = blurAmount,
                     dimAmount = dimAmount,
+                    grainEnabled = grainEnabled,
+                    grainAmount = grainAmount,
+                    grainScale = grainScale,
                     duotone = duotone,
                     effectTransitionDurationMillis = effectTransitionDurationMillis,
                     blurOnScreenLock = blurOnScreenLock,
@@ -363,6 +381,15 @@ private fun ShimmerSettingsScreen(
                         parseColorHex(input)?.let { parsed ->
                             preferences.setDuotoneDarkColor(parsed)
                         }
+                    },
+                    onGrainEnabledChange = {
+                        preferences.setGrainEnabled(it)
+                    },
+                    onGrainAmountChange = {
+                        preferences.setGrainAmount(it)
+                    },
+                    onGrainScaleChange = {
+                        preferences.setGrainScale(it)
                     },
                     onDuotonePresetSelected = { preset ->
                         preferences.setDuotoneLightColor(preset.lightColor)
@@ -438,6 +465,9 @@ private fun EffectsTab(
     modifier: Modifier = Modifier,
     blurAmount: Float,
     dimAmount: Float,
+    grainEnabled: Boolean,
+    grainAmount: Float,
+    grainScale: Float,
     duotone: DuotoneSettings,
     effectTransitionDurationMillis: Long,
     blurOnScreenLock: Boolean,
@@ -450,6 +480,9 @@ private fun EffectsTab(
     onDuotoneAlwaysOnChange: (Boolean) -> Unit,
     onDuotoneLightColorChange: (String) -> Unit,
     onDuotoneDarkColorChange: (String) -> Unit,
+    onGrainEnabledChange: (Boolean) -> Unit,
+    onGrainAmountChange: (Float) -> Unit,
+    onGrainScaleChange: (Float) -> Unit,
     onDuotonePresetSelected: (DuotonePreset) -> Unit,
     onBlurOnScreenLockChange: (Boolean) -> Unit,
     onBlurTimeoutEnabledChange: (Boolean) -> Unit,
@@ -458,6 +491,9 @@ private fun EffectsTab(
     // Local state for sliders to provide instant UI feedback
     var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
     var localDimAmount by remember { mutableFloatStateOf(dimAmount) }
+    var localGrainEnabled by remember { mutableStateOf(grainEnabled) }
+    var localGrainAmount by remember { mutableFloatStateOf(grainAmount) }
+    var localGrainScale by remember { mutableFloatStateOf(grainScale) }
 
     // Sync local state when preferences change externally
     LaunchedEffect(blurAmount) {
@@ -466,6 +502,18 @@ private fun EffectsTab(
 
     LaunchedEffect(dimAmount) {
         localDimAmount = dimAmount
+    }
+
+    LaunchedEffect(grainEnabled) {
+        localGrainEnabled = grainEnabled
+    }
+
+    LaunchedEffect(grainAmount) {
+        localGrainAmount = grainAmount
+    }
+
+    LaunchedEffect(grainScale) {
+        localGrainScale = grainScale
     }
 
     // Debounce blur changes (300ms delay after user stops dragging)
@@ -479,6 +527,18 @@ private fun EffectsTab(
     DebouncedEffect(localDimAmount, delayMillis = 300) { newValue ->
         if (newValue != dimAmount) {
             onDimAmountChange(newValue)
+        }
+    }
+
+    DebouncedEffect(localGrainAmount, delayMillis = 300) { newValue ->
+        if (newValue != grainAmount) {
+            onGrainAmountChange(newValue)
+        }
+    }
+
+    DebouncedEffect(localGrainScale, delayMillis = 300) { newValue ->
+        if (newValue != grainScale) {
+            onGrainScaleChange(newValue)
         }
     }
 
@@ -528,6 +588,69 @@ private fun EffectsTab(
                         durationMillis = effectTransitionDurationMillis,
                         onDurationChange = onEffectTransitionDurationChange
                     )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Contrast,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Film grain",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Switch(
+                                checked = localGrainEnabled,
+                                onCheckedChange = {
+                                    localGrainEnabled = it
+                                    onGrainEnabledChange(it)
+                                }
+                            )
+                        }
+                        SliderSetting(
+                            title = "Grain amount",
+                            icon = Icons.Outlined.RemoveRedEye,
+                            value = localGrainAmount,
+                            onValueChange = {
+                                localGrainAmount = it
+                                if (!localGrainEnabled) {
+                                    localGrainEnabled = true
+                                    onGrainEnabledChange(true)
+                                }
+                            },
+                            enabled = localGrainEnabled
+                        )
+                        val grainPx = grainScaleToImagePx(localGrainScale)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Grain size: ~${formatPx(grainPx)} image px",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Slider(
+                                value = localGrainScale,
+                                onValueChange = {
+                                    localGrainScale = it
+                                    if (!localGrainEnabled) {
+                                        localGrainEnabled = true
+                                        onGrainEnabledChange(true)
+                                    }
+                                },
+                                enabled = localGrainEnabled,
+                                steps = 19,
+                                valueRange = 0f..1f
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -773,6 +896,7 @@ private fun SliderSetting(
     value: Float,
     onValueChange: (Float) -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -796,6 +920,7 @@ private fun SliderSetting(
         Slider(
             value = value,
             onValueChange = onValueChange,
+            enabled = enabled,
             steps = 19,
             valueRange = 0f..1f
         )
@@ -803,6 +928,14 @@ private fun SliderSetting(
 }
 
 private fun formatPercent(value: Float): String = "${(value * 100).roundToInt()}%"
+
+private fun grainScaleToImagePx(scale: Float): Float {
+    val clamped = scale.coerceIn(0f, 1f)
+    return ShimmerRenderer.GRAIN_SIZE_MIN_IMAGE_PX +
+        (ShimmerRenderer.GRAIN_SIZE_MAX_IMAGE_PX - ShimmerRenderer.GRAIN_SIZE_MIN_IMAGE_PX) * clamped
+}
+
+private fun formatPx(value: Float): String = String.format("%.2f", value)
 
 @Composable
 private fun EffectTransitionDurationSlider(

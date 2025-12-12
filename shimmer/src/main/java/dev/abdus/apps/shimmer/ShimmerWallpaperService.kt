@@ -167,6 +167,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     alwaysOn = command.alwaysOn,
                     duotone = command.duotone
                 )
+                is RendererCommand.SetGrain -> {
+                    renderer.setGrainSettings(
+                        enabled = command.enabled,
+                        amount = command.amount,
+                        scale = command.scale
+                    )
+                }
                 is RendererCommand.SetParallax -> {
                     renderer.setParallaxOffset(command.offset)
                     markUserInteraction("applyCommand.SetParallax")
@@ -211,6 +218,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
             WallpaperPreferences.KEY_TRANSITION_ENABLED to ::applyTransitionEnabledPreference,
             WallpaperPreferences.KEY_TRANSITION_INTERVAL to ::applyTransitionIntervalPreference,
             WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION to ::applyEffectTransitionDurationPreference,
+            WallpaperPreferences.KEY_GRAIN_ENABLED to ::applyGrainPreference,
+            WallpaperPreferences.KEY_GRAIN_AMOUNT to ::applyGrainPreference,
+            WallpaperPreferences.KEY_GRAIN_SCALE to ::applyGrainPreference,
             WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED to ::applyBlurTimeoutPreference,
             WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS to ::applyBlurTimeoutPreference,
         )
@@ -385,6 +395,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             applyBlurPreference()
             applyDimPreference()
             applyDuotoneSettingsPreference()
+            applyGrainPreference()
             applyTransitionEnabledPreference()
             applyTransitionIntervalPreference()
             applyEffectTransitionDurationPreference()
@@ -464,6 +475,19 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         darkColor = settings.darkColor,
                         opacity = if (settings.enabled) 1f else 0f
                     )
+                )
+            )
+        }
+
+        private fun applyGrainPreference() {
+            val enabled = preferences.isGrainEnabled()
+            val amount = preferences.getGrainAmount()
+            val scale = preferences.getGrainScale()
+            enqueueCommand(
+                RendererCommand.SetGrain(
+                    enabled = enabled,
+                    amount = amount,
+                    scale = scale
                 )
             )
         }
@@ -647,6 +671,11 @@ private sealed interface RendererCommand {
         val alwaysOn: Boolean,
         val duotone: Duotone,
     ) : RendererCommand
+    data class SetGrain(
+        val enabled: Boolean,
+        val amount: Float,
+        val scale: Float,
+    ) : RendererCommand
     data class SetParallax(val offset: Float) : RendererCommand
     data class SetEffectDuration(val durationMs: Long) : RendererCommand
 }
@@ -657,6 +686,7 @@ private class RendererCommandQueue {
         RendererCommand.SetImage::class,
         RendererCommand.SetDim::class,
         RendererCommand.SetDuotone::class,
+        RendererCommand.SetGrain::class,
         RendererCommand.SetParallax::class,
         RendererCommand.SetEffectDuration::class
     )

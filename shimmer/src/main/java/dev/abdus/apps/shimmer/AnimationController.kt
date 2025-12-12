@@ -28,6 +28,9 @@ class AnimationController(private var durationMillis: Int) {
     
     // Track animation state to detect transitions
     private var wasImageAnimatingLastFrame = false
+    
+    // Force a re-render for one tick after target state updates (handles non-animated property changes)
+    private var forceUpdateOneFrame = false
 
     init {
         val defaultState = RenderState(
@@ -40,7 +43,8 @@ class AnimationController(private var durationMillis: Int) {
                 opacity = 0f
             ),
             duotoneAlwaysOn = false,
-            parallaxOffset = 0.5f
+            parallaxOffset = 0.5f,
+            grain = GrainSettings(), // Film grain off by default
         )
         currentRenderState = defaultState
         targetRenderState = defaultState
@@ -57,6 +61,7 @@ class AnimationController(private var durationMillis: Int) {
     fun updateTargetState(newTarget: RenderState) {
         val oldTarget = targetRenderState
         targetRenderState = newTarget
+        forceUpdateOneFrame = true
 
         // Blur amount
         if (oldTarget.blurAmount != newTarget.blurAmount) {
@@ -182,7 +187,8 @@ class AnimationController(private var durationMillis: Int) {
                 opacity = if (duotoneOpacityAnimating) duotoneOpacityAnimator.currentValue else targetRenderState.duotone.opacity
             ),
             duotoneAlwaysOn = targetRenderState.duotoneAlwaysOn,
-            parallaxOffset = targetRenderState.parallaxOffset // Parallax is not animated, it snaps
+            parallaxOffset = targetRenderState.parallaxOffset, // Parallax is not animated, it snaps
+            grain = targetRenderState.grain,
         )
 
         // Detect when image-relevant animations complete and invoke callback
@@ -192,7 +198,9 @@ class AnimationController(private var durationMillis: Int) {
         }
         wasImageAnimatingLastFrame = isImageAnimating
 
-        return blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating
+        val keepAlive = forceUpdateOneFrame || blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating
+        forceUpdateOneFrame = false
+        return keepAlive
     }
 
     // Helper for color interpolation (copied from ShimmerRenderer)
