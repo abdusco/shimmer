@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
-import androidx.core.net.toUri
 
 /**
  * Handles loading and preparing images for the wallpaper renderer.
@@ -85,15 +84,14 @@ class ImageLoader(
      */
     fun loadLast(blurAmount: Float): ImageSet? {
         Log.d(TAG, "loadLast: Attempting to load last image URI from preferences")
-        val lastImageUriString = preferences.getLastImageUri()
+        val lastImageUri = preferences.getLastImageUri()
         
-        if (lastImageUriString.isNullOrBlank()) {
+        if (lastImageUri == null) {
             Log.d(TAG, "loadLast: No last image URI in preferences")
             return null
         }
 
         return try {
-            val lastImageUri = lastImageUriString.toUri()
             val imageSet = loadFromUri(lastImageUri, blurAmount)
             if (imageSet == null) {
                 Log.w(TAG, "loadLast: Failed to load, clearing invalid URI")
@@ -101,7 +99,7 @@ class ImageLoader(
             }
             imageSet
         } catch (e: Exception) {
-            Log.e(TAG, "loadLast: Error loading last image URI: $lastImageUriString", e)
+            Log.e(TAG, "loadLast: Error loading last image URI: $lastImageUri", e)
             preferences.setLastImageUri(null) // Clear invalid URI
             null
         }

@@ -545,6 +545,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Log.d(TAG, "loadLastImage: Attempting to load last image")
 
             // Try to load last image from preferences
+            val lastImageUri = preferences.getLastImageUri()
             var imageSet = imageLoader.loadLast(blurAmount = preferences.getBlurAmount())
 
             // If no last image, try to get next image from folder repository
@@ -558,6 +559,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         preferences.setLastImageUri(nextUri.toString())
                     }
                 }
+            } else if (lastImageUri != null) {
+                // Successfully loaded last image - track its URI for re-blurring
+                currentImageUri = lastImageUri
             }
 
             if (imageSet != null) {
@@ -658,8 +662,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun reBlurCurrentImage() {
             Log.d(TAG, "reBlurCurrentImage: Re-blurring current image")
-            val uri = currentImageUri ?: return
-            val imageSet = imageLoader.loadFromUri(uri = uri, blurAmount = preferences.getBlurAmount())
+            val uri = currentImageUri
+            val imageSet = if (uri != null) {
+                // Reload the current image with new blur amount
+                imageLoader.loadFromUri(uri = uri, blurAmount = preferences.getBlurAmount())
+            } else {
+                // No URI means we're using the default image - reload it
+                Log.d(TAG, "reBlurCurrentImage: No URI, reloading default image")
+                imageLoader.loadDefault(blurAmount = preferences.getBlurAmount())
+            }
+            
             if (imageSet != null) {
                 enqueueCommand(
                     RendererCommand.SetImage(imageSet),

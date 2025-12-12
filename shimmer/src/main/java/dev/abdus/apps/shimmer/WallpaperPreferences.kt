@@ -2,7 +2,9 @@ package dev.abdus.apps.shimmer
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -237,8 +239,8 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 
-    fun getLastImageUri(): String? =
-        prefs.getString(KEY_LAST_IMAGE_URI, null)
+    fun getLastImageUri(): Uri? =
+        prefs.getString(KEY_LAST_IMAGE_URI, null)?.toUri()
 
     fun setLastImageUri(uri: String?) {
         prefs.edit {
