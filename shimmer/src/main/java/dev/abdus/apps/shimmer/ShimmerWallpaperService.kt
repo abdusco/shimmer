@@ -71,6 +71,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private var rendererReady = false
 
+        // Surface dimensions for touch coordinate conversion
+        @Volatile
+        private var surfaceWidthPx: Int = 0
+        @Volatile
+        private var surfaceHeightPx: Int = 0
+
         private fun isRenderable(): Boolean {
             val r = renderer
             return surfaceAvailable && engineVisible && rendererReady && (r?.isSurfaceReady() == true)
@@ -112,6 +118,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
             imageLoader.setScreenHeight(height)
+            surfaceWidthPx = width
+            surfaceHeightPx = height
             Log.d(TAG, "onSurfaceDimensionsChanged: ${width}x${height}")
         }
 
@@ -190,6 +198,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
 
                 is RendererCommand.SetEffectDuration -> renderer.setEffectTransitionDuration(command.durationMs)
+                is RendererCommand.SetTouchPoints -> renderer.setTouchPoints(command.touches)
+                is RendererCommand.SetChromaticAberration -> renderer.setChromaticAberrationSettings(
+                    command.enabled,
+                    command.intensity,
+                    command.fadeDurationMillis
+                )
             }
         }
 
@@ -232,6 +246,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             WallpaperPreferences.KEY_GRAIN_ENABLED to ::applyGrainPreference,
             WallpaperPreferences.KEY_GRAIN_AMOUNT to ::applyGrainPreference,
             WallpaperPreferences.KEY_GRAIN_SCALE to ::applyGrainPreference,
+            WallpaperPreferences.KEY_CHROMATIC_ABERRATION_SETTINGS to ::applyChromaticAberrationPreference,
             WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED to ::applyBlurTimeoutPreference,
             WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS to ::applyBlurTimeoutPreference,
         )
@@ -333,6 +348,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onTouchEvent(event: MotionEvent) {
             markUserInteraction("onTouchEvent")
+            
+            // ALWAYS process chromatic aberration touches immediately for responsive feedback
+            // This runs independently of gesture detection
+            processTouchEventForChromaticAberration(event)
+            
+            // Then check for tap gestures (which may have delays for multi-tap detection)
             when (tapGestureDetector.onTouchEvent(event)) {
                 TapEvent.TWO_FINGER_DOUBLE_TAP -> {
                     Log.d(TAG, "TapEvent.TWO_FINGER_DOUBLE_TAP - advancing to next image")
@@ -348,7 +369,91 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     // No gesture detected, continue with default handling
                 }
             }
+            
             super.onTouchEvent(event)
+        }
+
+        private fun processTouchEventForChromaticAberration(event: MotionEvent) {
+            if (surfaceWidthPx == 0 || surfaceHeightPx == 0) {
+                return // Surface dimensions not available yet
+            }
+
+            val touches = mutableListOf<TouchData>()
+            val action = event.actionMasked
+            val actionIndex = event.actionIndex
+            
+            // Handle ACTION_UP and ACTION_POINTER_UP specially because the pointer
+            // that was released is still accessible via actionIndex
+            when (action) {
+                MotionEvent.ACTION_UP -> {
+                    // Single pointer release - get the pointer that was just released
+                    val pointerId = event.getPointerId(0)
+                    val x = event.getX(0) / surfaceWidthPx
+                    val y = 1f - (event.getY(0) / surfaceHeightPx)  // Flip Y: Android is top-down, GL is bottom-up
+                    touches.add(TouchData(pointerId, x, y, TouchAction.UP))
+                }
+                MotionEvent.ACTION_POINTER_UP -> {
+                    // Multiple pointer release - get the specific pointer that was released
+                    val pointerId = event.getPointerId(actionIndex)
+                    val x = event.getX(actionIndex) / surfaceWidthPx
+                    val y = 1f - (event.getY(actionIndex) / surfaceHeightPx)  // Flip Y
+                    touches.add(TouchData(pointerId, x, y, TouchAction.UP))
+                    
+                    // Also send updates for all other still-active pointers
+                    for (i in 0 until event.pointerCount) {
+                        if (i != actionIndex) {
+                            val pid = event.getPointerId(i)
+                            val px = event.getX(i) / surfaceWidthPx
+                            val py = 1f - (event.getY(i) / surfaceHeightPx)  // Flip Y
+                            touches.add(TouchData(pid, px, py, TouchAction.MOVE))
+                        }
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    // All pointers cancelled - mark all as UP
+                    for (i in 0 until event.pointerCount) {
+                        val pointerId = event.getPointerId(i)
+                        val x = event.getX(i) / surfaceWidthPx
+                        val y = 1f - (event.getY(i) / surfaceHeightPx)  // Flip Y
+                        touches.add(TouchData(pointerId, x, y, TouchAction.UP))
+                    }
+                }
+                else -> {
+                    // Process all active pointers for DOWN and MOVE actions
+                    for (i in 0 until event.pointerCount) {
+                        val pointerId = event.getPointerId(i)
+                        val x = event.getX(i) / surfaceWidthPx
+                        val y = 1f - (event.getY(i) / surfaceHeightPx)  // Flip Y: Android is top-down, GL is bottom-up
+                        
+                        val touchAction = when {
+                            action == MotionEvent.ACTION_DOWN && i == 0 -> TouchAction.DOWN
+                            action == MotionEvent.ACTION_POINTER_DOWN && i == actionIndex -> TouchAction.DOWN
+                            else -> TouchAction.MOVE
+                        }
+                        
+                        touches.add(TouchData(pointerId, x, y, touchAction))
+                    }
+                }
+            }
+
+            if (touches.isNotEmpty()) {
+                enqueueCommand(
+                    RendererCommand.SetTouchPoints(touches),
+                    allowWhenSurfaceUnavailable = false,
+                    allowWhenInvisible = false,
+                    replayable = false
+                )
+            }
+        }
+        
+        private fun actionToString(action: Int): String = when (action) {
+            MotionEvent.ACTION_DOWN -> "DOWN"
+            MotionEvent.ACTION_UP -> "UP"
+            MotionEvent.ACTION_MOVE -> "MOVE"
+            MotionEvent.ACTION_POINTER_DOWN -> "POINTER_DOWN"
+            MotionEvent.ACTION_POINTER_UP -> "POINTER_UP"
+            MotionEvent.ACTION_CANCEL -> "CANCEL"
+            else -> "UNKNOWN($action)"
         }
 
         override fun requestRender() {
@@ -407,6 +512,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             applyDimPreference()
             applyDuotoneSettingsPreference()
             applyGrainPreference()
+            applyChromaticAberrationPreference()
             applyTransitionEnabledPreference()
             applyTransitionIntervalPreference()
             applyEffectTransitionDurationPreference()
@@ -499,6 +605,17 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     enabled = enabled,
                     amount = amount,
                     scale = scale
+                )
+            )
+        }
+
+        private fun applyChromaticAberrationPreference() {
+            val settings = preferences.getChromaticAberrationSettings()
+            enqueueCommand(
+                RendererCommand.SetChromaticAberration(
+                    enabled = settings.enabled,
+                    intensity = settings.intensity,
+                    fadeDurationMillis = settings.fadeDurationMillis.toInt()
                 )
             )
         }
@@ -704,6 +821,12 @@ private sealed interface RendererCommand {
 
     data class SetParallax(val offset: Float) : RendererCommand
     data class SetEffectDuration(val durationMs: Long) : RendererCommand
+    data class SetTouchPoints(val touches: List<TouchData>) : RendererCommand
+    data class SetChromaticAberration(
+        val enabled: Boolean,
+        val intensity: Float,
+        val fadeDurationMillis: Int
+    ) : RendererCommand
 }
 
 private class RendererCommandQueue {
@@ -714,7 +837,8 @@ private class RendererCommandQueue {
         RendererCommand.SetDuotone::class,
         RendererCommand.SetGrain::class,
         RendererCommand.SetParallax::class,
-        RendererCommand.SetEffectDuration::class
+        RendererCommand.SetEffectDuration::class,
+        RendererCommand.SetChromaticAberration::class
     )
 
     private val queue = mutableListOf<RendererCommand>()

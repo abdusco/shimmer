@@ -7,12 +7,14 @@ import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.opengl.Matrix
 import android.util.Log
+import android.view.animation.DecelerateInterpolator
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * Payload containing image data for the renderer.
@@ -48,6 +50,48 @@ data class Duotone(
 )
 
 /**
+ * Touch data for multitouch chromatic aberration.
+ * @property id Unique identifier for the touch point
+ * @property x Normalized x coordinate (0.0-1.0)
+ * @property y Normalized y coordinate (0.0-1.0)
+ * @property action The type of touch action (down, move, up)
+ */
+data class TouchData(
+    val id: Int,
+    val x: Float,
+    val y: Float,
+    val action: TouchAction,
+)
+
+/**
+ * Touch action types for multitouch chromatic aberration.
+ */
+enum class TouchAction {
+    DOWN, MOVE, UP,
+}
+
+/**
+ * Represents a touch point for chromatic aberration effect (internal).
+ * @property id Unique identifier for the touch point
+ * @property x Normalized x coordinate (0.0-1.0)
+ * @property y Normalized y coordinate (0.0-1.0)
+ * @property radius Current circle radius (0.0-1.0)
+ * @property intensity Current effect intensity (0.0-1.0, for fade-out)
+ * @property radiusAnimator Animator for circle growth/shrinkage
+ * @property fadeAnimator Animator for fade-out when touch is released
+ */
+private data class TouchPoint(
+    val id: Int,
+    var x: Float,
+    var y: Float,
+    var radius: Float = 0f,
+    var intensity: Float = 1f,
+    val radiusAnimator: TickingFloatAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
+    val fadeAnimator: TickingFloatAnimator = TickingFloatAnimator(2000, DecelerateInterpolator()),
+    var isReleased: Boolean = false,
+)
+
+/**
  * OpenGL ES 2.0 renderer for the Shimmer wallpaper.
  * Handles rendering of images with blur, duotone effects, and parallax scrolling.
  */
@@ -73,6 +117,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // Effect transition duration (for blur, duotone, and image fade animations)
     private var effectTransitionDurationMillis = 1500
+
+    // Chromatic aberration settings
+    private var chromaticAberrationEnabled = true
+    private var chromaticAberrationIntensity = 0.75f
+    private var chromaticAberrationFadeDuration = 500
 
     // Image state
     // Managed by RenderState
@@ -285,6 +334,104 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
     }
 
+    /**
+     * Configures chromatic aberration effect settings.
+     * @param enabled Whether the effect is enabled
+     * @param intensity Effect intensity (0.0 - 1.0)
+     * @param fadeDurationMillis Duration of fade-out animation in milliseconds
+     */
+    fun setChromaticAberrationSettings(enabled: Boolean, intensity: Float, fadeDurationMillis: Int) {
+        chromaticAberrationEnabled = enabled
+        chromaticAberrationIntensity = intensity.coerceIn(0f, 1f)
+        chromaticAberrationFadeDuration = fadeDurationMillis.coerceAtLeast(0)
+        
+        // If disabled, clear all active touch points
+        if (!enabled) {
+            touchPoints.clear()
+        }
+        callbacks.requestRender()
+    }
+
+    /**
+     * Sets touch points for chromatic aberration effect.
+     * @param touches List of touch data with normalized coordinates (0-1 range)
+     */
+    fun setTouchPoints(touches: List<TouchData>) {
+        if (!chromaticAberrationEnabled) return
+        
+        for (touch in touches) {
+            val existingTouch = touchPoints.find { it.id == touch.id && !it.isReleased }
+            when (touch.action) {
+                TouchAction.DOWN -> {
+                    if (existingTouch != null) {
+                         // Already active, just update position
+                        existingTouch.x = touch.x
+                        existingTouch.y = touch.y
+                    } else if (touchPoints.size < maxTouchPoints) {
+                        // Create new touch point
+                        val newTouch = TouchPoint(
+                            id = touch.id,
+                            x = touch.x,
+                            y = touch.y,
+                            radius = 0f,
+                            intensity = 1f,
+                            radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
+                            fadeAnimator = TickingFloatAnimator(chromaticAberrationFadeDuration, DecelerateInterpolator())
+                        )
+                        newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
+                        // Set fadeAnimator to not be running, but with intensity at 1.0
+                        newTouch.fadeAnimator.reset()
+                        newTouch.fadeAnimator.currentValue = 1f
+                        touchPoints.add(newTouch)
+                    }
+                }
+                TouchAction.MOVE -> { 
+                    existingTouch?.let { 
+                        it.x = touch.x
+                        it.y = touch.y
+                    }
+                }
+                TouchAction.UP -> { 
+                    existingTouch?.let { 
+                        it.radiusAnimator.start(startValue = it.radius, endValue = 0f)
+                        it.fadeAnimator.start(startValue = it.intensity, endValue = 0f)
+                        it.isReleased = true
+                    }
+                }
+            }
+        }
+        
+        // Don't remove touches here - let updateTouchPointAnimations() handle cleanup
+        // when animations complete. This allows fade-out animations to run.
+        
+        callbacks.requestRender()
+    }
+
+    // Touch point management for chromatic aberration - moved to class body
+    private fun updateTouchPointAnimations() {
+        val iterator = touchPoints.iterator()
+        while (iterator.hasNext()) {
+            val touchPoint = iterator.next()
+            
+            // Tick animators (they handle their own running state internally)
+            touchPoint.radiusAnimator.tick()
+            touchPoint.radius = touchPoint.radiusAnimator.currentValue
+            
+            touchPoint.fadeAnimator.tick()
+            touchPoint.intensity = touchPoint.fadeAnimator.currentValue
+            
+            // Remove touch points that have fully faded out AND finished their radius animation
+            if (!touchPoint.radiusAnimator.isRunning && !touchPoint.fadeAnimator.isRunning && 
+                touchPoint.radius <= 0.01f && touchPoint.intensity <= 0.01f) {
+                iterator.remove()
+            }
+        }
+    }
+
+    // Touch point management for chromatic aberration
+    private val touchPoints = mutableListOf<TouchPoint>()
+    private val maxTouchPoints = 10
+
     companion object {
         private const val TAG = "ShimmerRenderer"
         // Grain size in source image pixels
@@ -324,6 +471,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniform float uDimAmount;
             uniform float uGrainAmount;
             uniform vec2 uGrainCount;
+            uniform int uTouchPointCount;
+            uniform vec3 uTouchPoints[10];
+            uniform float uTouchIntensities[10];
+            uniform vec2 uScreenSize;
             varying vec2 vTexCoords;
             varying vec2 vPosition;
 
@@ -379,7 +530,73 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                     grain = snoise(noiseCoords) * uGrainAmount;
                 }
 
-                vec3 finalColor = clamp(dimmedColor + noise + grain, 0.0, 1.0);
+                // Chromatic aberration from touch points
+                vec2 screenPos = vPosition * 0.5 + 0.5;
+                
+                // Calculate aspect ratio for circular (not oval) effect regions
+                float aspectRatio = uScreenSize.x / uScreenSize.y;
+                
+                // Accumulate chromatic aberration offset
+                vec2 totalChromaticOffset = vec2(0.0);
+                float maxChromaticAbrStrength = 0.6;
+                
+                // Process all touch points and accumulate the effect
+                for (int i = 0; i < 10; i++) {
+                    if (i >= uTouchPointCount) break;
+                    
+                    vec3 touchPoint = uTouchPoints[i];
+                    float touchIntensity = uTouchIntensities[i];
+                    
+                    if (touchIntensity > 0.0 && touchPoint.z > 0.0) {
+                        vec2 touchCenter = touchPoint.xy;
+                        
+                        // Calculate delta in normalized coordinates
+                        vec2 delta = screenPos - touchCenter;
+                        
+                        // Correct for aspect ratio to make circles appear circular
+                        // Scale X up to compensate for narrow screens (aspectRatio < 1)
+                        // or scale Y down for wide screens (aspectRatio > 1)
+                        vec2 aspectCorrectedDelta = vec2(delta.x / aspectRatio, delta.y);
+                        
+                        float distance = length(aspectCorrectedDelta);
+                        float normalizedDistance = distance / touchPoint.z;
+                        
+                        // Calculate effect strength with smooth falloff
+                        float effectStrength = touchIntensity * (1.0 - smoothstep(0.0, 1.0, normalizedDistance));
+                        
+                        if (effectStrength > 0.0) {
+                            // Direction from touch center (normalized)
+                            vec2 direction = length(delta) > 0.0 ? normalize(delta) : vec2(0.0);
+                            
+                            // Accumulate chromatic offset - push colors outward from touch point
+                            // The offset is in texture coordinate space
+                            float offsetAmount = effectStrength * 0.1; // Adjust strength
+                            totalChromaticOffset += direction * offsetAmount;
+                            maxChromaticAbrStrength = max(maxChromaticAbrStrength, effectStrength);
+                        }
+                    }
+                }
+                
+                // Apply chromatic aberration by sampling RGB channels at different offsets
+                vec3 finalColor = dimmedColor;
+                if (length(totalChromaticOffset) > 0.001) {
+                    // Sample red channel pushed outward
+                    float r = texture2D(uTexture, vTexCoords + totalChromaticOffset).r;
+                    // Sample green channel at normal position
+                    float g = texture2D(uTexture, vTexCoords).g;
+                    // Sample blue channel pulled inward
+                    float b = texture2D(uTexture, vTexCoords - totalChromaticOffset).b;
+                    
+                    vec3 chromaticColor = vec3(r, g, b);
+                    
+                    // Apply duotone and dim to the chromatic result
+                    float lum = 0.2126 * chromaticColor.r + 0.7152 * chromaticColor.g + 0.0722 * chromaticColor.b;
+                    vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
+                    vec3 duotonedChromatic = mix(chromaticColor, duotone, uDuotoneOpacity);
+                    finalColor = mix(duotonedChromatic, vec3(0.0), uDimAmount);
+                }
+
+                finalColor = clamp(finalColor + noise + grain, 0.0, 1.0);
                 gl_FragColor = vec4(finalColor, color.a * uAlpha);
             }
         """
@@ -410,6 +627,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniformDimAmount = GLES20.glGetUniformLocation(pictureProgram, "uDimAmount"),
             uniformGrainAmount = GLES20.glGetUniformLocation(pictureProgram, "uGrainAmount"),
             uniformGrainCount = GLES20.glGetUniformLocation(pictureProgram, "uGrainCount"),
+            uniformTouchPointCount = GLES20.glGetUniformLocation(pictureProgram, "uTouchPointCount"),
+            uniformTouchPoints = GLES20.glGetUniformLocation(pictureProgram, "uTouchPoints"),
+            uniformTouchIntensities = GLES20.glGetUniformLocation(pictureProgram, "uTouchIntensities"),
+            uniformScreenSize = GLES20.glGetUniformLocation(pictureProgram, "uScreenSize"),
         )
 
         val maxTextureSize = IntArray(1)
@@ -443,7 +664,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     override fun onDrawFrame(gl: GL10) {
         if (!surfaceCreated) {
-            Log.d(TAG, "onDrawFrame: surface not created, skipping")
             return
         }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
@@ -491,6 +711,23 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         val currentImageAlpha = animationController.imageTransitionAnimator.currentValue
         val previousImageAlpha = 1f - animationController.imageTransitionAnimator.currentValue
 
+        // Update touch point animations
+        updateTouchPointAnimations()
+
+        // Prepare touch point data for shader
+        val touchPointCount = touchPoints.size.coerceAtMost(maxTouchPoints)
+        val touchPointsArray = FloatArray(touchPointCount * 3)
+        val touchIntensitiesArray = FloatArray(touchPointCount)
+        for (i in 0 until touchPointCount) {
+            val touch = touchPoints[i]
+            touchPointsArray[i * 3] = touch.x
+            touchPointsArray[i * 3 + 1] = touch.y
+            touchPointsArray[i * 3 + 2] = touch.radius
+            // Apply the global intensity multiplier
+            touchIntensitiesArray[i] = touch.intensity * chromaticAberrationIntensity
+        }
+        val screenSizeArray = floatArrayOf(surfaceWidthPx.toFloat(), surfaceHeightPx.toFloat())
+
         // Draw previous image (fade out during transition)
         previousPictureSet?.drawFrame(
             pictureHandles,
@@ -503,6 +740,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             grainAmount,
             grainCountX,
             grainCountY,
+            touchPointCount = touchPointCount,
+            touchPoints = touchPointsArray,
+            touchIntensities = touchIntensitiesArray,
+            screenSize = screenSizeArray,
         )
 
         // Draw current image (fade in during transition)
@@ -517,6 +758,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             grainAmount,
             grainCountX,
             grainCountY,
+            touchPointCount = touchPointCount,
+            touchPoints = touchPointsArray,
+            touchIntensities = touchIntensitiesArray,
+            screenSize = screenSizeArray,
         )
 
         // Clean up previous picture set after fade completes
@@ -526,8 +771,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             previousBitmapAspect = null
         }
 
-        // Request another frame if any animation is still running
-        if (isAnimating) {
+        // Request another frame if any animation is still running or touch points are animating
+        val touchPointsAnimating = touchPoints.any { it.radiusAnimator.isRunning || it.fadeAnimator.isRunning }
+        if (isAnimating || touchPointsAnimating) {
             callbacks.requestRender()
         }
     }
@@ -739,13 +985,6 @@ object GLUtil {
      * @throws IllegalStateException if texture creation fails or no GL context is available
      */
     fun loadTexture(bitmap: Bitmap): Int {
-        // Check for valid GL context before attempting texture creation
-        val glError = GLES20.glGetError()
-        if (glError == GLES20.GL_INVALID_OPERATION) {
-            Log.e(TAG, "loadTexture: No valid GL context available (glError=$glError)")
-            throw IllegalStateException("No valid GL context available for texture creation")
-        }
-        
         val textureHandle = IntArray(1)
         GLES20.glGenTextures(1, textureHandle, 0)
         checkGlError("glGenTextures")

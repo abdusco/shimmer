@@ -13,4 +13,8 @@ data class PictureHandles(
     val uniformDimAmount: Int,
     val uniformGrainAmount: Int,
     val uniformGrainCount: Int,
+    val uniformTouchPointCount: Int,
+    val uniformTouchPoints: Int,
+    val uniformTouchIntensities: Int,
+    val uniformScreenSize: Int,
 )

@@ -3,6 +3,7 @@ package dev.abdus.apps.shimmer
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.opengl.GLES20
+import android.util.Log
 import java.nio.FloatBuffer
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -61,6 +62,10 @@ class GLPictureSet {
         grainAmount: Float = 0f,
         grainCountX: Float = 0f,
         grainCountY: Float = 0f,
+        touchPointCount: Int = 0,
+        touchPoints: FloatArray = FloatArray(0),
+        touchIntensities: FloatArray = FloatArray(0),
+        screenSize: FloatArray = FloatArray(2),
     ) {
         if (pictures.all { it == null }) {
             return
@@ -88,6 +93,11 @@ class GLPictureSet {
                     grainAmount,
                     grainCountX,
                     grainCountY,
+                    enableBlending = true,
+                    touchPointCount = touchPointCount,
+                    touchPoints = touchPoints,
+                    touchIntensities = touchIntensities,
+                    screenSize = screenSize,
                 )
             }
 
@@ -107,7 +117,11 @@ class GLPictureSet {
                     grainAmount,
                     grainCountX,
                     grainCountY,
-                    enableBlending = false
+                    enableBlending = false,
+                    touchPointCount = touchPointCount,
+                    touchPoints = touchPoints,
+                    touchIntensities = touchIntensities,
+                    screenSize = screenSize,
                 )
                 pictures[hi]?.draw(
                     handles,
@@ -119,7 +133,11 @@ class GLPictureSet {
                     grainAmount,
                     grainCountX,
                     grainCountY,
-                    enableBlending = true
+                    enableBlending = true,
+                    touchPointCount = touchPointCount,
+                    touchPoints = touchPoints,
+                    touchIntensities = touchIntensities,
+                    screenSize = screenSize,
                 )
             }
         }
@@ -218,6 +236,10 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
         grainCountX: Float = 0f,
         grainCountY: Float = 0f,
         enableBlending: Boolean = true,
+        touchPointCount: Int = 0,
+        touchPoints: FloatArray = FloatArray(0),
+        touchIntensities: FloatArray = FloatArray(0),
+        screenSize: FloatArray = FloatArray(2),
     ) {
         if (textureHandles.isEmpty()) {
             android.util.Log.w("GLPicture", "draw: No texture handles available.")
@@ -267,6 +289,16 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
         GLES20.glUniform1f(handles.uniformDimAmount, dimAmount)
         GLES20.glUniform1f(handles.uniformGrainAmount, grainAmount)
         GLES20.glUniform2f(handles.uniformGrainCount, grainCountX, grainCountY)
+
+        // Set touch point uniforms for chromatic aberration
+        GLES20.glUniform1i(handles.uniformTouchPointCount, touchPointCount)
+        if (touchPointCount > 0 && touchPoints.size >= touchPointCount * 3) {
+            GLES20.glUniform3fv(handles.uniformTouchPoints, touchPointCount, touchPoints, 0)
+        }
+        if (touchPointCount > 0 && touchIntensities.size >= touchPointCount) {
+            GLES20.glUniform1fv(handles.uniformTouchIntensities, touchPointCount, touchIntensities, 0)
+        }
+        GLES20.glUniform2f(handles.uniformScreenSize, screenSize[0], screenSize[1])
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glUniform1i(handles.uniformTexture, 0)

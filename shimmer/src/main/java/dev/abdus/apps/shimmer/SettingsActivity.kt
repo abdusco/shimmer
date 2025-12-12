@@ -136,6 +136,7 @@ private fun ShimmerSettingsScreen(
     var grainAmount by remember { mutableFloatStateOf(preferences.getGrainAmount()) }
     var grainScale by remember { mutableFloatStateOf(preferences.getGrainScale()) }
     var duotone by remember { mutableStateOf(preferences.getDuotoneSettings()) }
+    var chromaticAberration by remember { mutableStateOf(preferences.getChromaticAberrationSettings()) }
     var imageFolders by remember { mutableStateOf(preferences.getImageFolders()) }
     var transitionIntervalMillis by remember {
         mutableLongStateOf(preferences.getTransitionIntervalMillis())
@@ -196,6 +197,10 @@ private fun ShimmerSettingsScreen(
 
                 WallpaperPreferences.KEY_DUOTONE_SETTINGS -> {
                     duotone = preferences.getDuotoneSettings()
+                }
+
+                WallpaperPreferences.KEY_CHROMATIC_ABERRATION_SETTINGS -> {
+                    chromaticAberration = preferences.getChromaticAberrationSettings()
                 }
 
                 WallpaperPreferences.KEY_IMAGE_FOLDERS -> {
@@ -356,6 +361,7 @@ private fun ShimmerSettingsScreen(
                     grainAmount = grainAmount,
                     grainScale = grainScale,
                     duotone = duotone,
+                    chromaticAberration = chromaticAberration,
                     effectTransitionDurationMillis = effectTransitionDurationMillis,
                     blurOnScreenLock = blurOnScreenLock,
                     blurTimeoutEnabled = blurTimeoutEnabled,
@@ -405,11 +411,20 @@ private fun ShimmerSettingsScreen(
                     onBlurOnScreenLockChange = {
                         preferences.setBlurOnScreenLock(it)
                 },
-                onBlurTimeoutEnabledChange = {
-                    preferences.setBlurTimeoutEnabled(it)
-                },
-                onBlurTimeoutMillisChange = {
-                    preferences.setBlurTimeoutMillis(it)
+                    onBlurTimeoutEnabledChange = {
+                        preferences.setBlurTimeoutEnabled(it)
+                    },
+                    onBlurTimeoutMillisChange = {
+                        preferences.setBlurTimeoutMillis(it)
+                    },
+                    onChromaticAberrationEnabledChange = {
+                        preferences.setChromaticAberrationEnabled(it)
+                    },
+                    onChromaticAberrationIntensityChange = {
+                        preferences.setChromaticAberrationIntensity(it)
+                    },
+                    onChromaticAberrationFadeDurationChange = {
+                        preferences.setChromaticAberrationFadeDuration(it)
                     }
                 )
             }
@@ -470,6 +485,7 @@ private fun EffectsTab(
     grainAmount: Float,
     grainScale: Float,
     duotone: DuotoneSettings,
+    chromaticAberration: ChromaticAberrationSettings,
     effectTransitionDurationMillis: Long,
     blurOnScreenLock: Boolean,
     blurTimeoutEnabled: Boolean,
@@ -488,6 +504,9 @@ private fun EffectsTab(
     onBlurOnScreenLockChange: (Boolean) -> Unit,
     onBlurTimeoutEnabledChange: (Boolean) -> Unit,
     onBlurTimeoutMillisChange: (Long) -> Unit,
+    onChromaticAberrationEnabledChange: (Boolean) -> Unit,
+    onChromaticAberrationIntensityChange: (Float) -> Unit,
+    onChromaticAberrationFadeDurationChange: (Long) -> Unit,
 ) {
     // Local state for sliders to provide instant UI feedback
     var localBlurAmount by remember { mutableFloatStateOf(blurAmount) }
@@ -495,6 +514,8 @@ private fun EffectsTab(
     var localGrainEnabled by remember { mutableStateOf(grainEnabled) }
     var localGrainAmount by remember { mutableFloatStateOf(grainAmount) }
     var localGrainScale by remember { mutableFloatStateOf(grainScale) }
+    var localChromaticAberrationIntensity by remember { mutableFloatStateOf(chromaticAberration.intensity) }
+    var localChromaticAberrationFadeDuration by remember { mutableLongStateOf(chromaticAberration.fadeDurationMillis) }
 
     // Sync local state when preferences change externally
     LaunchedEffect(blurAmount) {
@@ -515,6 +536,14 @@ private fun EffectsTab(
 
     LaunchedEffect(grainScale) {
         localGrainScale = grainScale
+    }
+
+    LaunchedEffect(chromaticAberration.intensity) {
+        localChromaticAberrationIntensity = chromaticAberration.intensity
+    }
+
+    LaunchedEffect(chromaticAberration.fadeDurationMillis) {
+        localChromaticAberrationFadeDuration = chromaticAberration.fadeDurationMillis
     }
 
     // Debounce blur changes (300ms delay after user stops dragging)
@@ -540,6 +569,18 @@ private fun EffectsTab(
     DebouncedEffect(localGrainScale, delayMillis = 300) { newValue ->
         if (newValue != grainScale) {
             onGrainScaleChange(newValue)
+        }
+    }
+
+    DebouncedEffect(localChromaticAberrationIntensity, delayMillis = 300) { newValue ->
+        if (newValue != chromaticAberration.intensity) {
+            onChromaticAberrationIntensityChange(newValue)
+        }
+    }
+
+    DebouncedEffect(localChromaticAberrationFadeDuration, delayMillis = 300) { newValue ->
+        if (newValue != chromaticAberration.fadeDurationMillis) {
+            onChromaticAberrationFadeDurationChange(newValue)
         }
     }
 
@@ -669,6 +710,17 @@ private fun EffectsTab(
                 onLightColorChange = onDuotoneLightColorChange,
                 onDarkColorChange = onDuotoneDarkColorChange,
                 onPresetSelected = onDuotonePresetSelected
+            )
+        }
+
+        item {
+            ChromaticAberrationSettings(
+                enabled = chromaticAberration.enabled,
+                intensity = localChromaticAberrationIntensity,
+                fadeDurationMillis = localChromaticAberrationFadeDuration,
+                onEnabledChange = onChromaticAberrationEnabledChange,
+                onIntensityChange = { localChromaticAberrationIntensity = it },
+                onFadeDurationChange = { localChromaticAberrationFadeDuration = it }
             )
         }
 
@@ -1283,6 +1335,86 @@ private fun EventsSettings(
                 onEnabledChange = onBlurTimeoutEnabledChange,
                 onTimeoutChange = onBlurTimeoutMillisChange
             )
+        }
+    }
+}
+
+@Composable
+private fun ChromaticAberrationSettings(
+    enabled: Boolean,
+    intensity: Float,
+    fadeDurationMillis: Long,
+    onEnabledChange: (Boolean) -> Unit,
+    onIntensityChange: (Float) -> Unit,
+    onFadeDurationChange: (Long) -> Unit,
+) {
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.RemoveRedEye,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Touch effect",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange
+                )
+            }
+            Text(
+                text = "Create a colorful distortion effect when touching the wallpaper",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            AnimatedVisibility(visible = enabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Intensity: ${formatPercent(intensity)}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Slider(
+                            value = intensity,
+                            onValueChange = onIntensityChange,
+                            steps = 20 - 1,
+                            valueRange = 0f..1f
+                        )
+                    }
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Fade duration: ${fadeDurationMillis}ms",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Slider(
+                            value = fadeDurationMillis.toFloat(),
+                            onValueChange = { onFadeDurationChange(it.toLong()) },
+                            steps = 10 - 1,
+                            valueRange = 500f..4000f
+                        )
+                    }
+                }
+            }
         }
     }
 }

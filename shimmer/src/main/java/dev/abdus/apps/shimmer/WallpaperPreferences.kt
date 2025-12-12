@@ -20,6 +20,13 @@ data class DuotoneSettings(
 )
 
 @Serializable
+data class ChromaticAberrationSettings(
+    val enabled: Boolean,
+    val intensity: Float,
+    val fadeDurationMillis: Long,
+)
+
+@Serializable
 data class ImageFolder(
     val uri: String,
     val thumbnailUri: String? = null,
@@ -46,6 +53,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_GRAIN_ENABLED = "wallpaper_grain_enabled"
         const val KEY_GRAIN_AMOUNT = "wallpaper_grain_amount"
         const val KEY_GRAIN_SCALE = "wallpaper_grain_scale"
+        const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -61,6 +69,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val DEFAULT_GRAIN_ENABLED = false
         const val DEFAULT_GRAIN_AMOUNT = 0.18f
         const val DEFAULT_GRAIN_SCALE = 0.5f
+        const val DEFAULT_CHROMATIC_ABERRATION_ENABLED = true
+        const val DEFAULT_CHROMATIC_ABERRATION_INTENSITY = 0.5f
+        const val DEFAULT_CHROMATIC_ABERRATION_FADE_DURATION = 500L
 
         fun create(context: Context): WallpaperPreferences {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -111,6 +122,54 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         prefs.edit {
             putFloat(KEY_GRAIN_SCALE, scale.coerceIn(0f, 1f))
         }
+    }
+
+    /**
+     * Get chromatic aberration settings as a single object.
+     */
+    fun getChromaticAberrationSettings(): ChromaticAberrationSettings {
+        val json = prefs.getString(KEY_CHROMATIC_ABERRATION_SETTINGS, null)
+        return if (json != null) {
+            try {
+                Json.decodeFromString<ChromaticAberrationSettings>(json)
+            } catch (e: Exception) {
+                getDefaultChromaticAberrationSettings()
+            }
+        } else {
+            getDefaultChromaticAberrationSettings()
+        }
+    }
+
+    /**
+     * Set chromatic aberration settings as a single atomic operation.
+     * This triggers only ONE SharedPreferences change notification.
+     */
+    fun setChromaticAberrationSettings(settings: ChromaticAberrationSettings) {
+        val json = Json.encodeToString(settings)
+        prefs.edit {
+            putString(KEY_CHROMATIC_ABERRATION_SETTINGS, json)
+        }
+    }
+
+    private fun getDefaultChromaticAberrationSettings() = ChromaticAberrationSettings(
+        enabled = DEFAULT_CHROMATIC_ABERRATION_ENABLED,
+        intensity = DEFAULT_CHROMATIC_ABERRATION_INTENSITY,
+        fadeDurationMillis = DEFAULT_CHROMATIC_ABERRATION_FADE_DURATION
+    )
+
+    fun setChromaticAberrationEnabled(enabled: Boolean) {
+        val current = getChromaticAberrationSettings()
+        setChromaticAberrationSettings(current.copy(enabled = enabled))
+    }
+
+    fun setChromaticAberrationIntensity(intensity: Float) {
+        val current = getChromaticAberrationSettings()
+        setChromaticAberrationSettings(current.copy(intensity = intensity.coerceIn(0f, 1f)))
+    }
+
+    fun setChromaticAberrationFadeDuration(durationMillis: Long) {
+        val current = getChromaticAberrationSettings()
+        setChromaticAberrationSettings(current.copy(fadeDurationMillis = durationMillis.coerceAtLeast(0)))
     }
 
     /**
