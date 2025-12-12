@@ -28,8 +28,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
     inner class ShimmerWallpaperEngine : GLEngine(), ShimmerRenderer.Callbacks {
 
         private var renderer: ShimmerRenderer? = null
-        @Volatile private var surfaceAvailable = false
-        @Volatile private var engineVisible = true
+        @Volatile
+        private var surfaceAvailable = false
+        @Volatile
+        private var engineVisible = true
         private val imageLoadExecutor = Executors.newSingleThreadScheduledExecutor()
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
         private val transitionScheduler =
@@ -55,8 +57,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private var isInitialLoad = true
 
         // Blur timeout preferences/state
-        @Volatile private var blurTimeoutEnabled = preferences.isBlurTimeoutEnabled()
-        @Volatile private var blurTimeoutMillis = preferences.getBlurTimeoutMillis()
+        @Volatile
+        private var blurTimeoutEnabled = preferences.isBlurTimeoutEnabled()
+        @Volatile
+        private var blurTimeoutMillis = preferences.getBlurTimeoutMillis()
         private val blurTimeoutHandler = Handler(Looper.getMainLooper())
         private val blurTimeoutRunnable = Runnable {
             if (!blurTimeoutEnabled) return@Runnable
@@ -110,6 +114,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             imageLoader.setScreenHeight(height)
             Log.d(TAG, "onSurfaceDimensionsChanged: ${width}x${height}")
         }
+
         private fun enqueueCommand(
             command: RendererCommand,
             allowWhenSurfaceUnavailable: Boolean = false,
@@ -154,19 +159,23 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     renderer.enableBlur(command.enabled, command.immediate)
                     updateBlurState(command.enabled, "applyCommand.ApplyBlur")
                 }
+
                 is RendererCommand.ToggleBlur -> {
                     renderer.toggleBlur()
                 }
+
                 is RendererCommand.SetImage -> {
                     renderer.setImage(command.imageSet)
                     markUserInteraction("applyCommand.SetImage")
                 }
+
                 is RendererCommand.SetDim -> renderer.setUserDimAmount(command.amount)
                 is RendererCommand.SetDuotone -> renderer.setDuotoneSettings(
                     enabled = command.enabled,
                     alwaysOn = command.alwaysOn,
                     duotone = command.duotone
                 )
+
                 is RendererCommand.SetGrain -> {
                     renderer.setGrainSettings(
                         enabled = command.enabled,
@@ -174,10 +183,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         scale = command.scale
                     )
                 }
+
                 is RendererCommand.SetParallax -> {
                     renderer.setParallaxOffset(command.offset)
                     markUserInteraction("applyCommand.SetParallax")
                 }
+
                 is RendererCommand.SetEffectDuration -> renderer.setEffectTransitionDuration(command.durationMs)
             }
         }
@@ -246,7 +257,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             preferences.registerListener(preferenceListener)
 
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
-            
+
             // Register receiver for screen unlock events
             val screenUnlockFilter = IntentFilter(Intent.ACTION_USER_PRESENT)
             this@ShimmerWallpaperService.registerReceiver(screenUnlockReceiver, screenUnlockFilter)
@@ -370,8 +381,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (folderRepository.hasFolders()) {
                 return
             }
-            
-            val imageSet = imageLoader.loadDefault()
+
+            val imageSet = imageLoader.loadDefault(blurAmount = preferences.getBlurAmount())
             if (imageSet != null) {
                 // Mark that we're using the default image (no URI means default)
                 currentImageUri = null
@@ -532,23 +543,23 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun loadLastImage(): Boolean {
             Log.d(TAG, "loadLastImage: Attempting to load last image")
-            
+
             // Try to load last image from preferences
-            var imageSet = imageLoader.loadLast()
-            
+            var imageSet = imageLoader.loadLast(blurAmount = preferences.getBlurAmount())
+
             // If no last image, try to get next image from folder repository
             if (imageSet == null) {
                 val nextUri = folderRepository.nextImageUri()
                 if (nextUri != null) {
                     Log.d(TAG, "loadLastImage: No last image, using next from folder: $nextUri")
-                    imageSet = imageLoader.loadFromUri(nextUri)
+                    imageSet = imageLoader.loadFromUri(uri = nextUri, blurAmount = preferences.getBlurAmount())
                     if (imageSet != null) {
                         currentImageUri = nextUri
                         preferences.setLastImageUri(nextUri.toString())
                     }
                 }
             }
-            
+
             if (imageSet != null) {
                 enqueueCommand(
                     RendererCommand.SetImage(imageSet),
@@ -557,7 +568,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 )
                 return true
             }
-            
+
             return false
         }
 
@@ -625,7 +636,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun loadImage(uri: Uri) {
             Log.d(TAG, "loadImage: Loading image from $uri")
             // Called on imageLoadExecutor thread to load a specific image
-            val imageSet = imageLoader.loadFromUri(uri)
+            val imageSet = imageLoader.loadFromUri(uri = uri, blurAmount = preferences.getBlurAmount())
             if (imageSet != null) {
                 Log.d(TAG, "loadImage: imageSet prepared, calling setImage with allowWhenSurfaceUnavailable = true")
                 currentImageUri = uri // Track for re-blurring
@@ -648,7 +659,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun reBlurCurrentImage() {
             Log.d(TAG, "reBlurCurrentImage: Re-blurring current image")
             val uri = currentImageUri ?: return
-            val imageSet = imageLoader.loadFromUri(uri)
+            val imageSet = imageLoader.loadFromUri(uri = uri, blurAmount = preferences.getBlurAmount())
             if (imageSet != null) {
                 enqueueCommand(
                     RendererCommand.SetImage(imageSet),
@@ -671,11 +682,13 @@ private sealed interface RendererCommand {
         val alwaysOn: Boolean,
         val duotone: Duotone,
     ) : RendererCommand
+
     data class SetGrain(
         val enabled: Boolean,
         val amount: Float,
         val scale: Float,
     ) : RendererCommand
+
     data class SetParallax(val offset: Float) : RendererCommand
     data class SetEffectDuration(val durationMs: Long) : RendererCommand
 }

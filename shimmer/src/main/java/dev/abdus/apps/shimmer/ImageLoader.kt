@@ -35,20 +35,20 @@ class ImageLoader(
     /**
      * Loads an image from a URI and prepares it with blur levels.
      * @param uri The URI of the image to load
+     * @param overrideBlurAmount Optional override for blur amount (0..1). If null, uses preferences.
      * @return ImageSet with original and blurred bitmaps, or null if loading fails
      */
-    fun loadFromUri(uri: Uri): ImageSet? {
-        Log.d(TAG, "loadFromUri: Loading image from $uri")
+    fun loadFromUri(uri: Uri, blurAmount: Float): ImageSet? {
         val bitmap = decodeBitmapFromUri(uri) ?: return null
-        return prepareImageSet(bitmap)
+        return prepareImageSet(bitmap, blurAmount)
     }
 
     /**
      * Loads the default wallpaper image.
+     * @param overrideBlurAmount Optional override for blur amount (0..1). If null, uses preferences.
      * @return ImageSet with original and blurred bitmaps, or null if loading fails
      */
-    fun loadDefault(): ImageSet? {
-        Log.d(TAG, "loadDefault: Loading default wallpaper image")
+    fun loadDefault(blurAmount: Float): ImageSet? {
         try {
             val targetHeight = if (screenHeight > 0) screenHeight else DEFAULT_SCREEN_HEIGHT
 
@@ -71,7 +71,7 @@ class ImageLoader(
             )
             val bitmap = BitmapFactory.decodeResource(resources, R.drawable.default_wallpaper, options)
 
-            return prepareImageSet(bitmap)
+            return prepareImageSet(bitmap, blurAmount)
         } catch (e: Exception) {
             Log.e(TAG, "loadDefault: Error loading default image: ${e.message}", e)
             return null
@@ -80,9 +80,10 @@ class ImageLoader(
 
     /**
      * Loads the last viewed image from preferences.
+     * @param overrideBlurAmount Optional override for blur amount (0..1). If null, uses preferences.
      * @return ImageSet if successful, null if no last image or loading fails
      */
-    fun loadLast(): ImageSet? {
+    fun loadLast(blurAmount: Float): ImageSet? {
         Log.d(TAG, "loadLast: Attempting to load last image URI from preferences")
         val lastImageUriString = preferences.getLastImageUri()
         
@@ -93,7 +94,7 @@ class ImageLoader(
 
         return try {
             val lastImageUri = lastImageUriString.toUri()
-            val imageSet = loadFromUri(lastImageUri)
+            val imageSet = loadFromUri(lastImageUri, blurAmount)
             if (imageSet == null) {
                 Log.w(TAG, "loadLast: Failed to load, clearing invalid URI")
                 preferences.setLastImageUri(null) // Clear invalid URI
@@ -109,8 +110,7 @@ class ImageLoader(
     /**
      * Prepares an ImageSet with blur levels from a bitmap.
      */
-    private fun prepareImageSet(bitmap: Bitmap): ImageSet {
-        val blurAmount = preferences.getBlurAmount()
+    private fun prepareImageSet(bitmap: Bitmap, blurAmount: Float): ImageSet {
         val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
         Log.d(TAG, "prepareImageSet: Generating blur levels with maxRadius=$maxRadius")
         val blurLevels = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
