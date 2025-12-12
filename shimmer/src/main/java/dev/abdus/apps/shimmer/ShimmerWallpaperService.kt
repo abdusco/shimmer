@@ -50,6 +50,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // Image change state management (accessed only on folderScheduler thread)
         private var pendingImageUri: Uri? = null
 
+        // Explicit session state for blur.
+        // Initialized from preferences, but updated by transient actions (user toggle).
+        // Survives surface destruction but not service restart.
+        private var sessionBlurEnabled = preferences.getBlurAmount() > 0f
+
         // Track current image URI for re-blurring when blur amount changes
         private var currentImageUri: Uri? = null
 
@@ -77,6 +82,43 @@ class ShimmerWallpaperService : GLWallpaperService() {
         @Volatile
         private var surfaceHeightPx: Int = 0
 
+        /**
+         * Resolves the effective blur state based on priority:
+         * 1. Lock screen override (Highest priority)
+         * 2. Session state (User preference/toggle)
+         */
+        private fun resolveAndApplyBlurState(reason: String) {
+            val blurOnLock = preferences.isBlurOnScreenLockEnabled()
+            val keyguardManager = getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager
+            val isOnLockScreen = keyguardManager?.isKeyguardLocked ?: false
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val isScreenOn = powerManager?.isInteractive ?: true
+
+            // Priority 1: Lock Screen Override
+            // If "Blur on Lock" is enabled, force blur when screen is off or on lock screen
+            val shouldForceBlur = blurOnLock && (isOnLockScreen || !isScreenOn)
+
+            val effectiveBlurEnabled = if (shouldForceBlur) {
+                true
+            } else {
+                sessionBlurEnabled
+            }
+
+            // Determine if transition should be immediate (e.g., when locking)
+            val immediate = shouldForceBlur && !isScreenOn
+
+            Log.d(TAG, "resolveBlurState($reason): force=$shouldForceBlur (locked=$isOnLockScreen, screenOn=$isScreenOn), session=$sessionBlurEnabled -> effective=$effectiveBlurEnabled")
+
+            enqueueCommand(
+                RendererCommand.ApplyBlur(enabled = effectiveBlurEnabled, immediate = immediate),
+                allowWhenSurfaceUnavailable = true,
+                allowWhenInvisible = true,
+                // We do NOT want to replay this specific command state automatically from the queue,
+                // because we re-resolve it explicitly on surface creation/ready events.
+                replayable = false
+            )
+        }
+
         private fun isRenderable(): Boolean {
             val r = renderer
             return surfaceAvailable && engineVisible && rendererReady && (r?.isSurfaceReady() == true)
@@ -102,6 +144,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             isInitialLoad = false
             startBlurTimeoutIfUnblurred("rendererReady")
+
+            // Ensure the correct blur state is applied immediately when renderer is ready
+            resolveAndApplyBlurState("rendererReady")
+
             requestRenderIfRenderable("rendererReady")
         }
 
@@ -168,10 +214,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     updateBlurState(command.enabled, "applyCommand.ApplyBlur")
                 }
 
-                is RendererCommand.ToggleBlur -> {
-                    renderer.toggleBlur()
-                }
-
                 is RendererCommand.SetImage -> {
                     renderer.setImage(command.imageSet)
                     markUserInteraction("applyCommand.SetImage")
@@ -228,9 +270,21 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // BroadcastReceiver for handling screen unlock events
         private val screenUnlockReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action == Intent.ACTION_USER_PRESENT && preferences.isChangeImageOnUnlockEnabled()) {
-                    Log.d(TAG, "Screen unlocked, changing image")
-                    advanceToNextImage()
+                if (intent.action == Intent.ACTION_USER_PRESENT) {
+                    // Check if we should keep the blur from the lock screen (i.e. if user disabled unblur on unlock)
+                    // If blurOnLock is enabled AND unblurOnUnlock is DISABLED, we explicitly latch the session state to blurred.
+                    if (preferences.isBlurOnScreenLockEnabled() && !preferences.isUnblurOnUnlockEnabled()) {
+                        Log.d(TAG, "Screen unlocked, Keeping blur (UnblurOnUnlock=false)")
+                        sessionBlurEnabled = true
+                    }
+
+                    // Re-resolve blur state on unlock to restore session state if needed
+                    resolveAndApplyBlurState("screenUnlocked")
+
+                    if (preferences.isChangeImageOnUnlockEnabled()) {
+                        Log.d(TAG, "Screen unlocked, changing image")
+                        advanceToNextImage()
+                    }
                 }
             }
         }
@@ -310,10 +364,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val blurOnLock = preferences.isBlurOnScreenLockEnabled()
             Log.d(TAG, "  isScreenOn=$isScreenOn, isOnLockScreen=$isOnLockScreen, blurOnLock=$blurOnLock")
 
-            if (!visible && blurOnLock && (isOnLockScreen || !isScreenOn)) {
-                Log.d(TAG, "  → Scheduling immediate blur due to screen lock")
-                renderer?.enableBlurImmediately(true)
-            }
+            // Re-resolve blur state whenever visibility changes (covers lock/unlock/screen off)
+            resolveAndApplyBlurState("visibilityChanged")
 
             markUserInteraction("visibilityChanged")
 
@@ -360,7 +412,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
                 TapEvent.TRIPLE_TAP -> {
                     Log.d(TAG, "TapEvent.TRIPLE_TAP - toggling blur")
-                    enqueueCommand(RendererCommand.ToggleBlur)
+                    // Toggle session state
+                    sessionBlurEnabled = !sessionBlurEnabled
+                    resolveAndApplyBlurState("tripleTap")
                 }
 
                 TapEvent.NONE -> {
@@ -518,8 +572,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun applyBlurPreference() {
+            // Update session state to match new preference
             val blurAmount = preferences.getBlurAmount()
-            enqueueCommand(RendererCommand.ApplyBlur(blurAmount > 0f))
+            sessionBlurEnabled = blurAmount > 0f
+            resolveAndApplyBlurState("preferenceChanged")
         }
 
         private fun applyBlurTimeoutPreference() {
@@ -562,12 +618,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun enableBlur(immediate: Boolean = false, replayable: Boolean = true) {
-            enqueueCommand(
-                RendererCommand.ApplyBlur(enabled = true, immediate = immediate),
-                allowWhenSurfaceUnavailable = true,
-                allowWhenInvisible = true,
-                replayable = replayable
-            )
+            sessionBlurEnabled = true
+            resolveAndApplyBlurState("enableBlur")
         }
 
         private fun onBlurPreferenceChanged() {
@@ -800,7 +852,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
 private sealed interface RendererCommand {
     data class ApplyBlur(val enabled: Boolean, val immediate: Boolean = false) : RendererCommand
-    object ToggleBlur : RendererCommand
     data class SetImage(val imageSet: ImageSet) : RendererCommand
     data class SetDim(val amount: Float) : RendererCommand
     data class SetDuotone(

@@ -49,6 +49,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_CHANGE_IMAGE_ON_UNLOCK = "wallpaper_change_image_on_unlock"
         const val KEY_BLUR_TIMEOUT_ENABLED = "wallpaper_blur_timeout_enabled"
         const val KEY_BLUR_TIMEOUT_MILLIS = "wallpaper_blur_timeout_millis"
+        const val KEY_UNBLUR_ON_UNLOCK = "wallpaper_unblur_on_unlock"
         const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
         const val KEY_GRAIN_SETTINGS = "wallpaper_grain_settings"
         const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
@@ -370,6 +371,15 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setBlurTimeoutEnabled(enabled: Boolean) {
         prefs.edit {
             putBoolean(KEY_BLUR_TIMEOUT_ENABLED, enabled)
+        }
+    }
+
+    fun isUnblurOnUnlockEnabled(): Boolean =
+        prefs.getBoolean(KEY_UNBLUR_ON_UNLOCK, false)
+
+    fun setUnblurOnUnlockEnabled(enabled: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_UNBLUR_ON_UNLOCK, enabled)
         }
     }
 
