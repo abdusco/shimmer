@@ -90,12 +90,12 @@ class GLPictureSet {
 
             else -> {
                 // Interpolating between two blur keyframes
-                // Distribute globalAlpha proportionally and composite blur levels correctly
-                val loAlpha = globalAlpha * (1f - localHiAlpha)
-                val hiAlpha = globalAlpha * localHiAlpha
+                // Draw lower blur level at full opacity, then blend higher blur level on top
+                val loAlpha = globalAlpha
+                val hiAlpha = localHiAlpha
 
                 // Draw first blur level without blending (replaces background)
-                // Then draw second blur level with blending (adds on top)
+                // Then draw second blur level with blending (crossfades on top)
                 pictures[lo]?.draw(
                     handles,
                     tileSize,
