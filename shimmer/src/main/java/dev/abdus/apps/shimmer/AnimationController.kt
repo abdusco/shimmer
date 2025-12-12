@@ -16,6 +16,8 @@ class AnimationController(private var durationMillis: Int) {
     val dimAmountAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
     val duotoneOpacityAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
     val imageTransitionAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
+    // Exponential smoothing for parallax provides natural, adaptive motion for both dragging and flinging
+    val parallaxOffsetAnimator = SmoothingFloatAnimator(smoothingFactor = 0.2f)
 
     // Duotone color animators (manual interpolation within tick)
     private var currentDuotoneLightColor: Int = 0
@@ -48,6 +50,7 @@ class AnimationController(private var durationMillis: Int) {
         )
         currentRenderState = defaultState
         targetRenderState = defaultState
+        parallaxOffsetAnimator.reset(0.5f)
     }
 
     fun setDuration(durationMillis: Int) {
@@ -89,6 +92,10 @@ class AnimationController(private var durationMillis: Int) {
             )
         }
 
+        // Parallax offset (exponential smoothing for natural motion)
+        if (oldTarget.parallaxOffset != newTarget.parallaxOffset) {
+            parallaxOffsetAnimator.setTarget(newTarget.parallaxOffset)
+        }
 
 
         // Duotone properties (opacity and colors)
@@ -148,6 +155,7 @@ class AnimationController(private var durationMillis: Int) {
     fun setRenderStateImmediately(newState: RenderState) {
         currentRenderState = newState
         targetRenderState = newState
+        parallaxOffsetAnimator.reset(newState.parallaxOffset)
     }
 
     fun setDuotoneColorsImmediately(lightColor: Int, darkColor: Int) {
@@ -163,6 +171,7 @@ class AnimationController(private var durationMillis: Int) {
         val dimAnimating = dimAmountAnimator.tick()
         val duotoneOpacityAnimating = duotoneOpacityAnimator.tick()
         val imageAnimating = imageTransitionAnimator.tick()
+        val parallaxAnimating = parallaxOffsetAnimator.tick()
 
         // Linearly interpolate duotone colors if duotoneOpacityAnimator is running
         val animatedDuotoneLightColor = if (duotoneOpacityAnimating && duotoneOpacityAnimator.progress < 1f) {
@@ -187,7 +196,7 @@ class AnimationController(private var durationMillis: Int) {
                 opacity = if (duotoneOpacityAnimating) duotoneOpacityAnimator.currentValue else targetRenderState.duotone.opacity
             ),
             duotoneAlwaysOn = targetRenderState.duotoneAlwaysOn,
-            parallaxOffset = targetRenderState.parallaxOffset, // Parallax is not animated, it snaps
+            parallaxOffset = parallaxOffsetAnimator.currentValue,
             grain = targetRenderState.grain,
         )
 
@@ -198,7 +207,7 @@ class AnimationController(private var durationMillis: Int) {
         }
         wasImageAnimatingLastFrame = isImageAnimating
 
-        val keepAlive = forceUpdateOneFrame || blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating
+        val keepAlive = forceUpdateOneFrame || blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating || parallaxAnimating
         forceUpdateOneFrame = false
         return keepAlive
     }

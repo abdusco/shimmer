@@ -450,6 +450,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         val currentRenderState = animationController.currentRenderState
 
+        // Recompute projection matrix with animated parallax offset
+        recomputeProjectionMatrix()
+
         // Compute transformation matrices
         Matrix.setIdentityM(modelMatrix, 0)
         Matrix.multiplyMM(viewModelMatrix, 0, viewMatrix, 0, modelMatrix, 0)
@@ -590,7 +593,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         if (baseState.parallaxOffset != newOffset) {
             val newTargetState = baseState.copy(parallaxOffset = newOffset)
             animationController.updateTargetState(newTargetState)
-            recomputeProjectionMatrix() // Recalculate immediately as parallax is not animated
+            // Animation system will handle smooth interpolation; projection matrix 
+            // is recalculated on every frame in onDrawFrame() using currentRenderState
             if (surfaceCreated) {
                 callbacks.requestRender()
             }
