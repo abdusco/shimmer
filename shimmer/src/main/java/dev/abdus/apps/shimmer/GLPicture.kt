@@ -46,14 +46,16 @@ class GLPictureSet {
     /**
      * Draws a frame with interpolated blur level.
      * @param mvpMatrix Model-view-projection matrix
-     * @param blurFrame Current blur level (0.0 = original, blurKeyframes = fully blurred)
-     * @param globalAlpha Overall opacity (0.0 = transparent, 1.0 = opaque)
+     * @param blurPercent Normalized blur amount (0.0 = no blur, 1.0 = full blur)
+     * @param imageAlpha Overall opacity (0.0 = transparent, 1.0 = opaque)
      * @param duotone Duotone color effect to apply
      */
     fun drawFrame(
         handles: PictureHandles,
         tileSize: Int,
-        mvpMatrix: FloatArray, blurFrame: Float, globalAlpha: Float = 1f,
+        mvpMatrix: FloatArray,
+        blurPercent: Float,
+        imageAlpha: Float = 1f,
         duotone: Duotone = Duotone(),
         dimAmount: Float = 0f,
         grainAmount: Float = 0f,
@@ -64,14 +66,15 @@ class GLPictureSet {
             return
         }
 
+
+        val blurFrame = blurPercent * blurKeyframes
         // Clamp and determine which two images to interpolate between
         val clampedBlur = blurFrame.coerceIn(0f, blurKeyframes.toFloat())
         val lo = floor(clampedBlur.toDouble()).toInt().coerceAtMost(blurKeyframes)
         val hi = ceil(clampedBlur.toDouble()).toInt().coerceAtMost(blurKeyframes)
-        val localHiAlpha = clampedBlur - lo
 
         when {
-            globalAlpha <= 0f -> return
+            imageAlpha <= 0f -> return
 
             lo == hi -> {
                 // Single blur level - just draw it normally
@@ -79,7 +82,7 @@ class GLPictureSet {
                     handles,
                     tileSize,
                     mvpMatrix,
-                    globalAlpha,
+                    imageAlpha,
                     duotone,
                     dimAmount,
                     grainAmount,
@@ -89,10 +92,8 @@ class GLPictureSet {
             }
 
             else -> {
-                // Interpolating between two blur keyframes
-                // Draw lower blur level at full opacity, then blend higher blur level on top
-                val loAlpha = globalAlpha
-                val hiAlpha = localHiAlpha
+                val loAlpha = imageAlpha * blurPercent
+                val hiAlpha = clampedBlur - lo
 
                 // Draw first blur level without blending (replaces background)
                 // Then draw second blur level with blending (crossfades on top)
@@ -216,7 +217,7 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
         grainAmount: Float = 0f,
         grainCountX: Float = 0f,
         grainCountY: Float = 0f,
-        enableBlending: Boolean = true
+        enableBlending: Boolean = true,
     ) {
         if (textureHandles.isEmpty()) {
             android.util.Log.w("GLPicture", "draw: No texture handles available.")

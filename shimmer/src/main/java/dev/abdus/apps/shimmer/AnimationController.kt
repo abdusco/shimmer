@@ -35,7 +35,7 @@ class AnimationController(private var durationMillis: Int) {
     init {
         val defaultState = RenderState(
             imageSet = ImageSet(original = createBitmap(1, 1)), // Placeholder
-            blurAmount = 0f,
+            blurPercent = 0f,
             dimAmount = 0f,
             duotone = Duotone(
                 lightColor = Color.WHITE, // From WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
@@ -64,15 +64,15 @@ class AnimationController(private var durationMillis: Int) {
         forceUpdateOneFrame = true
 
         // Blur amount
-        if (oldTarget.blurAmount != newTarget.blurAmount) {
+        if (oldTarget.blurPercent != newTarget.blurPercent) {
             val startBlurAmount = if (blurAmountAnimator.isRunning) {
                 blurAmountAnimator.currentValue
             } else {
-                currentRenderState.blurAmount
+                currentRenderState.blurPercent
             }
             blurAmountAnimator.start(
                 startValue = startBlurAmount,
-                endValue = newTarget.blurAmount
+                endValue = newTarget.blurPercent
             )
         }
 
@@ -179,7 +179,7 @@ class AnimationController(private var durationMillis: Int) {
         // Build the current animated state
         currentRenderState = RenderState(
             imageSet = targetRenderState.imageSet,
-            blurAmount = if (blurAnimating) blurAmountAnimator.currentValue else targetRenderState.blurAmount,
+            blurPercent = if (blurAnimating) blurAmountAnimator.currentValue else targetRenderState.blurPercent,
             dimAmount = if (dimAnimating) dimAmountAnimator.currentValue else targetRenderState.dimAmount,
             duotone = Duotone(
                 lightColor = animatedDuotoneLightColor,

@@ -183,7 +183,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         Log.d(TAG, "toggleBlur: called")
         val baseState = animationController.targetRenderState
         val newTargetState = baseState.copy(
-            blurAmount = if (baseState.blurAmount > 0f) 0f else 1f
+            blurPercent = if (baseState.blurPercent > 0f) 0f else 1f
         )
         animationController.updateTargetState(newTargetState)
         callbacks.requestRender()
@@ -194,8 +194,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         val baseState = animationController.targetRenderState
         val targetBlurAmount = if (enable) 1f else 0f
 
-        if (baseState.blurAmount != targetBlurAmount) {
-            val newTargetState = baseState.copy(blurAmount = targetBlurAmount)
+        if (baseState.blurPercent != targetBlurAmount) {
+            val newTargetState = baseState.copy(blurPercent = targetBlurAmount)
             if (immediate) {
                 animationController.setRenderStateImmediately(newTargetState)
                 animationController.blurAmountAnimator.reset()
@@ -212,7 +212,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun enableBlurImmediately(enable: Boolean) {
         val target = animationController.targetRenderState.copy(
-            blurAmount = if (enable) 1f else 0f
+            blurPercent = if (enable) 1f else 0f
         )
         animationController.setRenderStateImmediately(target)
         animationController.blurAmountAnimator.reset()
@@ -460,15 +460,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         val isAnimating = animationController.tick()
 
         // blurAmount is normalized 0-1, convert to actual keyframe count for rendering
-        val imageBlurKeyframes = currentRenderState.imageSet.blurred.size
-        val blurAmount = currentRenderState.blurAmount.coerceIn(0f, 1f)
-        val blurKeyframeIndex = blurAmount * imageBlurKeyframes
+        val blurPercent = currentRenderState.blurPercent.coerceIn(0f, 1f)
 
         val duotone = currentRenderState.duotone.copy(
-            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurAmount)
+            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurPercent)
         )
 
-        val finalDimAmount = currentRenderState.dimAmount * blurAmount
+        val finalDimAmount = currentRenderState.dimAmount * blurPercent
 
         val grainState = currentRenderState.grain
         // Apply intensity scaling here so the slider (0..1) maps to useful range (0..GRAIN_INTENSITY_MAX)
@@ -495,7 +493,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             pictureHandles,
             tileSize,
             previousMvpMatrix,
-            blurKeyframeIndex,
+            blurPercent,
             previousImageAlpha,
             duotone,
             finalDimAmount,
@@ -509,7 +507,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             pictureHandles,
             tileSize,
             mvpMatrix,
-            blurKeyframeIndex,
+            blurPercent,
             currentImageAlpha,
             duotone,
             finalDimAmount,
