@@ -31,6 +31,7 @@ class ImageFolderRepository(
     @Volatile
     private var folderUris: List<String> = emptyList()
     private val folderContents = mutableMapOf<String, List<Uri>>()
+    private val folderImagePositions = mutableMapOf<String, Int>()
     private val _imageCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
     val imageCounts: StateFlow<Map<String, Int>> = _imageCounts.asStateFlow()
     @Volatile
@@ -48,6 +49,9 @@ class ImageFolderRepository(
         // Only remove cache for folders that are no longer in the list
         synchronized(folderContents) {
             removedUris.forEach { folderContents.remove(it) }
+        }
+        synchronized(folderImagePositions) {
+            removedUris.forEach { folderImagePositions.remove(it) }
         }
         
         lastDisplayedUri = null
@@ -103,6 +107,9 @@ class ImageFolderRepository(
         synchronized(folderContents) {
             folderContents.remove(folderUri)
         }
+        synchronized(folderImagePositions) {
+            folderImagePositions.remove(folderUri)
+        }
         // Trigger a scan asynchronously
         repositoryScope.launch {
             getFolderImages(folderUri)
@@ -118,6 +125,9 @@ class ImageFolderRepository(
         val urisToRefresh = folderUris.toList() // Make a copy to avoid concurrent modification
         synchronized(folderContents) {
             folderContents.clear()
+        }
+        synchronized(folderImagePositions) {
+            folderImagePositions.clear()
         }
         // Trigger scans asynchronously for all folders
         urisToRefresh.forEach { uri ->
@@ -183,8 +193,9 @@ class ImageFolderRepository(
     }
 
     /**
-     * Returns next random image from folders in round-robin order.
-     * Tries to avoid showing the same image twice in a row.
+     * Returns next image from folders in round-robin order.
+     * Uses shuffle-based selection to ensure uniform distribution:
+     * each image appears exactly once before any image repeats.
      */
     fun nextImageUri(): Uri? {
         if (folderUris.isEmpty()) return null
@@ -195,7 +206,7 @@ class ImageFolderRepository(
             val images = getFolderImages(folderUri)
 
             if (images.isNotEmpty()) {
-                val candidate = selectRandomImage(images)
+                val candidate = selectNextImage(folderUri, images)
                 currentFolderIndex = (currentFolderIndex + 1) % folderUris.size
                 lastDisplayedUri = candidate
                 return candidate
@@ -216,9 +227,13 @@ class ImageFolderRepository(
 
         // Scan and cache
         val scanned = scanFolder(folderUri)
-        val count = scanned.size
+        val shuffled = shuffleImages(scanned.toMutableList())
+        val count = shuffled.size
         synchronized(folderContents) {
-            folderContents[folderUri] = scanned
+            folderContents[folderUri] = shuffled
+        }
+        synchronized(folderImagePositions) {
+            folderImagePositions[folderUri] = 0
         }
         
         // Update image counts flow
@@ -226,7 +241,7 @@ class ImageFolderRepository(
         updatedCounts[folderUri] = count
         _imageCounts.value = updatedCounts
         
-        return scanned
+        return shuffled
     }
 
     private fun scanFolder(folderUri: String): List<Uri> {
@@ -243,19 +258,62 @@ class ImageFolderRepository(
         }
     }
 
-    private fun selectRandomImage(images: List<Uri>): Uri {
-        // If only one image or no last displayed, just pick random
-        if (images.size == 1 || lastDisplayedUri == null) {
-            return images[Random.nextInt(images.size)]
+    /**
+     * Selects the next image from the shuffled list for a folder.
+     * Returns images sequentially from the shuffled list, ensuring uniform distribution.
+     * When all images have been shown, reshuffles and starts over.
+     */
+    private fun selectNextImage(folderUri: String, images: List<Uri>): Uri {
+        if (images.isEmpty()) {
+            throw IllegalArgumentException("Cannot select from empty image list")
         }
-
-        // Try to avoid showing same image twice
-        val candidates = images.filter { it != lastDisplayedUri }
-        return if (candidates.isNotEmpty()) {
-            candidates[Random.nextInt(candidates.size)]
-        } else {
-            // All images are the last one (shouldn't happen), just return any
-            images[Random.nextInt(images.size)]
+        
+        if (images.size == 1) {
+            return images[0]
         }
+        
+        // Get current position for this folder
+        val currentPosition = synchronized(folderImagePositions) {
+            folderImagePositions.getOrDefault(folderUri, 0)
+        }
+        
+        // If we've reached the end, reshuffle and reset
+        if (currentPosition >= images.size) {
+            val reshuffled = shuffleImages(images.toMutableList())
+            synchronized(folderContents) {
+                folderContents[folderUri] = reshuffled
+            }
+            synchronized(folderImagePositions) {
+                folderImagePositions[folderUri] = 0
+            }
+            return reshuffled[0]
+        }
+        
+        // Get the image at current position and advance
+        val selectedImage = images[currentPosition]
+        synchronized(folderImagePositions) {
+            folderImagePositions[folderUri] = currentPosition + 1
+        }
+        
+        return selectedImage
+    }
+    
+    /**
+     * Shuffles a list of URIs using Fisher-Yates algorithm for uniform random distribution.
+     */
+    private fun shuffleImages(images: MutableList<Uri>): List<Uri> {
+        if (images.size <= 1) {
+            return images
+        }
+        
+        // Fisher-Yates shuffle
+        for (i in images.size - 1 downTo 1) {
+            val j = Random.nextInt(i + 1)
+            val temp = images[i]
+            images[i] = images[j]
+            images[j] = temp
+        }
+        
+        return images
     }
 }
