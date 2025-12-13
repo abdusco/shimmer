@@ -30,6 +30,7 @@ data class ChromaticAberrationSettings(
 data class ImageFolder(
     val uri: String,
     val thumbnailUri: String? = null,
+    val imageCount: Int? = null,
 )
 
 class WallpaperPreferences(private val prefs: SharedPreferences) {

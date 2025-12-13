@@ -391,6 +391,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 // Receiver was not registered, ignore
             }
             transitionScheduler.cancel()
+            folderRepository.cleanup()
             imageLoadExecutor.shutdownNow()
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
             super.onDestroy()

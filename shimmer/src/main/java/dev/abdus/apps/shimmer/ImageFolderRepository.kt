@@ -3,28 +3,115 @@ package dev.abdus.apps.shimmer
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import kotlin.random.Random
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Simplified image folder repository.
  * Scans folders, caches contents, and returns random images in round-robin fashion.
  */
-class ImageFolderRepository(private val context: Context) {
-
-    private var folderUris: List<String> = emptyList()
-    private val folderContents = mutableMapOf<String, List<Uri>>()
-    private var lastDisplayedUri: Uri? = null
-    private var currentFolderIndex = 0
-
-    fun updateFolders(uris: List<String>) {
-        folderUris = uris
-        folderContents.clear()
-        lastDisplayedUri = null
-        currentFolderIndex = 0
+class ImageFolderRepository(
+    private val context: Context
+) {
+    companion object {
+        // Use the same TAG as ShimmerWallpaperService so logs appear in the same filter
+        private const val TAG = "ShimmerWallpaperService"
     }
 
-    fun hasFolders(): Boolean = folderUris.isNotEmpty()
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile
+    private var folderUris: List<String> = emptyList()
+    private val folderContents = mutableMapOf<String, List<Uri>>()
+    private val _imageCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val imageCounts: StateFlow<Map<String, Int>> = _imageCounts.asStateFlow()
+    @Volatile
+    private var lastDisplayedUri: Uri? = null
+    @Volatile
+    private var currentFolderIndex = 0
+
+    fun updateFolders(uris: List<String>, initialCounts: Map<String, Int> = emptyMap()) {
+        val previousUris = folderUris.toSet()
+        val newUris = uris.filter { it !in previousUris }
+        val removedUris = previousUris.filter { it !in uris }
+        
+        folderUris = uris
+        
+        // Only remove cache for folders that are no longer in the list
+        synchronized(folderContents) {
+            removedUris.forEach { folderContents.remove(it) }
+        }
+        
+        lastDisplayedUri = null
+        currentFolderIndex = 0
+        
+        // Initialize counts from preferences (for immediate display)
+        val updatedCounts = _imageCounts.value.toMutableMap()
+        removedUris.forEach { updatedCounts.remove(it) }
+        initialCounts.forEach { (uri, count) ->
+            if (uri in uris) {
+                updatedCounts[uri] = count
+            }
+        }
+        _imageCounts.value = updatedCounts
+        
+        // Scan newly added folders asynchronously in the background
+        newUris.forEach { uri ->
+            repositoryScope.launch {
+                getFolderImages(uri)
+            }
+        }
+        
+        // Also scan existing folders that don't have cached contents (for refresh scenarios)
+        uris.forEach { uri ->
+            val hasCache = synchronized(folderContents) {
+                folderContents.containsKey(uri)
+            }
+            if (!hasCache && uri !in newUris) {
+                repositoryScope.launch {
+                    getFolderImages(uri)
+                }
+            }
+        }
+    }
+
+    fun cleanup() {
+        // No-op now that polling is removed
+    }
+
+    /**
+     * Get the number of images in a folder. This will scan the folder if not cached.
+     */
+    fun getImageCount(folderUri: String): Int {
+        return getFolderImages(folderUri).size
+    }
+
+    /**
+     * Force refresh the cache for a specific folder by scanning it again.
+     * This runs asynchronously in the background.
+     */
+    fun refreshFolder(folderUri: String) {
+        Log.d(TAG, "Refreshing folder: $folderUri")
+        synchronized(folderContents) {
+            folderContents.remove(folderUri)
+        }
+        // Trigger a scan asynchronously
+        repositoryScope.launch {
+            getFolderImages(folderUri)
+        }
+    }
+
+    fun hasFolders(): Boolean {
+        return folderUris.isNotEmpty()
+    }
 
     /**
      * Checks if a given image URI is valid and belongs to any of the current folders.
@@ -37,7 +124,8 @@ class ImageFolderRepository(private val context: Context) {
         // First verify the file exists and is readable
         val file = try {
             DocumentFile.fromSingleUri(context, uri)
-        } catch (_: SecurityException) {
+        } catch (e: Exception) {
+            Log.w(TAG, "isImageUriValid: Failed to access URI: $uri", e)
             return false
         }
 
@@ -48,7 +136,8 @@ class ImageFolderRepository(private val context: Context) {
         // Get the document ID of the image file
         val imageDocumentId = try {
             DocumentsContract.getDocumentId(uri)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "isImageUriValid: Could not get document ID for $uri", e)
             return false
         }
 
@@ -65,7 +154,8 @@ class ImageFolderRepository(private val context: Context) {
                     imageDocumentId.startsWith("$folderDocumentId/")) {
                     return true
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w(TAG, "isImageUriValid: Failed to process folder URI $folderUriString", e)
                 // Skip invalid folder URI
                 return@forEach
             }
@@ -102,13 +192,22 @@ class ImageFolderRepository(private val context: Context) {
 
     private fun getFolderImages(folderUri: String): List<Uri> {
         // Return cached if available
-        folderContents[folderUri]?.let { return it }
+        synchronized(folderContents) {
+            folderContents[folderUri]?.let { return it }
+        }
 
         // Scan and cache
         val scanned = scanFolder(folderUri)
-        if (scanned.isNotEmpty()) {
+        val count = scanned.size
+        synchronized(folderContents) {
             folderContents[folderUri] = scanned
         }
+        
+        // Update image counts flow
+        val updatedCounts = _imageCounts.value.toMutableMap()
+        updatedCounts[folderUri] = count
+        _imageCounts.value = updatedCounts
+        
         return scanned
     }
 
@@ -120,7 +219,8 @@ class ImageFolderRepository(private val context: Context) {
             documentFile.listFiles()
                 .filter { it.isFile && it.type?.startsWith("image/") == true }
                 .map { it.uri }
-        } catch (_: SecurityException) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to scan folder $folderUri", e)
             emptyList()
         }
     }
