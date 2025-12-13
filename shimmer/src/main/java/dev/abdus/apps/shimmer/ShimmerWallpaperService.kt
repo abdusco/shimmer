@@ -697,7 +697,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
 
             imageLoadExecutor.execute {
-                // Try to load last image, otherwise next, otherwise default
+                // Check if current image is still valid in the new folder set
+                val currentUri = currentImageUri
+                if (currentUri != null && folderRepository.isImageUriValid(currentUri)) {
+                    Log.d(TAG, "setImageFolders: Current image $currentUri is still valid, keeping it")
+                    transitionScheduler.start()
+                    return@execute
+                }
+
+                // Current image is invalid or null, load a new one
+                Log.d(TAG, "setImageFolders: Current image invalid or null, loading new image")
                 if (loadLastImage()) {
                     transitionScheduler.start()
                 } else {

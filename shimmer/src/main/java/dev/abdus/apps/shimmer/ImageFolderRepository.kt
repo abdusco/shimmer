@@ -2,6 +2,7 @@ package dev.abdus.apps.shimmer
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import kotlin.random.Random
 
@@ -24,6 +25,54 @@ class ImageFolderRepository(private val context: Context) {
     }
 
     fun hasFolders(): Boolean = folderUris.isNotEmpty()
+
+    /**
+     * Checks if a given image URI is valid and belongs to any of the current folders.
+     * Returns true if the URI exists, is readable, and is a descendant of any folder.
+     * Uses document ID prefix matching for efficient checking without scanning folders.
+     */
+    fun isImageUriValid(uri: Uri): Boolean {
+        if (folderUris.isEmpty()) return false
+
+        // First verify the file exists and is readable
+        val file = try {
+            DocumentFile.fromSingleUri(context, uri)
+        } catch (_: SecurityException) {
+            return false
+        }
+
+        if (file == null || !file.exists() || !file.canRead()) {
+            return false
+        }
+
+        // Get the document ID of the image file
+        val imageDocumentId = try {
+            DocumentsContract.getDocumentId(uri)
+        } catch (_: Exception) {
+            return false
+        }
+
+        // Check if the image's document ID starts with any folder's document ID
+        folderUris.forEach { folderUriString ->
+            try {
+                val folderUri = Uri.parse(folderUriString)
+                val folderDocumentId = DocumentsContract.getTreeDocumentId(folderUri)
+                
+                // Check if image is a descendant of this folder
+                // Document IDs use format "storage:path/to/file", so we check if the image
+                // document ID starts with the folder document ID followed by "/" or equals it
+                if (imageDocumentId == folderDocumentId || 
+                    imageDocumentId.startsWith("$folderDocumentId/")) {
+                    return true
+                }
+            } catch (_: Exception) {
+                // Skip invalid folder URI
+                return@forEach
+            }
+        }
+
+        return false
+    }
 
     /**
      * Returns next random image from folders in round-robin order.
