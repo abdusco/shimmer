@@ -12,6 +12,7 @@ class Actions {
         const val ACTION_NEXT_DUOTONE = "dev.abdus.apps.shimmer.action.RANDOM_DUOTONE"
         const val ACTION_SET_BLUR_PERCENT = "dev.abdus.apps.shimmer.action.SET_BLUR_PERCENT"
         const val ACTION_ENABLE_BLUR = "dev.abdus.apps.shimmer.action.ENABLE_BLUR"
+        const val ACTION_REFRESH_FOLDERS = "dev.abdus.apps.shimmer.action.REFRESH_FOLDERS"
 
         /**
          * Send a broadcast to request next image.
@@ -37,12 +38,25 @@ class Actions {
             context.sendBroadcast(Intent(ACTION_NEXT_DUOTONE))
         }
 
+        /**
+         * Send a broadcast to trigger folder refresh/scan.
+         * Can be called from other apps using:
+         * context.sendBroadcast(Intent("dev.abdus.apps.shimmer.action.REFRESH_FOLDERS"))
+         *
+         * Or via adb:
+         * adb shell am broadcast -a dev.abdus.apps.shimmer.action.REFRESH_FOLDERS
+         */
+        fun requestRefreshFolders(context: Context) {
+            context.sendBroadcast(Intent(ACTION_REFRESH_FOLDERS))
+        }
+
         fun registerReceivers(context: Context, shortcutReceiver: BroadcastReceiver) {
             val filter = IntentFilter().apply {
                 addAction(ACTION_NEXT_IMAGE)
                 addAction(ACTION_NEXT_DUOTONE)
                 addAction(ACTION_SET_BLUR_PERCENT)
                 addAction(ACTION_ENABLE_BLUR)
+                addAction(ACTION_REFRESH_FOLDERS)
             }
             androidx.core.content.ContextCompat.registerReceiver(
                 context,

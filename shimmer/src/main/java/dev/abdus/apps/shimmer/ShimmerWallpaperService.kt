@@ -263,6 +263,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     }
 
                     Actions.ACTION_ENABLE_BLUR -> enableBlur()
+                    Actions.ACTION_REFRESH_FOLDERS -> refreshFolders()
                 }
             }
         }
@@ -794,6 +795,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         fun advanceToNextImage() {
             requestImageChange()
+        }
+
+        fun refreshFolders() {
+            Log.d(TAG, "refreshFolders: Refreshing all folders")
+            folderRepository.refreshAllFolders()
         }
 
         fun applyNextDuotonePreset() {

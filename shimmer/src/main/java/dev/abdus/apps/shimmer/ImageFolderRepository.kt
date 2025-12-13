@@ -109,6 +109,24 @@ class ImageFolderRepository(
         }
     }
 
+    /**
+     * Refresh all folders by clearing their cache and scanning them again.
+     * This runs asynchronously in the background.
+     */
+    fun refreshAllFolders() {
+        Log.d(TAG, "Refreshing all folders")
+        val urisToRefresh = folderUris.toList() // Make a copy to avoid concurrent modification
+        synchronized(folderContents) {
+            folderContents.clear()
+        }
+        // Trigger scans asynchronously for all folders
+        urisToRefresh.forEach { uri ->
+            repositoryScope.launch {
+                getFolderImages(uri)
+            }
+        }
+    }
+
     fun hasFolders(): Boolean {
         return folderUris.isNotEmpty()
     }
