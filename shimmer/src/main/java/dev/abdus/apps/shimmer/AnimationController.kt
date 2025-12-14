@@ -17,7 +17,7 @@ class AnimationController(private var durationMillis: Int) {
     val duotoneOpacityAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
     val imageTransitionAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
     // Exponential smoothing for parallax provides natural, adaptive motion for both dragging and flinging
-    val parallaxOffsetAnimator = SmoothingFloatAnimator(smoothingFactor = 0.2f)
+    val parallaxOffsetAnimator = SmoothingFloatAnimator()
 
     // Duotone color animators (manual interpolation within tick)
     private var currentDuotoneLightColor: Int = 0
