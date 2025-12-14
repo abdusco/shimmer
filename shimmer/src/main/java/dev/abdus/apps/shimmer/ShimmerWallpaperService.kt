@@ -135,18 +135,15 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onRendererReady() {
             Log.d(TAG, "onRendererReady called")
             rendererReady = true
-            Log.d(TAG, "onRendererReady applying preferences")
-            applyPreferences()
             Log.d(TAG, "onRendererReady enqueueing replay of latest commands")
             commandQueue.enqueueReplayOfLatest()
+            Log.d(TAG, "onRendererReady applying preferences")
+            applyPreferences()
             Log.d(TAG, "onRendererReady trying to drain commands")
             tryDrainCommands()
 
             isInitialLoad = false
             startBlurTimeoutIfUnblurred("rendererReady")
-
-            // Ensure the correct blur state is applied immediately when renderer is ready
-            resolveAndApplyBlurState("rendererReady")
 
             requestRenderIfRenderable("rendererReady")
         }
@@ -322,6 +319,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
             setTouchEventsEnabled(true)
             setOffsetNotificationsEnabled(true)
 
+            // Apply preferences early to avoid race conditions with touch events
+            applyPreferences()
+
             preferences.registerListener(preferenceListener)
 
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
@@ -336,7 +336,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
             commandQueue.enqueueReplayOfLatest()
-            tryDrainCommands()
+            
+            // Don't drain commands here - wait for onRendererReady() to re-resolve state first
+            // This prevents old context-dependent commands (like blur) from being applied
+            // before we've re-resolved the correct state based on current context
 
             requestRenderIfRenderable("surfaceCreated")
         }
@@ -558,9 +561,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyPreferences() {
             Log.d(TAG, "applyPreferences: Applying wallpaper preferences")
-            if (!isInitialLoad) {
-                return
-            }
             applyImageFolderPreference()
             applyBlurPreference()
             applyDimPreference()
@@ -574,9 +574,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun applyBlurPreference() {
-            // Update session state to match new preference
-            val blurAmount = preferences.getBlurAmount()
-            sessionBlurEnabled = blurAmount > 0f
+            // Only initialize session state from preferences on initial load
+            // After that, session state is managed by user toggles and should not be reset
+            if (isInitialLoad) {
+                val blurAmount = preferences.getBlurAmount()
+                sessionBlurEnabled = blurAmount > 0f
+            }
             resolveAndApplyBlurState("preferenceChanged")
         }
 

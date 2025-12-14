@@ -120,7 +120,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // Chromatic aberration settings
     private var chromaticAberrationEnabled = true
-    private var chromaticAberrationIntensity = 0.75f
+    private var chromaticAberrationIntensity = 0.5f
     private var chromaticAberrationFadeDuration = 500
 
     // Image state
