@@ -295,8 +295,11 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
                 putString(KEY_IMAGE_FOLDERS, Json.encodeToString(cleaned))
             } else {
                 remove(KEY_IMAGE_FOLDERS)
+                // Only clear last image URI when all folders are removed
+                setLastImageUri(null)
             }
-            setLastImageUri(null)
+            // Don't clear lastImageUri when folders are updated - let the wallpaper service
+            // validate if the current image is still valid in the new folder set
         }
     }
 

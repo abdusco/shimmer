@@ -79,8 +79,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -168,6 +170,9 @@ private fun ShimmerSettingsScreen(
     var changeImageOnUnlock by remember {
         mutableStateOf(preferences.isChangeImageOnUnlockEnabled())
     }
+    var currentWallpaperUri by remember {
+        mutableStateOf(preferences.getLastImageUri())
+    }
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -221,6 +226,10 @@ private fun ShimmerSettingsScreen(
 
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS -> {
                     blurTimeoutMillis = preferences.getBlurTimeoutMillis()
+                }
+
+                WallpaperPreferences.KEY_LAST_IMAGE_URI -> {
+                    currentWallpaperUri = preferences.getLastImageUri()
                 }
             }
         }
@@ -298,6 +307,7 @@ private fun ShimmerSettingsScreen(
                         modifier = Modifier.padding(paddingValues),
                         context = context,
                         preferences = preferences,
+                        currentWallpaperUri = currentWallpaperUri,
                         imageFolders = imageFolders,
                         transitionEnabled = transitionEnabled,
                         transitionIntervalMillis = transitionIntervalMillis,
@@ -396,6 +406,7 @@ private fun SourcesTab(
     modifier: Modifier = Modifier,
     context: Context,
     preferences: WallpaperPreferences,
+    currentWallpaperUri: Uri?,
     imageFolders: List<ImageFolder>,
     transitionEnabled: Boolean,
     transitionIntervalMillis: Long,
@@ -414,6 +425,23 @@ private fun SourcesTab(
         ),
         verticalArrangement = Arrangement.spacedBy(PADDING_X),
     ) {
+        item {
+            CurrentWallpaperCard(
+                wallpaperUri = currentWallpaperUri,
+                onViewImage = { uri ->
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "image/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    try {
+                        context.startActivity(viewIntent)
+                    } catch (e: Exception) {
+                        // Handle case where no app can view the image
+                    }
+                }
+            )
+        }
+
         item {
             FolderThumbnailSlider(
                 imageFolders = imageFolders,
@@ -664,6 +692,102 @@ private fun EffectsTab(
 }
 
 @Composable
+private fun CurrentWallpaperCard(
+    wallpaperUri: Uri?,
+    onViewImage: (Uri) -> Unit,
+) {
+    val context = LocalContext.current
+    val fileName = remember(wallpaperUri) {
+        wallpaperUri?.let { uri ->
+            try {
+                DocumentFile.fromSingleUri(context, uri)?.name
+                    ?: uri.lastPathSegment
+                    ?: "Unknown"
+            } catch (e: Exception) {
+                uri.lastPathSegment ?: "Unknown"
+            }
+        } ?: "No wallpaper"
+    }
+
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp)
+                .clickable(enabled = wallpaperUri != null) {
+                    wallpaperUri?.let { onViewImage(it) }
+                }
+        ) {
+            if (wallpaperUri != null) {
+                AsyncImage(
+                    modifier = Modifier.fillMaxSize(),
+                    model = ImageRequest.Builder(context)
+                        .data(wallpaperUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Current wallpaper",
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Image,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "No wallpaper set",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Gradient overlay at the bottom with filename
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.7f)
+                            )
+                        )
+                    )
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun FolderThumbnailSlider(
     imageFolders: List<ImageFolder>,
     onOpenFolderSelection: () -> Unit,
@@ -693,7 +817,7 @@ private fun FolderThumbnailSlider(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Local image folders",
+                        text = "Image sources",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
