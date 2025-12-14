@@ -37,13 +37,6 @@ class ImageTransitionScheduler(
         future = null
     }
 
-    fun restartAfterManualAdvance() {
-        if (!transitionEnabled) {
-            return
-        }
-        restartIfNecessary()
-    }
-
     private fun restartIfNecessary() {
         future?.cancel(false)
         if (!transitionEnabled) {

@@ -795,6 +795,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         fun advanceToNextImage() {
             requestImageChange()
+            transitionScheduler.start()
         }
 
         fun refreshFolders() {
