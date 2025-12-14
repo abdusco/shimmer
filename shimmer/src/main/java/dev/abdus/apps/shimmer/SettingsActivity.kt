@@ -20,12 +20,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -168,22 +171,6 @@ private fun ShimmerSettingsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    val folderPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree(),
-        onResult = { uri: Uri? ->
-            uri?.let {
-                context.contentResolver.takePersistableUriPermission(
-                    it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-                val newFolder = ImageFolder(uri = it.toString(), thumbnailUri = null, imageCount = null)
-                val nextList = (imageFolders + newFolder).distinctBy { folder -> folder.uri }
-                imageFolders = nextList
-                preferences.setImageFolders(nextList)
-                // Image counts will be updated reactively via the Flow when repository.updateFolders is called
-            }
-        }
-    )
 
     DisposableEffect(preferences) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -243,35 +230,6 @@ private fun ShimmerSettingsScreen(
         }
     }
 
-    LaunchedEffect(imageFolders) {
-        // Load/validate thumbnails for folders that need them
-        val foldersNeedingThumbnails = imageFolders.filter { folder ->
-            folder.thumbnailUri == null || !isValidThumbnailUri(context, folder.thumbnailUri)
-        }
-
-        val updatedFolders = if (foldersNeedingThumbnails.isNotEmpty()) {
-            // Load thumbnails in parallel
-            foldersNeedingThumbnails.map { folder ->
-                async(Dispatchers.IO) {
-                    val thumbnailUri = getFolderThumbnailUri(context, folder.uri, folder.thumbnailUri)
-                    folder.copy(thumbnailUri = thumbnailUri?.toString())
-                }
-            }.awaitAll().associateBy { it.uri }
-        } else {
-            emptyMap()
-        }
-
-        // Create the complete updated list
-        val finalList = imageFolders.map { folder ->
-            updatedFolders[folder.uri] ?: folder
-        }
-
-        if (updatedFolders.isNotEmpty()) {
-            imageFolders = finalList
-            preferences.setImageFolders(finalList)
-        }
-        // Image counts are now handled reactively via the Flow in SourcesTab
-    }
 
     var selectedTab by remember {
         mutableStateOf(
@@ -336,33 +294,14 @@ private fun ShimmerSettingsScreen(
         ) {
             when (selectedTab) {
                 SettingsTab.SOURCES -> {
-                    val repository = remember { ImageFolderRepository(context) }
-                    LaunchedEffect(imageFolders) {
-                        // Extract initial counts from preferences for immediate display
-                        val initialCounts = imageFolders.mapNotNull { folder ->
-                            folder.imageCount?.let { folder.uri to it }
-                        }.toMap()
-                        repository.updateFolders(imageFolders.map { it.uri }, initialCounts)
-                    }
                     SourcesTab(
                         modifier = Modifier.padding(paddingValues),
                         context = context,
                         preferences = preferences,
-                        repository = repository,
                         imageFolders = imageFolders,
                         transitionEnabled = transitionEnabled,
                         transitionIntervalMillis = transitionIntervalMillis,
                         changeImageOnUnlock = changeImageOnUnlock,
-                        onPickFolder = { folderPickerLauncher.launch(null) },
-                        onRemoveFolder = { folderUri ->
-                            val nextList = imageFolders.filter { it.uri != folderUri }
-                            imageFolders = nextList
-                            preferences.setImageFolders(nextList)
-                        },
-                        onImageFoldersChange = { updatedFolders ->
-                            imageFolders = updatedFolders
-                            preferences.setImageFolders(updatedFolders)
-                        },
                         onTransitionEnabledChange = {
                             preferences.setTransitionEnabled(it)
                         },
@@ -457,37 +396,14 @@ private fun SourcesTab(
     modifier: Modifier = Modifier,
     context: Context,
     preferences: WallpaperPreferences,
-    repository: ImageFolderRepository,
     imageFolders: List<ImageFolder>,
     transitionEnabled: Boolean,
     transitionIntervalMillis: Long,
     changeImageOnUnlock: Boolean,
-    onPickFolder: () -> Unit,
-    onRemoveFolder: (String) -> Unit,
-    onImageFoldersChange: (List<ImageFolder>) -> Unit,
     onTransitionEnabledChange: (Boolean) -> Unit,
     onTransitionDurationChange: (Long) -> Unit,
     onChangeImageOnUnlockChange: (Boolean) -> Unit,
 ) {
-    var isRefreshing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
-    val imageCounts by repository.imageCounts.collectAsState()
-    
-    // Update imageFolders with counts from the flow
-    LaunchedEffect(imageCounts) {
-        val updatedFolders = imageFolders.map { folder ->
-            val count = imageCounts[folder.uri]
-            if (count != null && folder.imageCount != count) {
-                folder.copy(imageCount = count)
-            } else {
-                folder
-            }
-        }
-        if (updatedFolders != imageFolders) {
-            onImageFoldersChange(updatedFolders)
-        }
-    }
-    
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -499,22 +415,10 @@ private fun SourcesTab(
         verticalArrangement = Arrangement.spacedBy(PADDING_X),
     ) {
         item {
-            FolderSelection(
+            FolderThumbnailSlider(
                 imageFolders = imageFolders,
-                isRefreshing = isRefreshing,
-                onPickFolder = onPickFolder,
-                onRemoveFolder = onRemoveFolder,
-                onRefresh = {
-                    isRefreshing = true
-                    // Refresh folder counts asynchronously (repository handles async internally)
-                    imageFolders.forEach { folder ->
-                        repository.refreshFolder(folder.uri)
-                    }
-                    // Reset refreshing state after a short delay (counts will update via Flow)
-                    coroutineScope.launch {
-                        kotlinx.coroutines.delay(500) // Give scans a moment to start
-                        isRefreshing = false
-                    }
+                onOpenFolderSelection = {
+                    context.startActivity(Intent(context, FolderSelectionActivity::class.java))
                 }
             )
         }
@@ -760,12 +664,9 @@ private fun EffectsTab(
 }
 
 @Composable
-private fun FolderSelection(
+private fun FolderThumbnailSlider(
     imageFolders: List<ImageFolder>,
-    isRefreshing: Boolean,
-    onPickFolder: () -> Unit,
-    onRemoveFolder: (String) -> Unit,
-    onRefresh: () -> Unit,
+    onOpenFolderSelection: () -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -796,69 +697,45 @@ private fun FolderSelection(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
-            }
-            Text(
-                text = "Select folders containing images to use as wallpaper sources",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (imageFolders.isEmpty()) {
-                Text(
-                    text = "No folders selected. Add a folder to display your own images.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            } else {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    imageFolders.forEach { folder ->
-                        FolderCard(
-                            imageFolder = folder,
-                            onRemove = onRemoveFolder
-                        )
-                    }
+                Button(onClick = onOpenFolderSelection) {
+                    Text("Manage")
                 }
             }
             
-            // Refresh and Add buttons at the bottom
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onRefresh,
-                    enabled = !isRefreshing && imageFolders.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
+            if (imageFolders.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (isRefreshing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
+                            imageVector = Icons.Default.Folder,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "No folders selected",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = if (isRefreshing) "Refreshing..." else "Refresh")
                 }
-                Button(
-                    onClick = onPickFolder,
-                    modifier = Modifier.weight(1f)
+            } else {
+                // Large thumbnail slider without labels
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "Add")
+                    items(imageFolders, key = { it.uri }) { folder ->
+                        FolderThumbnailLarge(folder = folder)
+                    }
                 }
             }
         }
@@ -866,82 +743,24 @@ private fun FolderSelection(
 }
 
 @Composable
-private fun FolderCard(
-    imageFolder: ImageFolder,
-    onRemove: (String) -> Unit,
-) {
-    val context = LocalContext.current
-    val folderName = remember(imageFolder.uri) {
-        DocumentFile.fromTreeUri(context, imageFolder.uri.toUri())?.name ?: imageFolder.uri
-    }
-    val displayPath = remember(imageFolder.uri) {
-        formatTreeUriPath(imageFolder.uri)
-    }
-    val previewUri = remember(imageFolder.thumbnailUri) {
-        imageFolder.thumbnailUri?.toUri()
-    }
-    val imageCount = remember(imageFolder.imageCount) {
-        imageFolder.imageCount ?: 0
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            FolderThumbnail(previewUri)
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = folderName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = displayPath,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = if (imageCount == 1) "1 image" else "$imageCount images",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            TextButton(onClick = { onRemove(imageFolder.uri) }) {
-                Text(text = "Remove")
-            }
-        }
-    }
-}
-
-@Composable
-private fun FolderThumbnail(
-    previewUri: Uri?,
+private fun FolderThumbnailLarge(
+    folder: ImageFolder,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val previewUri = remember(folder.thumbnailUri) {
+        folder.thumbnailUri?.toUri()
+    }
+
     Surface(
-        modifier = modifier.size(80.dp),
-        shape = RoundedCornerShape(8.dp),
+        modifier = modifier.size(160.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
         if (previewUri != null) {
             AsyncImage(
                 modifier = Modifier.fillMaxSize(),
-                model = ImageRequest.Builder(LocalContext.current)
+                model = ImageRequest.Builder(context)
                     .data(previewUri)
                     .crossfade(true)
                     .build(),
@@ -956,7 +775,7 @@ private fun FolderThumbnail(
                 Icon(
                     imageVector = Icons.Default.Folder,
                     contentDescription = null,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -964,76 +783,6 @@ private fun FolderThumbnail(
     }
 }
 
-private suspend fun getFolderThumbnailUri(
-    context: Context,
-    folderUri: String,
-    existingThumbnailUri: String? = null,
-): Uri? {
-    return withContext(Dispatchers.IO) {
-        try {
-            // Validate existing thumbnail if provided
-            if (existingThumbnailUri != null) {
-                val existingUri = existingThumbnailUri.toUri()
-                val existingFile = DocumentFile.fromSingleUri(context, existingUri)
-                if (existingFile?.exists() == true && existingFile.canRead()) {
-                    return@withContext existingUri
-                }
-            }
-
-            // Existing thumbnail invalid or missing, scan folder for new image
-            val folder = DocumentFile.fromTreeUri(context, folderUri.toUri()) ?: return@withContext null
-            folder.listFiles()
-                .asSequence()
-                .filter { it.isFile && it.type?.startsWith("image/") == true }
-                .map { it.uri }
-                .firstOrNull()
-        } catch (_: SecurityException) {
-            null
-        }
-    }
-}
-
-private suspend fun isValidThumbnailUri(context: Context, thumbnailUri: String): Boolean {
-    return withContext(Dispatchers.IO) {
-        try {
-            val uri = thumbnailUri.toUri()
-            val file = DocumentFile.fromSingleUri(context, uri)
-            file?.exists() == true && file.canRead()
-        } catch (_: Exception) {
-            false
-        }
-    }
-}
-
-private fun formatTreeUriPath(uriString: String): String {
-    return try {
-        val uri = uriString.toUri()
-        val documentId = DocumentsContract.getTreeDocumentId(uri)
-        val colonIndex = documentId.indexOf(':')
-        val storage = if (colonIndex < 0) {
-            documentId
-        } else {
-            documentId.substring(0, colonIndex)
-        }
-        val rawPath = if (colonIndex < 0) {
-            ""
-        } else {
-            documentId.substring(colonIndex + 1)
-        }
-        val storageLabel = when (storage.lowercase()) {
-            "primary" -> "sdcard"
-            else -> storage
-        }
-        if (rawPath.isBlank()) {
-            storageLabel
-        } else {
-            val decodedPath = Uri.decode(rawPath).trimStart('/')
-            "$storageLabel/$decodedPath"
-        }
-    } catch (_: Exception) {
-        uriString
-    }
-}
 
 @Composable
 private fun SliderSetting(
