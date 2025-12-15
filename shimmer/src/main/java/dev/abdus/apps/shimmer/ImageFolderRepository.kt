@@ -129,6 +129,9 @@ class ImageFolderRepository(
         synchronized(folderImagePositions) {
             folderImagePositions.clear()
         }
+        // Reset state to ensure fresh start after refresh
+        lastDisplayedUri = null
+        currentFolderIndex = 0
         // Trigger scans asynchronously for all folders
         urisToRefresh.forEach { uri ->
             repositoryScope.launch {
@@ -207,9 +210,22 @@ class ImageFolderRepository(
 
             if (images.isNotEmpty()) {
                 val candidate = selectNextImage(folderUri, images)
-                currentFolderIndex = (currentFolderIndex + 1) % folderUris.size
-                lastDisplayedUri = candidate
-                return candidate
+                
+                // Validate URI as safety net (should be rare since scanFolder validates)
+                if (isImageUriValid(candidate)) {
+                    currentFolderIndex = (currentFolderIndex + 1) % folderUris.size
+                    lastDisplayedUri = candidate
+                    return candidate
+                }
+                
+                // Invalid URI detected, clear cache and rescan
+                Log.w(TAG, "nextImageUri: Invalid URI detected: $candidate, clearing cache for folder")
+                synchronized(folderContents) {
+                    folderContents.remove(folderUri)
+                }
+                synchronized(folderImagePositions) {
+                    folderImagePositions.remove(folderUri)
+                }
             }
 
             // No images in this folder, try next
@@ -249,9 +265,26 @@ class ImageFolderRepository(
             val documentFile = DocumentFile.fromTreeUri(context, Uri.parse(folderUri))
                 ?: return emptyList()
 
-            documentFile.listFiles()
+            val uris = documentFile.listFiles()
                 .filter { it.isFile && it.type?.startsWith("image/") == true }
+                .filter { file ->
+                    // Validate file exists and is readable before caching its URI
+                    // This prevents caching stale URIs for deleted files
+                    val exists = file.exists()
+                    val canRead = file.canRead()
+                    if (!exists || !canRead) {
+                        Log.w(TAG, "scanFolder: Skipping invalid file (exists=$exists, canRead=$canRead): ${file.uri}")
+                    }
+                    exists && canRead
+                }
                 .map { it.uri }
+            
+            Log.d(TAG, "scanFolder: Scanned $folderUri, found ${uris.size} images")
+            if (uris.isNotEmpty()) {
+                Log.d(TAG, "scanFolder: First URI: ${uris.first()}")
+            }
+            
+            uris
         } catch (e: Exception) {
             Log.e(TAG, "Failed to scan folder $folderUri", e)
             emptyList()
