@@ -848,6 +848,16 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
+     * Called when the wallpaper visibility changes. Syncs the parallax animator's current value
+     * to match the target value, ensuring smooth animation starts from the correct position.
+     * This prevents lag when the user starts swiping immediately after unlock.
+     */
+    fun onVisibilityChanged() {
+        val targetOffset = animationController.targetRenderState.parallaxOffset
+        animationController.parallaxOffsetAnimator.reset(targetOffset)
+    }
+
+    /**
      * Recomputes projection matrices for current and previous images.
      * Handles aspect ratio matching and parallax offset.
      */

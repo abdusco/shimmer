@@ -18,7 +18,7 @@ import kotlin.math.abs
  *                        Default 0.15 provides good balance
  */
 class SmoothingFloatAnimator(
-    private val smoothingFactor: Float = 0.15f,
+    private val smoothingFactor: Float = 0.2f,
     private val snapThreshold: Float = 0.001f
 ) {
     var currentValue: Float = 0f

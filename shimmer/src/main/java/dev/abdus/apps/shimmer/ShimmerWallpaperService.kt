@@ -336,7 +336,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             super.onSurfaceCreated(holder)
             surfaceAvailable = true
             commandQueue.enqueueReplayOfLatest()
-            
+
             // Don't drain commands here - wait for onRendererReady() to re-resolve state first
             // This prevents old context-dependent commands (like blur) from being applied
             // before we've re-resolved the correct state based on current context
@@ -375,6 +375,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             if (engineVisible) {
                 tapGestureDetector.reset()
+                // Sync parallax animator when becoming visible to prevent lag after unlock
+                queueEvent {
+                    renderer?.onVisibilityChanged()
+                }
                 if (surfaceAvailable) {
                     requestRenderIfRenderable("visibilityChanged")
                 }
