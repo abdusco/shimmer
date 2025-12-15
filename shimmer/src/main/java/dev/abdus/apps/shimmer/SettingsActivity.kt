@@ -605,21 +605,27 @@ private fun EffectsTab(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    SliderSetting(
+                    PercentSlider(
                         title = "Blur amount",
                         icon = Icons.Outlined.RemoveRedEye,
                         value = localBlurAmount,
-                        onValueChange = { localBlurAmount = it }
+                        onValueChange = { localBlurAmount = it },
+                        steps = (1f / 0.05f).toInt() - 1,
                     )
-                    SliderSetting(
+                    PercentSlider(
                         title = "Dim amount",
                         icon = Icons.Outlined.Brightness4,
                         value = localDimAmount,
-                        onValueChange = { localDimAmount = it }
+                        onValueChange = { localDimAmount = it },
+                        steps = (1f / 0.05f).toInt() - 1,
                     )
-                    EffectTransitionDurationSlider(
+                    DurationSlider(
+                        title = "Effect transition duration",
                         durationMillis = effectTransitionDurationMillis,
-                        onDurationChange = onEffectTransitionDurationChange
+                        onDurationChange = onEffectTransitionDurationChange,
+                        durationRange = 0L..3000L,
+                        steps = (3000L / 250L).toInt() - 1, 
+                        icon = Icons.Outlined.Speed,
                     )
                 }
             }
@@ -909,13 +915,14 @@ private fun FolderThumbnailLarge(
 
 
 @Composable
-private fun SliderSetting(
+private fun PercentSlider(
     title: String,
     value: Float,
     onValueChange: (Float) -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     enabled: Boolean = true,
     steps: Int = 19,
+    labelFormatter: (Float) -> String = { formatPercent(it) },
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -932,7 +939,7 @@ private fun SliderSetting(
                 )
             }
             Text(
-                text = "$title: ${formatPercent(value)}",
+                text = "$title: ${labelFormatter(value)}",
                 style = MaterialTheme.typography.bodyMedium
             )
         }
@@ -948,54 +955,43 @@ private fun SliderSetting(
 
 private fun formatPercent(value: Float): String = "${(value * 100).roundToInt()}%"
 
-private fun grainScaleToImagePx(scale: Float): Float {
-    val clamped = scale.coerceIn(0f, 1f)
-    return ShimmerRenderer.GRAIN_SIZE_MIN_IMAGE_PX +
-        (ShimmerRenderer.GRAIN_SIZE_MAX_IMAGE_PX - ShimmerRenderer.GRAIN_SIZE_MIN_IMAGE_PX) * clamped
-}
-
-private fun formatPx(value: Float): String = String.format("%.2f", value)
-
 @Composable
-private fun EffectTransitionDurationSlider(
+private fun DurationSlider(
+    title: String,
     durationMillis: Long,
     onDurationChange: (Long) -> Unit,
+    durationRange: LongRange,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    enabled: Boolean = true,
+    steps: Int = 20 - 1,
 ) {
-    // Range: 0ms to 3000ms in 250ms steps = 13 steps (0, 250, 500, ..., 3000)
-    val steps = 12 // 13 values means 12 steps between them
-    val stepSize = 250L
-    val maxValue = 3000L
-
-    val sliderValue = (durationMillis / stepSize).toFloat()
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Speed,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "Effect transition duration: ${formatDurationMs(durationMillis)}",
-                style = MaterialTheme.typography.bodyMedium
-            )
+    val minDuration = durationRange.first.toFloat()
+    val maxDuration = durationRange.last.toFloat()
+    val durationSpan = maxDuration - minDuration
+    
+    // Convert duration to 0..1 slider value
+    val sliderValue = ((durationMillis - minDuration) / durationSpan).coerceIn(0f, 1f)
+    
+    PercentSlider(
+        title = title,
+        icon = icon,
+        value = sliderValue,
+        onValueChange = { sliderVal ->
+            // Convert slider value (0..1) back to duration range
+            val newDuration = (sliderVal * durationSpan + minDuration).roundToInt().toLong()
+                .coerceIn(durationRange.first, durationRange.last)
+            onDurationChange(newDuration)
+        },
+        enabled = enabled,
+        steps = steps,
+        labelFormatter = { sliderVal ->
+            val duration = (sliderVal * durationSpan + minDuration).roundToInt().toLong()
+                .coerceIn(durationRange.first, durationRange.last)
+            formatDurationMs(duration)
         }
-        Slider(
-            value = sliderValue,
-            onValueChange = { newValue ->
-                val newDuration = (newValue.roundToInt() * stepSize).coerceIn(0L, maxValue)
-                onDurationChange(newDuration)
-            },
-            steps = steps - 1,
-            valueRange = 0f..(maxValue / stepSize).toFloat()
-        )
-    }
+    )
 }
+
 
 private fun formatDurationMs(millis: Long): String {
     return if (millis == 0L) {
@@ -1276,28 +1272,21 @@ private fun GrainSettings(
             
             AnimatedVisibility(visible = enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SliderSetting(
+                    PercentSlider(
                         title = "Grain amount",
                         icon = Icons.Outlined.RemoveRedEye,
                         value = amount,
                         onValueChange = onAmountChange,
-                        steps = 10 - 1,
+                        steps = (1f / 0.1f).toInt() - 1,
                     )
                     
-                    val grainPx = grainScaleToImagePx(scale)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Grain size: ~${formatPx(grainPx)} image px",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Slider(
-                            value = scale,
-                            onValueChange = onScaleChange,
-                            steps = 10 - 1,
-                            valueRange = 0f..1f
-                        )
-                    }
+                    PercentSlider(
+                        title = "Grain size",
+                        icon = Icons.Outlined.RemoveRedEye,
+                        value = scale,
+                        onValueChange = onScaleChange,
+                        steps = (1f / 0.1f).toInt() - 1,
+                    )
                 }
             }
         }
@@ -1426,31 +1415,22 @@ private fun ChromaticAberrationSettings(
             
             AnimatedVisibility(visible = enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Intensity: ${formatPercent(intensity)}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Slider(
-                            value = intensity,
-                            onValueChange = onIntensityChange,
-                            steps = 19,
-                            valueRange = 0f..1f
-                        )
-                    }
+                    PercentSlider(
+                        title = "Intensity",
+                        icon = Icons.Outlined.RemoveRedEye,
+                        value = intensity,
+                        onValueChange = onIntensityChange,
+                        steps = (1f / 0.1f).toInt() - 1,
+                    )
                     
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Fade duration: ${fadeDurationMillis}ms",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Slider(
-                            value = fadeDurationMillis.toFloat(),
-                            onValueChange = { onFadeDurationChange(it.toLong()) },
-                            steps = 19,
-                            valueRange = 100f..2000f
-                        )
-                    }
+                    DurationSlider(
+                        title = "Fade duration",
+                        durationMillis = fadeDurationMillis,
+                        onDurationChange = onFadeDurationChange,
+                        icon = Icons.Outlined.Timer,
+                        durationRange = 0L..3000L,
+                        steps = (2000L / 250L).toInt() - 1,
+                    )
                 }
             }
         }
