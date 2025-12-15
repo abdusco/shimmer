@@ -478,6 +478,16 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             varying vec2 vTexCoords;
             varying vec2 vPosition;
 
+            // Luminosity calculation macro (using Rec. 709 luma coefficients)
+            #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
+
+            // Apply duotone effect to a color
+            vec3 applyDuotone(vec3 color) {
+                float lum = LUMINOSITY(vec4(color, 1.0));
+                vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
+                return mix(color, duotone, uDuotoneOpacity);
+            }
+
             // Simplex 2D noise
             // From: https://github.com/patriciogonzalezvivo/thebookofshaders/blob/master/glsl/noise/simplex_2d.glsl
             vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
@@ -509,12 +519,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             }
 
             void main() {
-                vec4 color = texture2D(uTexture, vTexCoords);
-                float lum = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-                vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-                vec3 duotonedColor = mix(color.rgb, duotone, uDuotoneOpacity);
-                vec3 dimmedColor = mix(duotonedColor, vec3(0.0), uDimAmount);
-
                 // Dithering (screen space is fine for dithering to break gradients)
                 // Use a simple high-freq hash for dithering
                 float noise = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453) - 0.5) / 64.0;
@@ -577,27 +581,26 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                     }
                 }
                 
-                // Apply chromatic aberration by sampling RGB channels at different offsets
-                vec3 finalColor = dimmedColor;
-                if (length(totalChromaticOffset) > 0.001) {
-                    // Sample red channel pushed outward
-                    float r = texture2D(uTexture, vTexCoords + totalChromaticOffset).r;
-                    // Sample green channel at normal position
-                    float g = texture2D(uTexture, vTexCoords).g;
-                    // Sample blue channel pulled inward
-                    float b = texture2D(uTexture, vTexCoords - totalChromaticOffset).b;
-                    
-                    vec3 chromaticColor = vec3(r, g, b);
-                    
-                    // Apply duotone and dim to the chromatic result
-                    float lum = 0.2126 * chromaticColor.r + 0.7152 * chromaticColor.g + 0.0722 * chromaticColor.b;
-                    vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-                    vec3 duotonedChromatic = mix(chromaticColor, duotone, uDuotoneOpacity);
-                    finalColor = mix(duotonedChromatic, vec3(0.0), uDimAmount);
-                }
+                // Sample RGB channels at different offsets and apply duotone to each
+                // When there's no chromatic aberration, offsets are zero so all samples are identical
+                vec4 colorR = texture2D(uTexture, vTexCoords + totalChromaticOffset);
+                vec4 colorG = texture2D(uTexture, vTexCoords);
+                vec4 colorB = texture2D(uTexture, vTexCoords - totalChromaticOffset);
+                
+                vec3 duotonedR = applyDuotone(colorR.rgb);
+                vec3 duotonedG = applyDuotone(colorG.rgb);
+                vec3 duotonedB = applyDuotone(colorB.rgb);
+                
+                // Combine RGB channels for chromatic aberration, or use center sample when no offset
+                vec3 finalColor = length(totalChromaticOffset) > 0.001 
+                    ? vec3(duotonedR.r, duotonedG.g, duotonedB.b)
+                    : duotonedG;
+                
+                // Apply dimming
+                finalColor = mix(finalColor, vec3(0.0), uDimAmount);
 
                 finalColor = clamp(finalColor + noise + grain, 0.0, 1.0);
-                gl_FragColor = vec4(finalColor, color.a * uAlpha);
+                gl_FragColor = vec4(finalColor, colorG.a * uAlpha);
             }
         """
 
