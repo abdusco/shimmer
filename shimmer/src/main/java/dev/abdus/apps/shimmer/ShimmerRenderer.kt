@@ -613,10 +613,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         GLES20.glClearColor(0f, 0f, 0f, 1f)
 
-        // Picture shader
-        val pictureVertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, PICTURE_VERTEX_SHADER_CODE)
-        val pictureFragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, PICTURE_FRAGMENT_SHADER_CODE)
-        val pictureProgram = GLUtil.createAndLinkProgram(pictureVertexShader, pictureFragmentShader)
+        try {
+            // Picture shader
+            val pictureVertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, PICTURE_VERTEX_SHADER_CODE)
+            val pictureFragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, PICTURE_FRAGMENT_SHADER_CODE)
+            val pictureProgram = GLUtil.createAndLinkProgram(pictureVertexShader, pictureFragmentShader)
         pictureHandles = PictureHandles(
             program = pictureProgram,
             attribPosition = GLES20.glGetAttribLocation(pictureProgram, "aPosition"),
@@ -635,6 +636,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniformTouchIntensities = GLES20.glGetUniformLocation(pictureProgram, "uTouchIntensities"),
             uniformScreenSize = GLES20.glGetUniformLocation(pictureProgram, "uScreenSize"),
         )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize shaders", e)
+            surfaceCreated = false
+            throw e
+        }
 
         val maxTextureSize = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, maxTextureSize, 0)
@@ -936,9 +942,14 @@ object GLUtil {
      * @param type Shader type (GL_VERTEX_SHADER or GL_FRAGMENT_SHADER)
      * @param shaderCode GLSL source code
      * @return Compiled shader handle
+     * @throws RuntimeException if shader compilation fails
      */
     fun loadShader(type: Int, shaderCode: String): Int {
         val shader = GLES20.glCreateShader(type)
+        if (shader == 0) {
+            throw RuntimeException("Failed to create shader (glCreateShader returned 0)")
+        }
+        
         GLES20.glShaderSource(shader, shaderCode)
         GLES20.glCompileShader(shader)
 
@@ -946,7 +957,15 @@ object GLUtil {
         GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compileStatus, 0)
         if (compileStatus[0] == 0) {
             val log = GLES20.glGetShaderInfoLog(shader)
-            Log.e(TAG, "Shader compile error: $log")
+            val shaderTypeName = when (type) {
+                GLES20.GL_VERTEX_SHADER -> "vertex"
+                GLES20.GL_FRAGMENT_SHADER -> "fragment"
+                else -> "unknown"
+            }
+            val errorMsg = "Shader compilation failed ($shaderTypeName shader):\n$log\n\nShader source:\n$shaderCode"
+            Log.e(TAG, errorMsg)
+            GLES20.glDeleteShader(shader)
+            throw RuntimeException(errorMsg)
         }
         return shader
     }
@@ -981,7 +1000,12 @@ object GLUtil {
         GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0)
         if (linkStatus[0] == 0) {
             val log = GLES20.glGetProgramInfoLog(program)
-            Log.e(TAG, "Program link error: $log")
+            val errorMsg = "Program linking failed:\n$log"
+            Log.e(TAG, errorMsg)
+            GLES20.glDeleteProgram(program)
+            GLES20.glDeleteShader(vertexShader)
+            GLES20.glDeleteShader(fragmentShader)
+            throw RuntimeException(errorMsg)
         }
 
         // Clean up shaders (program retains compiled code)
