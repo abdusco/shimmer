@@ -915,6 +915,7 @@ private fun SliderSetting(
     onValueChange: (Float) -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     enabled: Boolean = true,
+    steps: Int = 19,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -939,7 +940,7 @@ private fun SliderSetting(
             value = value,
             onValueChange = onValueChange,
             enabled = enabled,
-            steps = 19,
+            steps = steps,
             valueRange = 0f..1f
         )
     }
@@ -1279,7 +1280,8 @@ private fun GrainSettings(
                         title = "Grain amount",
                         icon = Icons.Outlined.RemoveRedEye,
                         value = amount,
-                        onValueChange = onAmountChange
+                        onValueChange = onAmountChange,
+                        steps = 10 - 1,
                     )
                     
                     val grainPx = grainScaleToImagePx(scale)
@@ -1292,7 +1294,7 @@ private fun GrainSettings(
                         Slider(
                             value = scale,
                             onValueChange = onScaleChange,
-                            steps = 19,
+                            steps = 10 - 1,
                             valueRange = 0f..1f
                         )
                     }

@@ -436,9 +436,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         private const val TAG = "ShimmerRenderer"
         // Grain size in source image pixels
         const val GRAIN_SIZE_MIN_IMAGE_PX = 1.5f
-        const val GRAIN_SIZE_MAX_IMAGE_PX = 3.5f
+        const val GRAIN_SIZE_MAX_IMAGE_PX = 3f
         // Limit max grain intensity to avoid garish look (user slider 1.0 -> this value)
-        const val GRAIN_INTENSITY_MAX = 0.40f
+        const val GRAIN_INTENSITY_MAX = 0.30f
 
         //language=c
         private const val PICTURE_VERTEX_SHADER_CODE = """
