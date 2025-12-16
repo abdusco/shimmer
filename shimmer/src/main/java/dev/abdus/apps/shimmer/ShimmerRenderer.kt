@@ -14,7 +14,6 @@ import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
-import kotlin.math.sqrt
 
 /**
  * Payload containing image data for the renderer.
@@ -208,21 +207,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun onSurfaceDestroyed() {
         surfaceCreated = false
-        destroyResources()
-    }
-
-    /**
-     * Destroy GL resources. Call from GL thread.
-     */
-    fun destroyResources() {
-        try {
-            pictureSet?.destroyPictures()
-            pictureSet = null
-            previousPictureSet?.destroyPictures()
-            previousPictureSet = null
-        } catch (e: Exception) {
-            Log.w(TAG, "destroyResources: failed to release GL resources", e)
-        }
+        pictureSet = null
+        previousPictureSet = null
     }
 
     /**
@@ -775,7 +761,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         // Clean up previous picture set after fade completes
         if (!animationController.imageTransitionAnimator.isRunning && previousImageAlpha <= 0f) {
-            previousPictureSet?.destroyPictures()
             previousPictureSet = null
             previousBitmapAspect = null
         }
@@ -797,8 +782,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             Log.w(TAG, "updatePictureSet: Surface no longer available, aborting")
             return
         }
-        
-        previousPictureSet?.destroyPictures()
+
         previousPictureSet = pictureSet
 
         // Build the bitmap list: [original, ...blurLevels]

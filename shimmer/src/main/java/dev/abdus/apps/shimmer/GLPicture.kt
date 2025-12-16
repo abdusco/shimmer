@@ -3,7 +3,6 @@ package dev.abdus.apps.shimmer
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.opengl.GLES20
-import android.util.Log
 import java.nio.FloatBuffer
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -37,7 +36,6 @@ class GLPictureSet {
      * @param bitmaps List of bitmaps with progressive blur levels (first = original, rest = increasingly blurred)
      */
     fun load(bitmaps: List<Bitmap?>, tileSize: Int) {
-        destroyPictures()
         pictures = arrayOfNulls(bitmaps.size)
         for (index in pictures.indices) {
             pictures[index] = bitmaps.getOrNull(index)?.let { GLPicture(it, tileSize) }
@@ -140,13 +138,6 @@ class GLPictureSet {
                     screenSize = screenSize,
                 )
             }
-        }
-    }
-
-    fun destroyPictures() {
-        for (i in pictures.indices) {
-            pictures[i]?.destroy()
-            pictures[i] = null
         }
     }
 }
