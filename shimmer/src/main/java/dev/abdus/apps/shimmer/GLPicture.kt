@@ -277,6 +277,7 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
             android.graphics.Color.blue(duotone.darkColor) / 255f
         )
         GLES20.glUniform1f(handles.uniformDuotoneOpacity, duotone.opacity)
+        GLES20.glUniform1i(handles.uniformDuotoneBlendMode, duotone.blendMode.ordinal)
         GLES20.glUniform1f(handles.uniformDimAmount, dimAmount)
         GLES20.glUniform1f(handles.uniformGrainAmount, grainAmount)
         GLES20.glUniform2f(handles.uniformGrainCount, grainCountX, grainCountY)

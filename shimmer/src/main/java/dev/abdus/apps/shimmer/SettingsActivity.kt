@@ -360,6 +360,9 @@ private fun ShimmerSettingsScreen(
                             preferences.setDuotoneDarkColor(parsed)
                         }
                     },
+                    onDuotoneBlendModeChange = {
+                        preferences.setDuotoneBlendMode(it)
+                    },
                     onGrainEnabledChange = {
                         preferences.setGrainEnabled(it)
                     },
@@ -483,6 +486,7 @@ private fun EffectsTab(
     onDuotoneAlwaysOnChange: (Boolean) -> Unit,
     onDuotoneLightColorChange: (String) -> Unit,
     onDuotoneDarkColorChange: (String) -> Unit,
+    onDuotoneBlendModeChange: (DuotoneBlendMode) -> Unit,
     onGrainEnabledChange: (Boolean) -> Unit,
     onGrainAmountChange: (Float) -> Unit,
     onGrainScaleChange: (Float) -> Unit,
@@ -665,10 +669,12 @@ private fun EffectsTab(
                 darkColorText = colorIntToHex(duotone.darkColor),
                 lightColorPreview = colorIntToComposeColor(duotone.lightColor),
                 darkColorPreview = colorIntToComposeColor(duotone.darkColor),
+                blendMode = duotone.blendMode,
                 onEnabledChange = onDuotoneEnabledChange,
                 onAlwaysOnChange = onDuotoneAlwaysOnChange,
                 onLightColorChange = onDuotoneLightColorChange,
                 onDarkColorChange = onDuotoneDarkColorChange,
+                onBlendModeChange = onDuotoneBlendModeChange,
                 onPresetSelected = onDuotonePresetSelected
             )
         }
@@ -1145,10 +1151,12 @@ private fun DuotoneSettings(
     darkColorText: String,
     lightColorPreview: Color,
     darkColorPreview: Color,
+    blendMode: DuotoneBlendMode,
     onEnabledChange: (Boolean) -> Unit,
     onAlwaysOnChange: (Boolean) -> Unit,
     onLightColorChange: (String) -> Unit,
     onDarkColorChange: (String) -> Unit,
+    onBlendModeChange: (DuotoneBlendMode) -> Unit,
     onPresetSelected: (DuotonePreset) -> Unit,
 ) {
     Surface(
@@ -1215,6 +1223,10 @@ private fun DuotoneSettings(
                         value = darkColorText,
                         onValueChange = onDarkColorChange,
                         previewColor = darkColorPreview
+                    )
+                    DuotoneBlendModeDropdown(
+                        selectedBlendMode = blendMode,
+                        onBlendModeSelected = onBlendModeChange
                     )
                     DuotonePresetDropdown(onPresetSelected = onPresetSelected)
                 }
@@ -1497,6 +1509,40 @@ private fun BlurTimeoutSetting(
                 valueRange = 0f..steps.toFloat(),
                 steps = (steps - 1).coerceAtLeast(0)
             )
+        }
+    }
+}
+
+@Composable
+private fun DuotoneBlendModeDropdown(
+    selectedBlendMode: DuotoneBlendMode,
+    onBlendModeSelected: (DuotoneBlendMode) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val blendModes = listOf(
+        DuotoneBlendMode.NORMAL to "Normal",
+        DuotoneBlendMode.SOFT_LIGHT to "Soft Light",
+        DuotoneBlendMode.SCREEN to "Screen"
+    )
+    val selectedName = blendModes.find { it.first == selectedBlendMode }?.second ?: "Normal"
+    
+    Box {
+        OutlinedButton(onClick = { expanded = true }) {
+            Text(text = "Blend mode: $selectedName")
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            blendModes.forEach { (mode, name) ->
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    onClick = {
+                        expanded = false
+                        onBlendModeSelected(mode)
+                    }
+                )
+            }
         }
     }
 }

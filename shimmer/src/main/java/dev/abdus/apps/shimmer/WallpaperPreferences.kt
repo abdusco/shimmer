@@ -5,10 +5,33 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+
+object DuotoneBlendModeSerializer : KSerializer<DuotoneBlendMode> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("DuotoneBlendMode", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: DuotoneBlendMode) {
+        encoder.encodeString(value.name)
+    }
+
+    override fun deserialize(decoder: Decoder): DuotoneBlendMode {
+        val string = decoder.decodeString()
+        return try {
+            DuotoneBlendMode.valueOf(string)
+        } catch (e: IllegalArgumentException) {
+            DuotoneBlendMode.NORMAL
+        }
+    }
+}
 
 @Serializable
 data class DuotoneSettings(
@@ -17,6 +40,8 @@ data class DuotoneSettings(
     val lightColor: Int,
     val darkColor: Int,
     val presetIndex: Int,
+    @Serializable(with = DuotoneBlendModeSerializer::class)
+    val blendMode: DuotoneBlendMode = DuotoneBlendMode.NORMAL,
 )
 
 @Serializable
@@ -225,7 +250,8 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         alwaysOn = DEFAULT_DUOTONE_ALWAYS_ON,
         lightColor = DEFAULT_DUOTONE_LIGHT,
         darkColor = DEFAULT_DUOTONE_DARK,
-        presetIndex = -1
+        presetIndex = -1,
+        blendMode = DuotoneBlendMode.NORMAL
     )
 
     fun setDuotoneEnabled(enabled: Boolean) {
@@ -254,6 +280,11 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setDuotonePresetIndex(index: Int) {
         val current = getDuotoneSettings()
         setDuotoneSettings(current.copy(presetIndex = index))
+    }
+
+    fun setDuotoneBlendMode(blendMode: DuotoneBlendMode) {
+        val current = getDuotoneSettings()
+        setDuotoneSettings(current.copy(blendMode = blendMode))
     }
 
     fun applyDuotonePreset(

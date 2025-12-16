@@ -107,7 +107,7 @@ class SplashActivity : ComponentActivity() {
                 duotone = Duotone(
                     lightColor = preset.lightColor,
                     darkColor = preset.darkColor,
-                    opacity = 1f
+                    opacity = 1f,
                 ),
             )
         }

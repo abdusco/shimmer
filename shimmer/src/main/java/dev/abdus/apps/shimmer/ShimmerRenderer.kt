@@ -37,15 +37,26 @@ data class ImageSet(
 )
 
 /**
+ * Blend mode for duotone effect application.
+ */
+enum class DuotoneBlendMode {
+    NORMAL,      // Simple linear interpolation (mix)
+    SOFT_LIGHT, // Soft light blend mode
+    SCREEN,     // Screen blend mode
+}
+
+/**
  * Duotone color effect configuration.
  * @property lightColor Color for highlights (default: white)
  * @property darkColor Color for shadows (default: black)
  * @property opacity Effect opacity (0.0 = disabled, 1.0 = full effect)
+ * @property blendMode How the duotone effect is blended with the original image
  */
 data class Duotone(
     val lightColor: Int = Color.WHITE,
     val darkColor: Int = Color.BLACK,
     val opacity: Float = 0f,
+    val blendMode: DuotoneBlendMode = DuotoneBlendMode.NORMAL,
 )
 
 /**
@@ -281,7 +292,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         val newTargetDuotone = Duotone(
             lightColor = duotone.lightColor,
             darkColor = duotone.darkColor,
-            opacity = if (enabled) 1f else 0f
+            opacity = if (enabled) 1f else 0f,
+            blendMode = duotone.blendMode
         )
         val baseState = animationController.targetRenderState
         if (baseState.duotone != newTargetDuotone || baseState.duotoneAlwaysOn != alwaysOn) {
@@ -448,12 +460,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             #else
             precision mediump float;
             #endif
-            
+
             uniform sampler2D uTexture;
             uniform float uAlpha;
             uniform vec3 uDuotoneLightColor;
             uniform vec3 uDuotoneDarkColor;
             uniform float uDuotoneOpacity;
+            uniform int uDuotoneBlendMode;
             uniform float uDimAmount;
             uniform float uGrainAmount;
             uniform vec2 uGrainCount;
@@ -467,11 +480,42 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             // Luminosity calculation macro (using Rec. 709 luma coefficients)
             #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
 
+            // Soft light blend mode (Photoshop formula)
+            vec3 blendSoftLight(vec3 base, vec3 blend) {
+                // If blend <= 0.5: result = base - (1 - 2*blend) * base * (1 - base)
+                // If blend > 0.5: result = base + (2*blend - 1) * (sqrt(base) - base)
+                vec3 result1 = base - (1.0 - 2.0 * blend) * base * (1.0 - base);
+                vec3 result2 = base + (2.0 * blend - 1.0) * (sqrt(base) - base);
+                return mix(result1, result2, step(0.5, blend));
+            }
+
+            // Screen blend mode
+            vec3 blendScreen(vec3 base, vec3 blend) {
+                // Screen: 1 - (1 - base) * (1 - blend)
+                return 1.0 - (1.0 - base) * (1.0 - blend);
+            }
+
             // Apply duotone effect to a color
             vec3 applyDuotone(vec3 color) {
                 float lum = LUMINOSITY(vec4(color, 1.0));
                 vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-                return mix(color, duotone, uDuotoneOpacity);
+                
+                // Apply blend mode based on uDuotoneBlendMode
+                vec3 blended;
+                
+                if (uDuotoneBlendMode == 0) {
+                    // NORMAL
+                    blended = duotone;
+                } else if (uDuotoneBlendMode == 1) {
+                    // SOFT_LIGHT
+                    blended = blendSoftLight(color, duotone);
+                } else {
+                    // SCREEN
+                    blended = blendScreen(color, duotone);
+                }
+                
+                // Apply opacity: mix between original and blended result
+                return mix(color, blended, uDuotoneOpacity);
             }
 
             // Simplex 2D noise
@@ -479,8 +523,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 
             float snoise(vec2 v){
-                const vec4 C = vec4(0.211324865405187, 0.366025403784439,
-                         -0.577350269189626, 0.024390243902439);
+                const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
                 vec2 i  = floor(v + dot(v, C.yy) );
                 vec2 x0 = v -   i + dot(i, C.xx);
                 vec2 i1;
@@ -512,7 +555,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                 // Film grain in image space (attached to geometry)
                 float grain = 0.0;
                 if (uGrainAmount > 0.0) {
-                     // Map -1..1 to 0..1
+                    // Map -1..1 to 0..1
                     vec2 normPos = vPosition * 0.5 + 0.5;
                     
                     // Use Simplex noise which lacks the square grid artifacts of value/perlin noise
@@ -614,6 +657,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniformDuotoneLight = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneLightColor"),
             uniformDuotoneDark = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneDarkColor"),
             uniformDuotoneOpacity = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneOpacity"),
+            uniformDuotoneBlendMode = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneBlendMode"),
             uniformDimAmount = GLES20.glGetUniformLocation(pictureProgram, "uDimAmount"),
             uniformGrainAmount = GLES20.glGetUniformLocation(pictureProgram, "uGrainAmount"),
             uniformGrainCount = GLES20.glGetUniformLocation(pictureProgram, "uGrainCount"),
@@ -681,7 +725,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         val blurPercent = currentRenderState.blurPercent.coerceIn(0f, 1f)
 
         val duotone = currentRenderState.duotone.copy(
-            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurPercent)
+            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurPercent),
+            blendMode = currentRenderState.duotone.blendMode // Explicitly preserve blendMode
         )
 
         val finalDimAmount = currentRenderState.dimAmount * blurPercent
@@ -946,7 +991,7 @@ object GLUtil {
                 GLES20.GL_FRAGMENT_SHADER -> "fragment"
                 else -> "unknown"
             }
-            val errorMsg = "Shader compilation failed ($shaderTypeName shader):\n$log\n\nShader source:\n$shaderCode"
+            val errorMsg = "Shader compilation failed ($shaderTypeName shader):\n$log"
             Log.e(TAG, errorMsg)
             GLES20.glDeleteShader(shader)
             throw RuntimeException(errorMsg)

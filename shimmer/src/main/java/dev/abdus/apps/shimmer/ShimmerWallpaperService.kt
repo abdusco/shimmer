@@ -651,7 +651,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     duotone = Duotone(
                         lightColor = settings.lightColor,
                         darkColor = settings.darkColor,
-                        opacity = if (settings.enabled) 1f else 0f
+                        opacity = if (settings.enabled) 1f else 0f,
+                        blendMode = settings.blendMode
                     )
                 )
             )

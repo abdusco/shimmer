@@ -42,7 +42,8 @@ class AnimationController(private var durationMillis: Int) {
             duotone = Duotone(
                 lightColor = Color.WHITE, // From WallpaperPreferences.DEFAULT_DUOTONE_LIGHT
                 darkColor = Color.BLACK, // From WallpaperPreferences.DEFAULT_DUOTONE_DARK
-                opacity = 0f
+                opacity = 0f,
+                blendMode = DuotoneBlendMode.NORMAL
             ),
             duotoneAlwaysOn = false,
             parallaxOffset = 0.5f,
@@ -193,7 +194,8 @@ class AnimationController(private var durationMillis: Int) {
             duotone = Duotone(
                 lightColor = animatedDuotoneLightColor,
                 darkColor = animatedDuotoneDarkColor,
-                opacity = if (duotoneOpacityAnimating) duotoneOpacityAnimator.currentValue else targetRenderState.duotone.opacity
+                opacity = if (duotoneOpacityAnimating) duotoneOpacityAnimator.currentValue else targetRenderState.duotone.opacity,
+                blendMode = targetRenderState.duotone.blendMode
             ),
             duotoneAlwaysOn = targetRenderState.duotoneAlwaysOn,
             parallaxOffset = parallaxOffsetAnimator.currentValue,
