@@ -174,6 +174,9 @@ private class GLGaussianRenderer(
     private val uRadius: Int
     private val uWeights: Int
 
+    // Weights Cache
+    private val weightsCache = mutableMapOf<Int, FloatArray>()
+
     init {
         // 1. Initialize EGL
         val version = IntArray(2)
@@ -295,15 +298,17 @@ private class GLGaussianRenderer(
     }
 
     private fun calculateGaussianWeights(radius: Int): FloatArray {
-        val sigma = max(radius / 2f, 1f) // Adjusted sigma for smoother falloff
-        val weights = FloatArray(MAX_RADIUS_CONST + 1)
-        var sum = 0f
-        for (i in 0..radius) {
-            weights[i] = exp(-0.5f * (i * i) / (sigma * sigma))
-            sum += if (i == 0) weights[i] else 2f * weights[i]
+        return weightsCache.getOrPut(radius) {
+            val sigma = max(radius / 2f, 1f) // Adjusted sigma for smoother falloff
+            val weights = FloatArray(MAX_RADIUS_CONST + 1)
+            var sum = 0f
+            for (i in 0..radius) {
+                weights[i] = exp(-0.5f * (i * i) / (sigma * sigma))
+                sum += if (i == 0) weights[i] else 2f * weights[i]
+            }
+            for (i in 0..radius) weights[i] /= sum
+            weights
         }
-        for (i in 0..radius) weights[i] /= sum
-        return weights
     }
 
     private fun loadShader(type: Int, code: String): Int {
