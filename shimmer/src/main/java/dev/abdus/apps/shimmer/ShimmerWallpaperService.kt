@@ -12,8 +12,13 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService
-import java.util.concurrent.Executors
 import kotlin.reflect.KClass
 
 class ShimmerWallpaperService : GLWallpaperService() {
@@ -32,10 +37,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private var surfaceAvailable = false
         @Volatile
         private var engineVisible = true
-        private val imageLoadExecutor = Executors.newSingleThreadScheduledExecutor()
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
         private val transitionScheduler =
-            ImageTransitionScheduler(imageLoadExecutor) { handleScheduledAdvance() }
+            ImageTransitionScheduler(scope) { handleScheduledAdvance() }
         private val imageLoader = ImageLoader(
             contentResolver = contentResolver,
             resources = resources,
@@ -151,7 +156,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onReadyForNextImage() {
             Log.d(TAG, "onReadyForNextImage called on ${Thread.currentThread().name}")
             startBlurTimeoutIfUnblurred("onReadyForNextImage")
-            imageLoadExecutor.execute {
+            scope.launch {
                 pendingImageUri?.let { uri ->
                     pendingImageUri = null
                     loadImage(uri)
@@ -400,7 +405,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
             transitionScheduler.cancel()
             folderRepository.cleanup()
-            imageLoadExecutor.shutdownNow()
+            scope.cancel()
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
             super.onDestroy()
         }
@@ -543,7 +548,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun loadDefaultImage() {
             Log.d(TAG, "loadDefaultImage: Loading default wallpaper image")
-            // Called on imageLoadExecutor thread
+            // Called on coroutine scope (IO dispatcher)
             if (folderRepository.hasFolders()) {
                 return
             }
@@ -700,7 +705,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (!folderRepository.hasFolders()) {
                 Log.d(TAG, "setImageFolders: No folders set, loading last or default image")
                 // If no folders are set, try to load the last image. If that fails, load default.
-                imageLoadExecutor.execute {
+                scope.launch {
                     if (!loadLastImage()) {
                         loadDefaultImage()
                     }
@@ -708,13 +713,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 return
             }
 
-            imageLoadExecutor.execute {
+            scope.launch {
                 // Check if current image is still valid in the new folder set
                 val currentUri = currentImageUri
                 if (currentUri != null && folderRepository.isImageUriValid(currentUri)) {
                     Log.d(TAG, "setImageFolders: Current image $currentUri is still valid, keeping it")
                     transitionScheduler.start()
-                    return@execute
+                    return@launch
                 }
 
                 // Current image is invalid or null, load a new one
@@ -774,7 +779,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun requestImageChange() {
-            imageLoadExecutor.execute {
+            scope.launch {
                 Log.d(TAG, "requestImageChange START: pendingUri=$pendingImageUri")
 
                 // Check if renderer is currently animating
@@ -783,15 +788,19 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
                 if (isAnimating) {
                     // Animation is running - queue/replace this request
-                    val next = folderRepository.nextImageUri()
+                    val next = withContext(Dispatchers.Default) {
+                        folderRepository.nextImageUri()
+                    }
                     Log.d(TAG, "  → QUEUING/REPLACING as pending (animating): old=$pendingImageUri, new=$next")
                     pendingImageUri = next
-                    return@execute
+                    return@launch
                 }
 
                 // No animation running - load immediately
                 // Prioritize pending request if it exists, otherwise get next image
-                val uriToLoad = pendingImageUri ?: folderRepository.nextImageUri()
+                val uriToLoad = pendingImageUri ?: withContext(Dispatchers.Default) {
+                    folderRepository.nextImageUri()
+                }
                 pendingImageUri = null  // Clear pending since we're about to load
                 Log.d(TAG, "  → NOT animating, loading: $uriToLoad")
                 if (uriToLoad != null) {
@@ -832,7 +841,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun loadImage(uri: Uri) {
             Log.d(TAG, "loadImage: Loading image from $uri")
-            // Called on imageLoadExecutor thread to load a specific image
+            // Called on coroutine scope (IO dispatcher) to load a specific image
             val imageSet = imageLoader.loadFromUri(uri = uri, blurAmount = preferences.getBlurAmount())
             if (imageSet != null) {
                 Log.d(TAG, "loadImage: imageSet prepared, calling setImage with allowWhenSurfaceUnavailable = true")

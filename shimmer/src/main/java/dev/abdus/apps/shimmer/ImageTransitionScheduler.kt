@@ -1,8 +1,10 @@
 package dev.abdus.apps.shimmer
 
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.max
 
 /**
@@ -10,11 +12,11 @@ import kotlin.math.max
  * the wallpaper engine focused on rendering concerns.
  */
 class ImageTransitionScheduler(
-    private val executor: ScheduledExecutorService,
+    private val scope: CoroutineScope,
     private val onAdvanceRequest: () -> Unit
 ) {
 
-    private var future: ScheduledFuture<*>? = null
+    private var job: Job? = null
     private var transitionIntervalMillis = WallpaperPreferences.DEFAULT_TRANSITION_INTERVAL_MILLIS
     private var transitionEnabled = true
 
@@ -33,22 +35,23 @@ class ImageTransitionScheduler(
     }
 
     fun cancel() {
-        future?.cancel(false)
-        future = null
+        job?.cancel()
+        job = null
     }
 
     private fun restartIfNecessary() {
-        future?.cancel(false)
+        job?.cancel()
         if (!transitionEnabled) {
-            future = null
+            job = null
             return
         }
         val delayMillis = max(transitionIntervalMillis, 1_000L)
-        future = executor.scheduleWithFixedDelay(
-            { onAdvanceRequest() },
-            delayMillis,
-            delayMillis,
-            TimeUnit.MILLISECONDS
-        )
+        job = scope.launch {
+            delay(delayMillis) // Initial delay
+            while (isActive) {
+                onAdvanceRequest()
+                delay(delayMillis)
+            }
+        }
     }
 }
