@@ -217,9 +217,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * Marks the surface/context as lost so subsequent commands are deferred.
      */
     fun onSurfaceDestroyed() {
-        surfaceCreated = false
+        pictureSet?.release()
+        previousPictureSet?.release()
         pictureSet = null
         previousPictureSet = null
+        surfaceCreated = false
     }
 
     /**

@@ -140,6 +140,11 @@ class GLPictureSet {
             }
         }
     }
+
+    fun release() {
+        pictures.forEach { it?.destroy() }
+        pictures = arrayOfNulls(0)
+    }
 }
 
 
@@ -168,7 +173,7 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
     private val vertexBuffer: FloatBuffer = GLUtil.newFloatBuffer(vertices.size)
     private val textureCoordsBuffer: FloatBuffer = GLUtil.asFloatBuffer(SQUARE_TEXTURE_VERTICES)
 
-    private val textureHandles: IntArray
+    private var textureHandles: IntArray
     private val numColumns: Int
     private val numRows: Int
     private val width = bitmap.width
@@ -337,6 +342,13 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
     fun destroy() {
         if (textureHandles.isNotEmpty()) {
             GLES20.glDeleteTextures(textureHandles.size, textureHandles, 0)
+        }
+    }
+
+    fun release() {
+        if (textureHandles.isNotEmpty()) {
+            GLES20.glDeleteTextures(textureHandles.size, textureHandles, 0)
+            textureHandles = IntArray(0)
         }
     }
 }
