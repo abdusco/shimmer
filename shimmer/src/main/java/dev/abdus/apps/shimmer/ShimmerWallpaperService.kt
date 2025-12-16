@@ -565,7 +565,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun applyPreferences() {
             Log.d(TAG, "applyPreferences: Applying wallpaper preferences")
-            applyImageFolderPreference()
+            if (isInitialLoad) {
+                applyImageFolderPreference()
+            }
             applyBlurPreference()
             applyDimPreference()
             applyDuotoneSettingsPreference()
