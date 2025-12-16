@@ -431,6 +431,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     // Touch point management for chromatic aberration
     private val touchPoints = mutableListOf<TouchPoint>()
     private val maxTouchPoints = 10
+    private val touchPointsArray = FloatArray(maxTouchPoints * 3)
+    private val touchIntensitiesArray = FloatArray(maxTouchPoints)
+    private val screenSizeArray = floatArrayOf(0f, 0f)
 
     companion object {
         private const val TAG = "ShimmerRenderer"
@@ -756,10 +759,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         // Update touch point animations
         updateTouchPointAnimations()
 
-        // Prepare touch point data for shader
+        // Prepare touch point data for shader (reuse arrays)
         val touchPointCount = touchPoints.size.coerceAtMost(maxTouchPoints)
-        val touchPointsArray = FloatArray(touchPointCount * 3)
-        val touchIntensitiesArray = FloatArray(touchPointCount)
+        screenSizeArray[0] = surfaceWidthPx.toFloat()
+        screenSizeArray[1] = surfaceHeightPx.toFloat()
+        
+        // Fill existing arrays
         for (i in 0 until touchPointCount) {
             val touch = touchPoints[i]
             touchPointsArray[i * 3] = touch.x
@@ -768,7 +773,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             // Apply the global intensity multiplier
             touchIntensitiesArray[i] = touch.intensity * chromaticAberrationIntensity
         }
-        val screenSizeArray = floatArrayOf(surfaceWidthPx.toFloat(), surfaceHeightPx.toFloat())
 
         // Draw previous image (fade out during transition)
         previousPictureSet?.drawFrame(
