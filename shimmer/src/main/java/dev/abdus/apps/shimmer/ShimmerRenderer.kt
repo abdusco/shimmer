@@ -6,6 +6,7 @@ import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.opengl.Matrix
+import android.util.ArrayMap
 import android.util.Log
 import android.view.animation.DecelerateInterpolator
 import java.nio.ByteBuffer
@@ -347,7 +348,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         
         // If disabled, clear all active touch points
         if (!enabled) {
-            touchPoints.clear()
+            activeTouches.clear()
         }
         callbacks.requestRender()
     }
@@ -360,42 +361,32 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         if (!chromaticAberrationEnabled) return
         
         for (touch in touches) {
-            val existingTouch = touchPoints.find { it.id == touch.id && !it.isReleased }
             when (touch.action) {
                 TouchAction.DOWN -> {
-                    if (existingTouch != null) {
-                         // Already active, just update position
+                    val existingTouch = activeTouches[touch.id]
+                    if (existingTouch != null && !existingTouch.isReleased) {
+                        // Already active, just update position
                         existingTouch.x = touch.x
                         existingTouch.y = touch.y
-                    } else if (touchPoints.size < maxTouchPoints) {
+                    } else if (activeTouches.size < maxTouchPoints) {
                         // Create new touch point
-                        val newTouch = TouchPoint(
-                            id = touch.id,
-                            x = touch.x,
-                            y = touch.y,
-                            radius = 0f,
-                            intensity = 1f,
-                            radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
-                            fadeAnimator = TickingFloatAnimator(chromaticAberrationFadeDuration, DecelerateInterpolator())
-                        )
-                        newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
-                        // Set fadeAnimator to not be running, but with intensity at 1.0
-                        newTouch.fadeAnimator.reset()
-                        newTouch.fadeAnimator.currentValue = 1f
-                        touchPoints.add(newTouch)
+                        val newTouch = createTouchPoint(touch)
+                        activeTouches[touch.id] = newTouch
                     }
                 }
-                TouchAction.MOVE -> { 
-                    existingTouch?.let { 
-                        it.x = touch.x
-                        it.y = touch.y
+                TouchAction.MOVE -> {
+                    activeTouches[touch.id]?.let { 
+                        if (!it.isReleased) {
+                            it.x = touch.x
+                            it.y = touch.y
+                        }
                     }
                 }
-                TouchAction.UP -> { 
-                    existingTouch?.let { 
-                        it.radiusAnimator.start(startValue = it.radius, endValue = 0f)
-                        it.fadeAnimator.start(startValue = it.intensity, endValue = 0f)
-                        it.isReleased = true
+                TouchAction.UP -> {
+                    activeTouches[touch.id]?.let { 
+                        if (!it.isReleased) {
+                            releaseTouch(it)
+                        }
                     }
                 }
             }
@@ -407,12 +398,33 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         callbacks.requestRender()
     }
 
+    private fun createTouchPoint(touch: TouchData): TouchPoint {
+        val newTouch = TouchPoint(
+            id = touch.id,
+            x = touch.x,
+            y = touch.y,
+            radius = 0f,
+            intensity = 1f,
+            radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
+            fadeAnimator = TickingFloatAnimator(chromaticAberrationFadeDuration, DecelerateInterpolator())
+        )
+        newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
+        // Set fadeAnimator to not be running, but with intensity at 1.0
+        newTouch.fadeAnimator.reset()
+        newTouch.fadeAnimator.currentValue = 1f
+        return newTouch
+    }
+
+    private fun releaseTouch(touchPoint: TouchPoint) {
+        touchPoint.radiusAnimator.start(startValue = touchPoint.radius, endValue = 0f)
+        touchPoint.fadeAnimator.start(startValue = touchPoint.intensity, endValue = 0f)
+        touchPoint.isReleased = true
+    }
+
     // Touch point management for chromatic aberration - moved to class body
     private fun updateTouchPointAnimations() {
-        val iterator = touchPoints.iterator()
-        while (iterator.hasNext()) {
-            val touchPoint = iterator.next()
-            
+        val keysToRemove = mutableListOf<Int>()
+        for ((id, touchPoint) in activeTouches) {
             // Tick animators (they handle their own running state internally)
             touchPoint.radiusAnimator.tick()
             touchPoint.radius = touchPoint.radiusAnimator.currentValue
@@ -423,14 +435,18 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             // Remove touch points that have fully faded out AND finished their radius animation
             if (!touchPoint.radiusAnimator.isRunning && !touchPoint.fadeAnimator.isRunning && 
                 touchPoint.radius <= 0.01f && touchPoint.intensity <= 0.01f) {
-                iterator.remove()
+                keysToRemove.add(id)
             }
+        }
+        // Remove completed touch points
+        for (id in keysToRemove) {
+            activeTouches.remove(id)
         }
     }
 
     // Touch point management for chromatic aberration
-    private val touchPoints = mutableListOf<TouchPoint>()
     private val maxTouchPoints = 10
+    private val activeTouches = ArrayMap<Int, TouchPoint>(maxTouchPoints)
     private val touchPointsArray = FloatArray(maxTouchPoints * 3)
     private val touchIntensitiesArray = FloatArray(maxTouchPoints)
     private val screenSizeArray = floatArrayOf(0f, 0f)
@@ -760,18 +776,20 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         updateTouchPointAnimations()
 
         // Prepare touch point data for shader (reuse arrays)
-        val touchPointCount = touchPoints.size.coerceAtMost(maxTouchPoints)
+        val touchPointCount = activeTouches.size.coerceAtMost(maxTouchPoints)
         screenSizeArray[0] = surfaceWidthPx.toFloat()
         screenSizeArray[1] = surfaceHeightPx.toFloat()
         
         // Fill existing arrays
-        for (i in 0 until touchPointCount) {
-            val touch = touchPoints[i]
+        var i = 0
+        for (touch in activeTouches.values) {
+            if (i >= touchPointCount) break
             touchPointsArray[i * 3] = touch.x
             touchPointsArray[i * 3 + 1] = touch.y
             touchPointsArray[i * 3 + 2] = touch.radius
             // Apply the global intensity multiplier
             touchIntensitiesArray[i] = touch.intensity * chromaticAberrationIntensity
+            i++
         }
 
         // Draw previous image (fade out during transition)
@@ -817,7 +835,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
 
         // Request another frame if any animation is still running or touch points are animating
-        val touchPointsAnimating = touchPoints.any { it.radiusAnimator.isRunning || it.fadeAnimator.isRunning }
+        val touchPointsAnimating = activeTouches.values.any { it.radiusAnimator.isRunning || it.fadeAnimator.isRunning }
         if (isAnimating || touchPointsAnimating) {
             callbacks.requestRender()
         }
