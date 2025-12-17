@@ -2,7 +2,7 @@ package dev.abdus.apps.shimmer
 
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.opengl.GLES20
+import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.opengl.Matrix
@@ -461,11 +461,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         //language=c
         private const val PICTURE_VERTEX_SHADER_CODE = """
+            #version 300 es
             uniform mat4 uMVPMatrix;
-            attribute vec4 aPosition;
-            attribute vec2 aTexCoords;
-            varying vec2 vTexCoords;
-            varying vec2 vPosition;
+            in vec4 aPosition;
+            in vec2 aTexCoords;
+            out vec2 vTexCoords;
+            out vec2 vPosition;
 
             void main() {
                 vTexCoords = aTexCoords;
@@ -476,6 +477,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         //language=glsl
         private const val PICTURE_FRAGMENT_SHADER_CODE = """
+            #version 300 es
             #ifdef GL_FRAGMENT_PRECISION_HIGH
             precision highp float;
             #else
@@ -495,8 +497,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             uniform vec3 uTouchPoints[10];
             uniform float uTouchIntensities[10];
             uniform vec2 uScreenSize;
-            varying vec2 vTexCoords;
-            varying vec2 vPosition;
+            in vec2 vTexCoords;
+            in vec2 vPosition;
+            out vec4 fragColor;
 
             // Luminosity calculation macro (using Rec. 709 luma coefficients)
             #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
@@ -633,9 +636,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                 
                 // Sample RGB channels at different offsets and apply duotone to each
                 // When there's no chromatic aberration, offsets are zero so all samples are identical
-                vec4 colorR = texture2D(uTexture, vTexCoords + totalChromaticOffset);
-                vec4 colorG = texture2D(uTexture, vTexCoords);
-                vec4 colorB = texture2D(uTexture, vTexCoords - totalChromaticOffset);
+                vec4 colorR = texture(uTexture, vTexCoords + totalChromaticOffset);
+                vec4 colorG = texture(uTexture, vTexCoords);
+                vec4 colorB = texture(uTexture, vTexCoords - totalChromaticOffset);
                 
                 vec3 duotonedR = applyDuotone(colorR.rgb);
                 vec3 duotonedG = applyDuotone(colorG.rgb);
@@ -650,7 +653,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                 finalColor = mix(finalColor, vec3(0.0), uDimAmount);
 
                 finalColor = clamp(finalColor + noise + grain, 0.0, 1.0);
-                gl_FragColor = vec4(finalColor, colorG.a * uAlpha);
+                fragColor = vec4(finalColor, colorG.a * uAlpha);
             }
         """
 
@@ -659,33 +662,33 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
         surfaceCreated = true
-        GLES20.glEnable(GLES20.GL_BLEND)
-        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
-        GLES20.glClearColor(0f, 0f, 0f, 1f)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glClearColor(0f, 0f, 0f, 1f)
 
         try {
             // Picture shader
-            val pictureVertexShader = GLUtil.loadShader(GLES20.GL_VERTEX_SHADER, PICTURE_VERTEX_SHADER_CODE)
-            val pictureFragmentShader = GLUtil.loadShader(GLES20.GL_FRAGMENT_SHADER, PICTURE_FRAGMENT_SHADER_CODE)
+            val pictureVertexShader = GLUtil.loadShader(GLES30.GL_VERTEX_SHADER, PICTURE_VERTEX_SHADER_CODE)
+            val pictureFragmentShader = GLUtil.loadShader(GLES30.GL_FRAGMENT_SHADER, PICTURE_FRAGMENT_SHADER_CODE)
             val pictureProgram = GLUtil.createAndLinkProgram(pictureVertexShader, pictureFragmentShader)
         pictureHandles = PictureHandles(
             program = pictureProgram,
-            attribPosition = GLES20.glGetAttribLocation(pictureProgram, "aPosition"),
-            attribTexCoords = GLES20.glGetAttribLocation(pictureProgram, "aTexCoords"),
-            uniformMvpMatrix = GLES20.glGetUniformLocation(pictureProgram, "uMVPMatrix"),
-            uniformTexture = GLES20.glGetUniformLocation(pictureProgram, "uTexture"),
-            uniformAlpha = GLES20.glGetUniformLocation(pictureProgram, "uAlpha"),
-            uniformDuotoneLight = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneLightColor"),
-            uniformDuotoneDark = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneDarkColor"),
-            uniformDuotoneOpacity = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneOpacity"),
-            uniformDuotoneBlendMode = GLES20.glGetUniformLocation(pictureProgram, "uDuotoneBlendMode"),
-            uniformDimAmount = GLES20.glGetUniformLocation(pictureProgram, "uDimAmount"),
-            uniformGrainAmount = GLES20.glGetUniformLocation(pictureProgram, "uGrainAmount"),
-            uniformGrainCount = GLES20.glGetUniformLocation(pictureProgram, "uGrainCount"),
-            uniformTouchPointCount = GLES20.glGetUniformLocation(pictureProgram, "uTouchPointCount"),
-            uniformTouchPoints = GLES20.glGetUniformLocation(pictureProgram, "uTouchPoints"),
-            uniformTouchIntensities = GLES20.glGetUniformLocation(pictureProgram, "uTouchIntensities"),
-            uniformScreenSize = GLES20.glGetUniformLocation(pictureProgram, "uScreenSize"),
+            attribPosition = GLES30.glGetAttribLocation(pictureProgram, "aPosition"),
+            attribTexCoords = GLES30.glGetAttribLocation(pictureProgram, "aTexCoords"),
+            uniformMvpMatrix = GLES30.glGetUniformLocation(pictureProgram, "uMVPMatrix"),
+            uniformTexture = GLES30.glGetUniformLocation(pictureProgram, "uTexture"),
+            uniformAlpha = GLES30.glGetUniformLocation(pictureProgram, "uAlpha"),
+            uniformDuotoneLight = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneLightColor"),
+            uniformDuotoneDark = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneDarkColor"),
+            uniformDuotoneOpacity = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneOpacity"),
+            uniformDuotoneBlendMode = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneBlendMode"),
+            uniformDimAmount = GLES30.glGetUniformLocation(pictureProgram, "uDimAmount"),
+            uniformGrainAmount = GLES30.glGetUniformLocation(pictureProgram, "uGrainAmount"),
+            uniformGrainCount = GLES30.glGetUniformLocation(pictureProgram, "uGrainCount"),
+            uniformTouchPointCount = GLES30.glGetUniformLocation(pictureProgram, "uTouchPointCount"),
+            uniformTouchPoints = GLES30.glGetUniformLocation(pictureProgram, "uTouchPoints"),
+            uniformTouchIntensities = GLES30.glGetUniformLocation(pictureProgram, "uTouchIntensities"),
+            uniformScreenSize = GLES30.glGetUniformLocation(pictureProgram, "uScreenSize"),
         )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize shaders", e)
@@ -694,7 +697,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         }
 
         val maxTextureSize = IntArray(1)
-        GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, maxTextureSize, 0)
+        GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, maxTextureSize, 0)
         tileSize = kotlin.math.min(512, maxTextureSize[0])
         if (tileSize == 0) {
             tileSize = 512
@@ -713,7 +716,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     override fun onSurfaceChanged(gl: GL10, width: Int, height: Int) {
-        GLES20.glViewport(0, 0, width, height)
+        GLES30.glViewport(0, 0, width, height)
         surfaceWidthPx = width
         surfaceHeightPx = height
         surfaceAspect = if (height == 0) 1f else width.toFloat() / height
@@ -726,7 +729,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         if (!surfaceCreated) {
             return
         }
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         val currentRenderState = animationController.currentRenderState
 
@@ -998,26 +1001,26 @@ object GLUtil {
      * @throws RuntimeException if shader compilation fails
      */
     fun loadShader(type: Int, shaderCode: String): Int {
-        val shader = GLES20.glCreateShader(type)
+        val shader = GLES30.glCreateShader(type)
         if (shader == 0) {
             throw RuntimeException("Failed to create shader (glCreateShader returned 0)")
         }
         
-        GLES20.glShaderSource(shader, shaderCode)
-        GLES20.glCompileShader(shader)
+        GLES30.glShaderSource(shader, shaderCode)
+        GLES30.glCompileShader(shader)
 
         val compileStatus = IntArray(1)
-        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compileStatus, 0)
+        GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, compileStatus, 0)
         if (compileStatus[0] == 0) {
-            val log = GLES20.glGetShaderInfoLog(shader)
+            val log = GLES30.glGetShaderInfoLog(shader)
             val shaderTypeName = when (type) {
-                GLES20.GL_VERTEX_SHADER -> "vertex"
-                GLES20.GL_FRAGMENT_SHADER -> "fragment"
+                GLES30.GL_VERTEX_SHADER -> "vertex"
+                GLES30.GL_FRAGMENT_SHADER -> "fragment"
                 else -> "unknown"
             }
             val errorMsg = "Shader compilation failed ($shaderTypeName shader):\n$log"
             Log.e(TAG, errorMsg)
-            GLES20.glDeleteShader(shader)
+            GLES30.glDeleteShader(shader)
             throw RuntimeException(errorMsg)
         }
         return shader
@@ -1035,35 +1038,35 @@ object GLUtil {
         fragmentShader: Int,
         attributes: Array<String>? = null,
     ): Int {
-        val program = GLES20.glCreateProgram()
+        val program = GLES30.glCreateProgram()
         checkGlError("glCreateProgram")
 
-        GLES20.glAttachShader(program, vertexShader)
+        GLES30.glAttachShader(program, vertexShader)
         checkGlError("glAttachShader(vertex)")
-        GLES20.glAttachShader(program, fragmentShader)
+        GLES30.glAttachShader(program, fragmentShader)
         checkGlError("glAttachShader(fragment)")
 
         attributes?.forEachIndexed { index, name ->
-            GLES20.glBindAttribLocation(program, index, name)
+            GLES30.glBindAttribLocation(program, index, name)
         }
 
-        GLES20.glLinkProgram(program)
+        GLES30.glLinkProgram(program)
 
         val linkStatus = IntArray(1)
-        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0)
+        GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, linkStatus, 0)
         if (linkStatus[0] == 0) {
-            val log = GLES20.glGetProgramInfoLog(program)
+            val log = GLES30.glGetProgramInfoLog(program)
             val errorMsg = "Program linking failed:\n$log"
             Log.e(TAG, errorMsg)
-            GLES20.glDeleteProgram(program)
-            GLES20.glDeleteShader(vertexShader)
-            GLES20.glDeleteShader(fragmentShader)
+            GLES30.glDeleteProgram(program)
+            GLES30.glDeleteShader(vertexShader)
+            GLES30.glDeleteShader(fragmentShader)
             throw RuntimeException(errorMsg)
         }
 
         // Clean up shaders (program retains compiled code)
-        GLES20.glDeleteShader(vertexShader)
-        GLES20.glDeleteShader(fragmentShader)
+        GLES30.glDeleteShader(vertexShader)
+        GLES30.glDeleteShader(fragmentShader)
 
         return program
     }
@@ -1076,36 +1079,36 @@ object GLUtil {
      */
     fun loadTexture(bitmap: Bitmap): Int {
         val textureHandle = IntArray(1)
-        GLES20.glGenTextures(1, textureHandle, 0)
+        GLES30.glGenTextures(1, textureHandle, 0)
         checkGlError("glGenTextures")
 
         if (textureHandle[0] != 0) {
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureHandle[0])
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureHandle[0])
 
             // Set texture parameters
-            GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D,
-                GLES20.GL_TEXTURE_WRAP_S,
-                GLES20.GL_CLAMP_TO_EDGE
+            GLES30.glTexParameteri(
+                GLES30.GL_TEXTURE_2D,
+                GLES30.GL_TEXTURE_WRAP_S,
+                GLES30.GL_CLAMP_TO_EDGE
             )
-            GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D,
-                GLES20.GL_TEXTURE_WRAP_T,
-                GLES20.GL_CLAMP_TO_EDGE
+            GLES30.glTexParameteri(
+                GLES30.GL_TEXTURE_2D,
+                GLES30.GL_TEXTURE_WRAP_T,
+                GLES30.GL_CLAMP_TO_EDGE
             )
-            GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D,
-                GLES20.GL_TEXTURE_MIN_FILTER,
-                GLES20.GL_LINEAR
+            GLES30.glTexParameteri(
+                GLES30.GL_TEXTURE_2D,
+                GLES30.GL_TEXTURE_MIN_FILTER,
+                GLES30.GL_LINEAR
             )
-            GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D,
-                GLES20.GL_TEXTURE_MAG_FILTER,
-                GLES20.GL_LINEAR
+            GLES30.glTexParameteri(
+                GLES30.GL_TEXTURE_2D,
+                GLES30.GL_TEXTURE_MAG_FILTER,
+                GLES30.GL_LINEAR
             )
 
             // Upload bitmap data
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
             checkGlError("texImage2D")
         }
 
@@ -1146,8 +1149,8 @@ object GLUtil {
      * @throws RuntimeException if a GL error is detected
      */
     fun checkGlError(op: String) {
-        val error = GLES20.glGetError()
-        if (error != GLES20.GL_NO_ERROR) {
+        val error = GLES30.glGetError()
+        if (error != GLES30.GL_NO_ERROR) {
             throw RuntimeException("$op: glError $error")
         }
     }

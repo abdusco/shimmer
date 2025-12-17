@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-apply plugin: 'com.android.library'
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+}
 
 android {
-    namespace 'com.google.android.apps.muzei.glwallpaper'
+    namespace 'net.rbgrn.android.glwallpaperservice'
     compileSdk libs.versions.compileSdk.get().toInteger()
 
     defaultConfig {
@@ -32,5 +35,8 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = '11'
     }
 }

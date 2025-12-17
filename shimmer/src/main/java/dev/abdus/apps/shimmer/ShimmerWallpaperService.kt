@@ -315,11 +315,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             Log.d(TAG, "onCreate called")
             super.onCreate(surfaceHolder)
-            renderer = ShimmerRenderer(this)
-            setEGLContextClientVersion(2)
+            val newRenderer = ShimmerRenderer(this)
+            renderer = newRenderer
+            setEGLContextClientVersion(3)
             setEGLConfigChooser(8, 8, 8, 0, 0, 0)
-            setRenderer(renderer)
-            renderMode = RENDERMODE_WHEN_DIRTY
+            setRenderer(newRenderer)
+            setRenderMode(GLWallpaperService.RENDERMODE_WHEN_DIRTY)
 
             setTouchEventsEnabled(true)
             setOffsetNotificationsEnabled(true)

@@ -2,7 +2,7 @@ package dev.abdus.apps.shimmer
 
 import android.graphics.Bitmap
 import android.graphics.Rect
-import android.opengl.GLES20
+import android.opengl.GLES30
 import java.nio.FloatBuffer
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -244,61 +244,61 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
 
         // Control blending state
         if (enableBlending) {
-            GLES20.glEnable(GLES20.GL_BLEND)
+            GLES30.glEnable(GLES30.GL_BLEND)
         } else {
-            GLES20.glDisable(GLES20.GL_BLEND)
+            GLES30.glDisable(GLES30.GL_BLEND)
         }
 
-        GLES20.glUseProgram(handles.program)
+        GLES30.glUseProgram(handles.program)
 
-        GLES20.glUniformMatrix4fv(handles.uniformMvpMatrix, 1, false, mvpMatrix, 0)
+        GLES30.glUniformMatrix4fv(handles.uniformMvpMatrix, 1, false, mvpMatrix, 0)
         GLUtil.checkGlError("glUniformMatrix4fv")
 
-        GLES20.glEnableVertexAttribArray(handles.attribPosition)
-        GLES20.glEnableVertexAttribArray(handles.attribTexCoords)
+        GLES30.glEnableVertexAttribArray(handles.attribPosition)
+        GLES30.glEnableVertexAttribArray(handles.attribTexCoords)
 
-        GLES20.glVertexAttribPointer(
+        GLES30.glVertexAttribPointer(
             handles.attribTexCoords,
             COORDS_PER_TEXTURE_VERTEX,
-            GLES20.GL_FLOAT,
+            GLES30.GL_FLOAT,
             false,
             TEXTURE_VERTEX_STRIDE_BYTES,
             textureCoordsBuffer
         )
 
-        GLES20.glUniform1f(handles.uniformAlpha, alpha)
+        GLES30.glUniform1f(handles.uniformAlpha, alpha)
 
         // Set duotone uniforms
-        GLES20.glUniform3f(
+        GLES30.glUniform3f(
             handles.uniformDuotoneLight,
             android.graphics.Color.red(duotone.lightColor) / 255f,
             android.graphics.Color.green(duotone.lightColor) / 255f,
             android.graphics.Color.blue(duotone.lightColor) / 255f
         )
-        GLES20.glUniform3f(
+        GLES30.glUniform3f(
             handles.uniformDuotoneDark,
             android.graphics.Color.red(duotone.darkColor) / 255f,
             android.graphics.Color.green(duotone.darkColor) / 255f,
             android.graphics.Color.blue(duotone.darkColor) / 255f
         )
-        GLES20.glUniform1f(handles.uniformDuotoneOpacity, duotone.opacity)
-        GLES20.glUniform1i(handles.uniformDuotoneBlendMode, duotone.blendMode.ordinal)
-        GLES20.glUniform1f(handles.uniformDimAmount, dimAmount)
-        GLES20.glUniform1f(handles.uniformGrainAmount, grainAmount)
-        GLES20.glUniform2f(handles.uniformGrainCount, grainCountX, grainCountY)
+        GLES30.glUniform1f(handles.uniformDuotoneOpacity, duotone.opacity)
+        GLES30.glUniform1i(handles.uniformDuotoneBlendMode, duotone.blendMode.ordinal)
+        GLES30.glUniform1f(handles.uniformDimAmount, dimAmount)
+        GLES30.glUniform1f(handles.uniformGrainAmount, grainAmount)
+        GLES30.glUniform2f(handles.uniformGrainCount, grainCountX, grainCountY)
 
         // Set touch point uniforms for chromatic aberration
-        GLES20.glUniform1i(handles.uniformTouchPointCount, touchPointCount)
+        GLES30.glUniform1i(handles.uniformTouchPointCount, touchPointCount)
         if (touchPointCount > 0 && touchPoints.size >= touchPointCount * 3) {
-            GLES20.glUniform3fv(handles.uniformTouchPoints, touchPointCount, touchPoints, 0)
+            GLES30.glUniform3fv(handles.uniformTouchPoints, touchPointCount, touchPoints, 0)
         }
         if (touchPointCount > 0 && touchIntensities.size >= touchPointCount) {
-            GLES20.glUniform1fv(handles.uniformTouchIntensities, touchPointCount, touchIntensities, 0)
+            GLES30.glUniform1fv(handles.uniformTouchIntensities, touchPointCount, touchIntensities, 0)
         }
-        GLES20.glUniform2f(handles.uniformScreenSize, screenSize[0], screenSize[1])
+        GLES30.glUniform2f(handles.uniformScreenSize, screenSize[0], screenSize[1])
 
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glUniform1i(handles.uniformTexture, 0)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glUniform1i(handles.uniformTexture, 0)
 
         var tileIndex = 0
         for (y in 0 until numRows) {
@@ -319,35 +319,35 @@ class GLPicture(bitmap: Bitmap, tileSize: Int) {
                 vertexBuffer.put(vertices)
                 vertexBuffer.position(0)
 
-                GLES20.glVertexAttribPointer(
+                GLES30.glVertexAttribPointer(
                     handles.attribPosition,
                     COORDS_PER_VERTEX,
-                    GLES20.GL_FLOAT,
+                    GLES30.GL_FLOAT,
                     false,
                     VERTEX_STRIDE_BYTES,
                     vertexBuffer
                 )
 
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureHandles[tileIndex])
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureHandles[tileIndex])
                 GLUtil.checkGlError("glBindTexture")
-                GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, vertices.size / COORDS_PER_VERTEX)
+                GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, vertices.size / COORDS_PER_VERTEX)
                 tileIndex++
             }
         }
 
-        GLES20.glDisableVertexAttribArray(handles.attribPosition)
-        GLES20.glDisableVertexAttribArray(handles.attribTexCoords)
+        GLES30.glDisableVertexAttribArray(handles.attribPosition)
+        GLES30.glDisableVertexAttribArray(handles.attribTexCoords)
     }
 
     fun destroy() {
         if (textureHandles.isNotEmpty()) {
-            GLES20.glDeleteTextures(textureHandles.size, textureHandles, 0)
+            GLES30.glDeleteTextures(textureHandles.size, textureHandles, 0)
         }
     }
 
     fun release() {
         if (textureHandles.isNotEmpty()) {
-            GLES20.glDeleteTextures(textureHandles.size, textureHandles, 0)
+            GLES30.glDeleteTextures(textureHandles.size, textureHandles, 0)
             textureHandles = IntArray(0)
         }
     }

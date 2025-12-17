@@ -17,7 +17,7 @@ fun WallpaperPreview(
     AndroidView(
         factory = { context ->
             PreviewSurfaceView(context).apply {
-                setEGLContextClientVersion(2)
+                setEGLContextClientVersion(3)
                 setEGLConfigChooser(8, 8, 8, 0, 0, 0)
                 val renderer = ShimmerRenderer(object : ShimmerRenderer.Callbacks {
                     override fun requestRender() {
@@ -38,7 +38,7 @@ fun WallpaperPreview(
                 })
                 renderer.setEffectTransitionDuration(2000)
                 setRenderer(renderer)
-                renderMode = GLWallpaperService.GLEngine.RENDERMODE_WHEN_DIRTY
+                renderMode = GLWallpaperService.RENDERMODE_WHEN_DIRTY
                 onRendererCreated(renderer, this)
             }
         },
