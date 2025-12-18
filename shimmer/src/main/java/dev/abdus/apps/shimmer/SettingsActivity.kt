@@ -75,6 +75,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.Alignment
@@ -1609,13 +1610,49 @@ private fun ColorHexField(
     onValueChange: (String) -> Unit,
     previewColor: Color,
 ) {
-    val normalized = value.uppercase()
+    // Maintain local state for editing to allow free typing without parent overwriting
+    var localValue by remember { mutableStateOf(value.uppercase()) }
+    // Track the last valid value we sent to distinguish our updates from external ones
+    var lastValidSentValue by remember { mutableStateOf<String?>(null) }
+    
+    // Sync from parent only when parent value represents an external change
+    LaunchedEffect(value) {
+        val normalizedParent = value.uppercase()
+        val normalizedLocal = localValue.uppercase()
+        
+        // Only sync if parent has a valid color that's different from what we last sent
+        // This prevents parent from overwriting user's partial input while typing
+        if (isValidHexColor(normalizedParent)) {
+            // Parent has valid color - sync only if it's different from what we last sent
+            // (meaning it's an external update, not our own update being reflected back)
+            if (normalizedParent != lastValidSentValue) {
+                localValue = normalizedParent
+                lastValidSentValue = normalizedParent
+            }
+        } else if (normalizedParent.isEmpty() && normalizedLocal.isNotEmpty()) {
+            // Handle reset case
+            localValue = ""
+            lastValidSentValue = ""
+        }
+    }
+    
+    val normalized = localValue.uppercase()
     val isError = normalized.isNotEmpty() && !isValidHexColor(normalized)
+    
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             modifier = Modifier.weight(1f),
             value = normalized,
-            onValueChange = { onValueChange(it.uppercase()) },
+            onValueChange = { newValue ->
+                val uppercased = newValue.uppercase()
+                localValue = uppercased
+                onValueChange(uppercased)
+                // Update lastValidSentValue only when we send a valid color
+                // This helps us distinguish our updates from external ones
+                if (isValidHexColor(uppercased)) {
+                    lastValidSentValue = uppercased
+                }
+            },
             label = { Text(label) },
             singleLine = true,
             isError = isError
