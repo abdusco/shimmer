@@ -79,6 +79,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
         const val KEY_GRAIN_SETTINGS = "wallpaper_grain_settings"
         const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
+        const val KEY_IMAGE_LAST_CHANGED_AT = "image_last_changed_at"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -102,6 +103,13 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             return WallpaperPreferences(prefs)
         }
+    }
+
+
+    fun getImageLastChangedAt(): Long = prefs.getLong(KEY_IMAGE_LAST_CHANGED_AT, 0L)
+
+    fun setImageLastChangedAt(time: Long) {
+        prefs.edit { putLong(KEY_IMAGE_LAST_CHANGED_AT, time) }
     }
 
     fun getBlurAmount(): Float =

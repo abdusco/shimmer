@@ -33,7 +33,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
         private val imageLoader = ImageLoader(contentResolver, resources)
-        private val transitionScheduler = ImageTransitionScheduler(scope) { requestImageChange() }
+        private val transitionScheduler = ImageTransitionScheduler(scope, preferences) {
+            Log.d(TAG, "TransitionScheduler triggered image advance")
+            requestImageChange()
+        }
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
 
         // Cache state
@@ -112,10 +115,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     folderRepository.updateFolders(preferences.getImageFolders().map { it.uri })
                 }
 
-                if (key == WallpaperPreferences.KEY_TRANSITION_ENABLED || key == WallpaperPreferences.KEY_TRANSITION_INTERVAL) {
-                    Log.d(TAG, "syncRendererSettings: transition settings changed, updating scheduler")
+                if (key == null || key == WallpaperPreferences.KEY_TRANSITION_ENABLED || key == WallpaperPreferences.KEY_TRANSITION_INTERVAL) {
                     transitionScheduler.updateEnabled(preferences.isTransitionEnabled())
-                    transitionScheduler.updateInterval(preferences.getTransitionIntervalMillis())
                 }
             }
         }
@@ -224,7 +225,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
                 val nextUri = folderRepository.nextImageUri()
                 Log.d(TAG, "requestImageChange: nextUri=$nextUri")
-                if (nextUri != null) loadImage(nextUri)
+                if (nextUri != null) {
+                    loadImage(nextUri)
+                    preferences.setImageLastChangedAt(System.currentTimeMillis())
+                }
             }
         }
 
@@ -236,11 +240,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 TapEvent.TWO_FINGER_DOUBLE_TAP -> {
                     Log.d(TAG, "onTouchEvent: TWO_FINGER_DOUBLE_TAP detected, requesting image change")
                     requestImageChange()
+                    transitionScheduler.pauseForInteraction()
                 }
                 TapEvent.TRIPLE_TAP -> {
                     sessionBlurEnabled = !sessionBlurEnabled
                     Log.d(TAG, "onTouchEvent: TRIPLE_TAP toggled sessionBlurEnabled=$sessionBlurEnabled")
                     applyBlurState(immediate = false)
+                    transitionScheduler.pauseForInteraction()
                 }
                 else -> {}
             }
@@ -278,12 +284,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
             engineVisible = visible
             if (visible) {
                 applyBlurState(immediate = false)
+                transitionScheduler.start()
                 queueEvent { renderer?.onVisibilityChanged() }
+            } else {
+                transitionScheduler.stop()
             }
         }
 
         override fun onOffsetsChanged(x: Float, y: Float, xs: Float, ys: Float, xp: Int, yp: Int) {
             Log.d(TAG, "onOffsetsChanged: x=$x y=$y")
+            transitionScheduler.pauseForInteraction()
             queueEvent { renderer?.setParallaxOffset(x) }
         }
 
