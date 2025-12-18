@@ -111,7 +111,7 @@ class ImageLoader(
     private fun prepareImageSet(bitmap: Bitmap, blurAmount: Float, id: String): ImageSet {
         val maxRadius = blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS
         Log.d(TAG, "prepareImageSet: Generating blur levels with maxRadius=$maxRadius")
-        val blurResult = bitmap.generateBlurLevels(BLUR_KEYFRAMES, maxRadius)
+        val blurResult = bitmap.generateBlurLevels(maxRadius)
         
         return ImageSet(
             id = id,

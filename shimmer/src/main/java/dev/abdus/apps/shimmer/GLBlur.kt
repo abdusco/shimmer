@@ -18,10 +18,18 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-const val BLUR_KEYFRAMES = 4
+// Increase to 8 for a much smoother "radius shrinking" feel without OOM risk
+const val BLUR_KEYFRAMES = 8 
 const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 300
-private const val BLUR_SCALE_FACTOR = 4
-private const val LAST_FRAME_BLUR_SCALE_FACTOR = 2
+
+// Efficiency Constants
+const val MAX_BLUR_KEYFRAMES = 8 
+private const val PIXELS_PER_STEP = 40f 
+private const val BLUR_SCALE_FACTOR = 6 
+
+// The "Ease-Out" factor. 2.0 means the radius grows quadratically.
+// This puts more keyframes near the "Sharp" end for a smooth finish.
+private const val RADIUS_EXPONENT = 1.8
 
 private const val TAG = "GLBlur"
 
@@ -30,75 +38,57 @@ data class BlurLevelResult(
     val radii: List<Float>
 )
 
-fun Bitmap.generateBlurLevels(levels: Int, maxRadius: Float): BlurLevelResult {
-    if (levels <= 0) return BlurLevelResult(emptyList(), emptyList())
+/**
+ * Generates dynamic blur levels with an exponential radius distribution.
+ * This creates a natural ease-out effect when the wallpaper clears.
+ */
+fun Bitmap.generateBlurLevels(maxRadius: Float): BlurLevelResult {
+    if (maxRadius < 1f) return BlurLevelResult(emptyList(), emptyList())
 
-    val pixelsPerLevel = 80
-    // Calculate maxLevels based on BLUR_SCALE_FACTOR initially, as this is the default for most frames.
-    val maxLevels = min(levels, ceil(maxRadius / (pixelsPerLevel / BLUR_SCALE_FACTOR)).toInt())
-    if (maxLevels == 0) return BlurLevelResult(emptyList(), emptyList())
-
-    val radii = mutableListOf<Float>()
-    val power = 2
-
-    for (i in 1..maxLevels) {
-        val normalizedIndex = i.toFloat() / maxLevels
-        val radius = maxRadius * normalizedIndex.toDouble().pow(power).toFloat()
-        radii.add(ceil(max(1.0f, radius)))
-    }
+    // Calculate how many frames we need based on intensity
+    val calculatedLevels = ceil(maxRadius / PIXELS_PER_STEP).toInt()
+        .coerceIn(1, MAX_BLUR_KEYFRAMES)
 
     val resultBitmaps = mutableListOf<Bitmap>()
-    val finalResultRadii = mutableListOf<Float>()
+    val resultRadii = mutableListOf<Float>()
     val startTime = System.currentTimeMillis()
-    var loggedRadiiString = ""
+
+    val scaledWidth = max(1, width / BLUR_SCALE_FACTOR)
+    val scaledHeight = max(1, height / BLUR_SCALE_FACTOR)
 
     try {
-        for ((index, radius) in radii.withIndex()) {
-            val currentScaleFactor = if (index == radii.lastIndex) LAST_FRAME_BLUR_SCALE_FACTOR else BLUR_SCALE_FACTOR
+        val baseDownsampled = this.scale(scaledWidth, scaledHeight)
 
-            val currentScaledWidth = max(1, width / currentScaleFactor)
-            val currentScaledHeight = max(1, height / currentScaleFactor)
+        GLGaussianRenderer(scaledWidth, scaledHeight).use { renderer ->
+            for (i in 1..calculatedLevels) {
+                // Exponential progress: (i/N)^2
+                // Example with 4 levels: 0.06, 0.25, 0.56, 1.0
+                val linearProgress = i.toFloat() / calculatedLevels
+                val exponentialProgress = linearProgress.toDouble().pow(RADIUS_EXPONENT).toFloat()
+                
+                val currentRadius = maxRadius * exponentialProgress
+                
+                renderer.uploadSource(baseDownsampled)
+                val blurredSmall = renderer.blur(currentRadius / BLUR_SCALE_FACTOR)
 
-            if (currentScaledWidth == 0 || currentScaledHeight == 0) {
-                return BlurLevelResult(emptyList(), emptyList())
-            }
-
-            val downsampledBitmap = try {
-                this.scale(currentScaledWidth, currentScaledHeight)
-            } catch (e: Throwable) {
-                Log.e(TAG, "generateBlurLevels: Failed to scale bitmap for radius $radius (scale: $currentScaleFactor)", e)
-                return BlurLevelResult(emptyList(), emptyList())
-            }
-
-            GLGaussianRenderer(currentScaledWidth, currentScaledHeight).use { renderer ->
-                renderer.uploadSource(downsampledBitmap)
-                val scaledRadius = radius / currentScaleFactor
-                val smallBlurred = renderer.blur(scaledRadius)
-
-                if (smallBlurred != null) {
-                    val finalBlurred = smallBlurred.scale(width, height)
+                if (blurredSmall != null) {
+                    val finalBlurred = blurredSmall.scale(width, height)
                     resultBitmaps.add(finalBlurred)
-                    finalResultRadii.add(radius)
-                } else {
-                    Log.e(TAG, "generateBlurLevels: Failed to blur for radius $radius (scale: $currentScaleFactor)")
-                    return BlurLevelResult(resultBitmaps, finalResultRadii) // Return partial results
+                    resultRadii.add(currentRadius)
+                    blurredSmall.recycle()
                 }
             }
-            downsampledBitmap.recycle() // Recycle intermediate bitmap as it's no longer needed
         }
-        loggedRadiiString = finalResultRadii.joinToString(", ") { String.format("%.2f", it) }
-        return BlurLevelResult(resultBitmaps, finalResultRadii)
-    } catch (e: Throwable) {
-        Log.e(TAG, "generateBlurLevels: Error during blur level generation", e)
-        return BlurLevelResult(emptyList(), emptyList())
-    } finally {
-        val elapsed = System.currentTimeMillis() - startTime
-        val actualLevelsGenerated = resultBitmaps.size
+        baseDownsampled.recycle()
 
-        Log.d(TAG, "generateBlurLevels: Generated $actualLevelsGenerated/$maxLevels blur levels in ${elapsed}ms for bitmap ${width}x${height}. " +
-                "Radii (Original Scale): [$loggedRadiiString]"
-        )
+    } catch (e: Throwable) {
+        Log.e(TAG, "generateBlurLevels: Failed", e)
+        resultBitmaps.forEach { it.recycle() }
+        return BlurLevelResult(emptyList(), emptyList())
     }
+
+    Log.d(TAG, "Ease-Out Blur: Generated $calculatedLevels levels (Exp: $RADIUS_EXPONENT) in ${System.currentTimeMillis() - startTime}ms")
+    return BlurLevelResult(resultBitmaps, resultRadii)
 }
 
 private class GLGaussianRenderer(
