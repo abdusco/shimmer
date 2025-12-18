@@ -20,30 +20,38 @@ import kotlin.math.max
  * Payload containing image data for the renderer.
  * @property original The original unprocessed bitmap
  * @property blurred List of progressively blurred bitmaps (excluding original).
+ * ```
  *                   The number of blur levels determines the keyframe count.
  *                   Examples:
  *                   - 0 levels: No blur animation (just original)
  *                   - 1 level: [100% blur] → 2 states (original, blurred)
  *                   - 2 levels: [50% blur, 100% blur] → 3 states (original, 50%, 100%)
- * @property blurRadii List of blur radii corresponding to each blurred bitmap (in pixels).
+ * @property blurRadii
+ * ```
+ * List of blur radii corresponding to each blurred bitmap (in pixels).
+ * ```
  *                     Size must match blurred.size. Used to map between different blur amounts.
- * @property id Optional URI identifying the source image. Used to detect when the same
+ * @property id
+ * ```
+ * Optional URI identifying the source image. Used to detect when the same
+ * ```
  *                     image is reloaded with different blur settings.
+ * ```
  */
 data class ImageSet(
     val original: Bitmap,
     val blurred: List<Bitmap> = emptyList(),
     val blurRadii: List<Float> = emptyList(),
     val id: String = "",
+    val width: Int = original.width,
+    val height: Int = original.height
 )
 
-/**
- * Blend mode for duotone effect application.
- */
+/** Blend mode for duotone effect application. */
 enum class DuotoneBlendMode {
-    NORMAL,      // Simple linear interpolation (mix)
+    NORMAL, // Simple linear interpolation (mix)
     SOFT_LIGHT, // Soft light blend mode
-    SCREEN,     // Screen blend mode
+    SCREEN, // Screen blend mode
 }
 
 /**
@@ -54,10 +62,10 @@ enum class DuotoneBlendMode {
  * @property blendMode How the duotone effect is blended with the original image
  */
 data class Duotone(
-    val lightColor: Int = Color.WHITE,
-    val darkColor: Int = Color.BLACK,
-    val opacity: Float = 0f,
-    val blendMode: DuotoneBlendMode = DuotoneBlendMode.NORMAL,
+        val lightColor: Int = Color.WHITE,
+        val darkColor: Int = Color.BLACK,
+        val opacity: Float = 0f,
+        val blendMode: DuotoneBlendMode = DuotoneBlendMode.NORMAL,
 )
 
 /**
@@ -68,17 +76,17 @@ data class Duotone(
  * @property action The type of touch action (down, move, up)
  */
 data class TouchData(
-    val id: Int,
-    val x: Float,
-    val y: Float,
-    val action: TouchAction,
+        val id: Int,
+        val x: Float,
+        val y: Float,
+        val action: TouchAction,
 )
 
-/**
- * Touch action types for multitouch chromatic aberration.
- */
+/** Touch action types for multitouch chromatic aberration. */
 enum class TouchAction {
-    DOWN, MOVE, UP,
+    DOWN,
+    MOVE,
+    UP,
 }
 
 /**
@@ -92,34 +100,39 @@ enum class TouchAction {
  * @property fadeAnimator Animator for fade-out when touch is released
  */
 private data class TouchPoint(
-    val id: Int,
-    var x: Float,
-    var y: Float,
-    var radius: Float = 0f,
-    var intensity: Float = 1f,
-    val radiusAnimator: TickingFloatAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
-    val fadeAnimator: TickingFloatAnimator = TickingFloatAnimator(2000, DecelerateInterpolator()),
-    var isReleased: Boolean = false,
+        val id: Int,
+        var x: Float,
+        var y: Float,
+        var radius: Float = 0f,
+        var intensity: Float = 1f,
+        val radiusAnimator: TickingFloatAnimator =
+                TickingFloatAnimator(4000, DecelerateInterpolator()),
+        val fadeAnimator: TickingFloatAnimator =
+                TickingFloatAnimator(2000, DecelerateInterpolator()),
+        var isReleased: Boolean = false,
 )
 
 /**
- * OpenGL ES 2.0 renderer for the Shimmer wallpaper.
- * Handles rendering of images with blur, duotone effects, and parallax scrolling.
+ * OpenGL ES 2.0 renderer for the Shimmer wallpaper. Handles rendering of images with blur, duotone
+ * effects, and parallax scrolling.
  */
-class ShimmerRenderer(private val callbacks: Callbacks) :
-    GLSurfaceView.Renderer {
+class ShimmerRenderer(private val callbacks: Callbacks) : GLSurfaceView.Renderer {
 
-    /**
-     * Callbacks for the renderer to communicate with the host.
-     */
+    /** Callbacks for the renderer to communicate with the host. */
     interface Callbacks {
         /** Request a new frame to be rendered */
         fun requestRender()
 
-        /** Notifies when the renderer has finished its initial setup and is ready to receive commands. */
+        /**
+         * Notifies when the renderer has finished its initial setup and is ready to receive
+         * commands.
+         */
         fun onRendererReady()
 
-        /** Notifies when all animations (blur, image fade) have completed and renderer is ready to accept a new image. */
+        /**
+         * Notifies when all animations (blur, image fade) have completed and renderer is ready to
+         * accept a new image.
+         */
         fun onReadyForNextImage()
 
         /** Notifies when surface dimensions change */
@@ -136,7 +149,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // Image state
     // Managed by RenderState
-    
+
     // Pending image to load when surface becomes available
     private var pendingImageSet: ImageSet? = null
 
@@ -160,43 +173,81 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
     // OpenGL resources
     private lateinit var pictureHandles: PictureHandles
-    private var pictureSet: GLPictureSet? = null
-    private var previousPictureSet: GLPictureSet? = null
+    private var currentImage = GLTextureImage()
+    private var previousImage = GLTextureImage()
+
     private var tileSize: Int = 0
 
     // Animation state
-    private val animationController = AnimationController(effectTransitionDurationMillis).apply {
-        onImageAnimationComplete = {
-            Log.d(TAG, "Animation completed, notifying host")
-            callbacks.onReadyForNextImage()
-        }
-    }
+    private val animationController =
+            AnimationController(effectTransitionDurationMillis).apply {
+                onImageAnimationComplete = {
+                    Log.d(TAG, "Animation completed, notifying host")
+                    callbacks.onReadyForNextImage()
+                }
+            }
 
     /**
-     * Sets the wallpaper image with pre-processed blur levels.
-     * @param imageSet Image payload containing original and blur level bitmaps
+     * Sets the wallpaper image with pre-processed blur levels. Handles the transition from the old
+     * image to the new one using a slot-based handover.
      */
     fun setImage(imageSet: ImageSet) {
-        Log.d(TAG, "setImage: called, ${imageSet.original.width}x${imageSet.original.height}, blurred=${imageSet.blurred.size}")
-        
+        Log.d(
+                TAG,
+                "setImage: called, ${imageSet.original.width}x${imageSet.original.height}, blurred=${imageSet.blurred.size}"
+        )
+
+        // 1. Safety Check: If the OpenGL surface isn't ready, save this for later.
         if (!surfaceCreated) {
             Log.w(TAG, "setImage: Surface not created, deferring image load")
             pendingImageSet = imageSet
             return
         }
-        
-        val baseState = animationController.targetRenderState
-        val newTargetState = baseState.copy(imageSet = imageSet)
 
-        if (pictureSet != null) {
+        // 2. Slot Handover:
+        // Release any old textures in 'previous', then move the 'current' image into 'previous'
+        // so we can crossfade out of it.
+        previousImage.release()
+        previousImage = currentImage
+        currentImage = GLTextureImage() // Create a fresh manager for the new image
+
+        // 3. Aspect Ratio Management:
+        // We track the aspect ratio of both images so the parallax doesn't "jump"
+        // if the new image has different dimensions than the old one.
+        if (previousImage != null) {
             previousBitmapAspect = bitmapAspect
         }
-        bitmapAspect = if (imageSet.original.height == 0) 1f else imageSet.original.width.toFloat() / imageSet.original.height
+        bitmapAspect =
+                if (imageSet.original.height == 0) 1f
+                else imageSet.original.width.toFloat() / imageSet.original.height
 
-        updatePictureSet(imageSet)
+        // 4. GPU Upload:
+        // This loads the bitmaps into GPU textures, performs the glFinish() handshake,
+        // and recycles the CPU bitmaps immediately to prevent LMK crashes.
+        try {
+            currentImage.load(imageSet)
+        } catch (e: Exception) {
+            Log.e(TAG, "setImage: Failed to load textures", e)
+            // If upload fails (e.g. context lost), defer until surface is recreated
+            surfaceCreated = false
+            pendingImageSet = imageSet
+            return
+        }
 
+        // 5. Update Animation State:
+        // Update the target state in the controller. This triggers the imageTransitionAnimator,
+        // which starts the crossfade from previousImage (alpha 1->0) to currentImage (alpha 0->1).
+        val baseState = animationController.targetRenderState
+        val newTargetState = baseState.copy(imageSet = imageSet)
         animationController.updateTargetState(newTargetState)
+
+        // 6. Recalculate Matrices:
+        // Adjust the orthographic projection to match the new image's aspect ratio.
         recomputeProjectionMatrix()
+
+        // 7. Render:
+        // Request a frame to start the animation sequence.
+        callbacks.requestRender()
     }
 
     /**
@@ -209,31 +260,24 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
-     * Exposes whether the renderer currently has a valid surface/context.
-     * Used by the host to decide when it is safe to issue GL work.
+     * Exposes whether the renderer currently has a valid surface/context. Used by the host to
+     * decide when it is safe to issue GL work.
      */
     fun isSurfaceReady(): Boolean = surfaceCreated
 
-    /**
-     * Marks the surface/context as lost so subsequent commands are deferred.
-     */
+    /** Marks the surface/context as lost so subsequent commands are deferred. */
     fun onSurfaceDestroyed() {
-        pictureSet?.release()
-        previousPictureSet?.release()
-        pictureSet = null
-        previousPictureSet = null
+        currentImage.release()
+        previousImage.release()
         surfaceCreated = false
     }
 
-    /**
-     * Toggles the blur effect on/off with animation.
-     */
+    /** Toggles the blur effect on/off with animation. */
     fun toggleBlur() {
         Log.d(TAG, "toggleBlur: called")
         val baseState = animationController.targetRenderState
-        val newTargetState = baseState.copy(
-            blurPercent = if (baseState.blurPercent > 0f) 0f else 1f
-        )
+        val newTargetState =
+                baseState.copy(blurPercent = if (baseState.blurPercent > 0f) 0f else 1f)
         animationController.updateTargetState(newTargetState)
         callbacks.requestRender()
     }
@@ -256,13 +300,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
-     * Seeds the current render state to the desired blur without animation.
-     * Intended for first frame / context restore before any commands animate.
+     * Seeds the current render state to the desired blur without animation. Intended for first
+     * frame / context restore before any commands animate.
      */
     fun enableBlurImmediately(enable: Boolean) {
-        val target = animationController.targetRenderState.copy(
-            blurPercent = if (enable) 1f else 0f
-        )
+        val target =
+                animationController.targetRenderState.copy(blurPercent = if (enable) 1f else 0f)
         animationController.setRenderStateImmediately(target)
         animationController.blurAmountAnimator.reset()
     }
@@ -288,22 +331,21 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param duotone Duotone colors to blend when enabled
      */
     fun setDuotoneSettings(
-        enabled: Boolean,
-        alwaysOn: Boolean,
-        duotone: Duotone,
+            enabled: Boolean,
+            alwaysOn: Boolean,
+            duotone: Duotone,
     ) {
-        val newTargetDuotone = Duotone(
-            lightColor = duotone.lightColor,
-            darkColor = duotone.darkColor,
-            opacity = if (enabled) 1f else 0f,
-            blendMode = duotone.blendMode
-        )
+        val newTargetDuotone =
+                Duotone(
+                        lightColor = duotone.lightColor,
+                        darkColor = duotone.darkColor,
+                        opacity = if (enabled) 1f else 0f,
+                        blendMode = duotone.blendMode
+                )
         val baseState = animationController.targetRenderState
         if (baseState.duotone != newTargetDuotone || baseState.duotoneAlwaysOn != alwaysOn) {
-            val newTargetState = baseState.copy(
-                duotone = newTargetDuotone,
-                duotoneAlwaysOn = alwaysOn
-            )
+            val newTargetState =
+                    baseState.copy(duotone = newTargetDuotone, duotoneAlwaysOn = alwaysOn)
             animationController.updateTargetState(newTargetState)
             callbacks.requestRender()
         }
@@ -316,18 +358,15 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param scale Normalized grain size slider (0.0 = fine, 1.0 = coarse)
      */
     fun setGrainSettings(
-        enabled: Boolean,
-        amount: Float,
-        scale: Float,
+            enabled: Boolean,
+            amount: Float,
+            scale: Float,
     ) {
         val clampedAmount = amount.coerceIn(0f, 1f)
         val clampedScale = scale.coerceIn(0f, 1f)
         val baseState = animationController.targetRenderState
-        val newGrain = GrainSettings(
-            enabled = enabled,
-            amount = clampedAmount,
-            scale = clampedScale
-        )
+        val newGrain =
+                GrainSettings(enabled = enabled, amount = clampedAmount, scale = clampedScale)
         if (baseState.grain != newGrain) {
             val newTargetState = baseState.copy(grain = newGrain)
             animationController.updateTargetState(newTargetState)
@@ -341,11 +380,15 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param intensity Effect intensity (0.0 - 1.0)
      * @param fadeDurationMillis Duration of fade-out animation in milliseconds
      */
-    fun setChromaticAberrationSettings(enabled: Boolean, intensity: Float, fadeDurationMillis: Int) {
+    fun setChromaticAberrationSettings(
+            enabled: Boolean,
+            intensity: Float,
+            fadeDurationMillis: Int
+    ) {
         chromaticAberrationEnabled = enabled
         chromaticAberrationIntensity = intensity.coerceIn(0f, 1f)
         chromaticAberrationFadeDuration = fadeDurationMillis.coerceAtLeast(0)
-        
+
         // If disabled, clear all active touch points
         if (!enabled) {
             activeTouches.clear()
@@ -359,7 +402,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      */
     fun setTouchPoints(touches: List<TouchData>) {
         if (!chromaticAberrationEnabled) return
-        
+
         for (touch in touches) {
             when (touch.action) {
                 TouchAction.DOWN -> {
@@ -375,7 +418,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                     }
                 }
                 TouchAction.MOVE -> {
-                    activeTouches[touch.id]?.let { 
+                    activeTouches[touch.id]?.let {
                         if (!it.isReleased) {
                             it.x = touch.x
                             it.y = touch.y
@@ -383,7 +426,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                     }
                 }
                 TouchAction.UP -> {
-                    activeTouches[touch.id]?.let { 
+                    activeTouches[touch.id]?.let {
                         if (!it.isReleased) {
                             releaseTouch(it)
                         }
@@ -391,23 +434,28 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                 }
             }
         }
-        
+
         // Don't remove touches here - let updateTouchPointAnimations() handle cleanup
         // when animations complete. This allows fade-out animations to run.
-        
+
         callbacks.requestRender()
     }
 
     private fun createTouchPoint(touch: TouchData): TouchPoint {
-        val newTouch = TouchPoint(
-            id = touch.id,
-            x = touch.x,
-            y = touch.y,
-            radius = 0f,
-            intensity = 1f,
-            radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
-            fadeAnimator = TickingFloatAnimator(chromaticAberrationFadeDuration, DecelerateInterpolator())
-        )
+        val newTouch =
+                TouchPoint(
+                        id = touch.id,
+                        x = touch.x,
+                        y = touch.y,
+                        radius = 0f,
+                        intensity = 1f,
+                        radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
+                        fadeAnimator =
+                                TickingFloatAnimator(
+                                        chromaticAberrationFadeDuration,
+                                        DecelerateInterpolator()
+                                )
+                )
         newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
         // Set fadeAnimator to not be running, but with intensity at 1.0
         newTouch.fadeAnimator.reset()
@@ -428,13 +476,16 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             // Tick animators (they handle their own running state internally)
             touchPoint.radiusAnimator.tick()
             touchPoint.radius = touchPoint.radiusAnimator.currentValue
-            
+
             touchPoint.fadeAnimator.tick()
             touchPoint.intensity = touchPoint.fadeAnimator.currentValue
-            
+
             // Remove touch points that have fully faded out AND finished their radius animation
-            if (!touchPoint.radiusAnimator.isRunning && !touchPoint.fadeAnimator.isRunning && 
-                touchPoint.radius <= 0.01f && touchPoint.intensity <= 0.01f) {
+            if (!touchPoint.radiusAnimator.isRunning &&
+                            !touchPoint.fadeAnimator.isRunning &&
+                            touchPoint.radius <= 0.01f &&
+                            touchPoint.intensity <= 0.01f
+            ) {
                 keysToRemove.add(id)
             }
         }
@@ -459,8 +510,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         // Limit max grain intensity to avoid garish look (user slider 1.0 -> this value)
         const val GRAIN_INTENSITY_MAX = 0.30f
 
-        //language=c
-        private const val PICTURE_VERTEX_SHADER_CODE = """
+        // language=c
+        private const val PICTURE_VERTEX_SHADER_CODE =
+                """
             #version 300 es
             uniform mat4 uMVPMatrix;
             in vec4 aPosition;
@@ -475,8 +527,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             }
         """
 
-        //language=glsl
-        private const val PICTURE_FRAGMENT_SHADER_CODE = """
+        // language=glsl
+        private const val PICTURE_FRAGMENT_SHADER_CODE =
+                """
             #version 300 es
             #ifdef GL_FRAGMENT_PRECISION_HIGH
             precision highp float;
@@ -656,9 +709,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
                 fragColor = vec4(finalColor, colorG.a * uAlpha);
             }
         """
-
     }
-
 
     override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
         surfaceCreated = true
@@ -668,28 +719,59 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
 
         try {
             // Picture shader
-            val pictureVertexShader = GLUtil.loadShader(GLES30.GL_VERTEX_SHADER, PICTURE_VERTEX_SHADER_CODE)
-            val pictureFragmentShader = GLUtil.loadShader(GLES30.GL_FRAGMENT_SHADER, PICTURE_FRAGMENT_SHADER_CODE)
-            val pictureProgram = GLUtil.createAndLinkProgram(pictureVertexShader, pictureFragmentShader)
-        pictureHandles = PictureHandles(
-            program = pictureProgram,
-            attribPosition = GLES30.glGetAttribLocation(pictureProgram, "aPosition"),
-            attribTexCoords = GLES30.glGetAttribLocation(pictureProgram, "aTexCoords"),
-            uniformMvpMatrix = GLES30.glGetUniformLocation(pictureProgram, "uMVPMatrix"),
-            uniformTexture = GLES30.glGetUniformLocation(pictureProgram, "uTexture"),
-            uniformAlpha = GLES30.glGetUniformLocation(pictureProgram, "uAlpha"),
-            uniformDuotoneLight = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneLightColor"),
-            uniformDuotoneDark = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneDarkColor"),
-            uniformDuotoneOpacity = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneOpacity"),
-            uniformDuotoneBlendMode = GLES30.glGetUniformLocation(pictureProgram, "uDuotoneBlendMode"),
-            uniformDimAmount = GLES30.glGetUniformLocation(pictureProgram, "uDimAmount"),
-            uniformGrainAmount = GLES30.glGetUniformLocation(pictureProgram, "uGrainAmount"),
-            uniformGrainCount = GLES30.glGetUniformLocation(pictureProgram, "uGrainCount"),
-            uniformTouchPointCount = GLES30.glGetUniformLocation(pictureProgram, "uTouchPointCount"),
-            uniformTouchPoints = GLES30.glGetUniformLocation(pictureProgram, "uTouchPoints"),
-            uniformTouchIntensities = GLES30.glGetUniformLocation(pictureProgram, "uTouchIntensities"),
-            uniformScreenSize = GLES30.glGetUniformLocation(pictureProgram, "uScreenSize"),
-        )
+            val pictureVertexShader =
+                    GLUtil.loadShader(GLES30.GL_VERTEX_SHADER, PICTURE_VERTEX_SHADER_CODE)
+            val pictureFragmentShader =
+                    GLUtil.loadShader(GLES30.GL_FRAGMENT_SHADER, PICTURE_FRAGMENT_SHADER_CODE)
+            val pictureProgram =
+                    GLUtil.createAndLinkProgram(pictureVertexShader, pictureFragmentShader)
+            pictureHandles =
+                    PictureHandles(
+                            program = pictureProgram,
+                            attribPosition =
+                                    GLES30.glGetAttribLocation(pictureProgram, "aPosition"),
+                            attribTexCoords =
+                                    GLES30.glGetAttribLocation(pictureProgram, "aTexCoords"),
+                            uniformMvpMatrix =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uMVPMatrix"),
+                            uniformTexture =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uTexture"),
+                            uniformAlpha = GLES30.glGetUniformLocation(pictureProgram, "uAlpha"),
+                            uniformDuotoneLight =
+                                    GLES30.glGetUniformLocation(
+                                            pictureProgram,
+                                            "uDuotoneLightColor"
+                                    ),
+                            uniformDuotoneDark =
+                                    GLES30.glGetUniformLocation(
+                                            pictureProgram,
+                                            "uDuotoneDarkColor"
+                                    ),
+                            uniformDuotoneOpacity =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uDuotoneOpacity"),
+                            uniformDuotoneBlendMode =
+                                    GLES30.glGetUniformLocation(
+                                            pictureProgram,
+                                            "uDuotoneBlendMode"
+                                    ),
+                            uniformDimAmount =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uDimAmount"),
+                            uniformGrainAmount =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uGrainAmount"),
+                            uniformGrainCount =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uGrainCount"),
+                            uniformTouchPointCount =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uTouchPointCount"),
+                            uniformTouchPoints =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uTouchPoints"),
+                            uniformTouchIntensities =
+                                    GLES30.glGetUniformLocation(
+                                            pictureProgram,
+                                            "uTouchIntensities"
+                                    ),
+                            uniformScreenSize =
+                                    GLES30.glGetUniformLocation(pictureProgram, "uScreenSize"),
+                    )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize shaders", e)
             surfaceCreated = false
@@ -726,120 +808,120 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     override fun onDrawFrame(gl: GL10) {
-        if (!surfaceCreated) {
-            return
-        }
+        if (!surfaceCreated) return
+
+        // 1. Setup & Clear
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
-        val currentRenderState = animationController.currentRenderState
+        // 2. Drive Animations
+        // Ticks all animators (blur, dim, image fade, parallax, duotone colors)
+        val isAnimating = animationController.tick()
+        val state = animationController.currentRenderState
 
-        // Recompute projection matrix with animated parallax offset
+        // imageAlpha goes from 0.0 (old image) to 1.0 (new image)
+        val imageAlpha = animationController.imageTransitionAnimator.currentValue
+
+        // 3. Update Matrices
+        // Recalculates projectionMatrix based on current parallax offset
         recomputeProjectionMatrix()
-
-        // Compute transformation matrices
         Matrix.setIdentityM(modelMatrix, 0)
         Matrix.multiplyMM(viewModelMatrix, 0, viewMatrix, 0, modelMatrix, 0)
-        Matrix.multiplyMM(previousMvpMatrix, 0, previousProjectionMatrix, 0, viewModelMatrix, 0)
+
+        // MVP for Current Image
         Matrix.multiplyMM(mvpMatrix, 0, projectionMatrix, 0, viewModelMatrix, 0)
+        // MVP for Previous Image (uses the projection matrix calculated with its aspect ratio)
+        Matrix.multiplyMM(previousMvpMatrix, 0, previousProjectionMatrix, 0, viewModelMatrix, 0)
 
-        // Update animations
-        val isAnimating = animationController.tick()
+        // 4. Calculate Effect Parameters
+        val blurPercent = state.blurPercent.coerceIn(0f, 1f)
 
-        // blurAmount is normalized 0-1, convert to actual keyframe count for rendering
-        val blurPercent = currentRenderState.blurPercent.coerceIn(0f, 1f)
+        // Final duotone settings: opacity is scaled by blur unless 'Always On' is enabled
+        val effectiveDuotone =
+                state.duotone.copy(
+                        opacity =
+                                if (state.duotoneAlwaysOn) state.duotone.opacity
+                                else (state.duotone.opacity * blurPercent)
+                )
 
-        val duotone = currentRenderState.duotone.copy(
-            opacity = if (currentRenderState.duotoneAlwaysOn) currentRenderState.duotone.opacity else (currentRenderState.duotone.opacity * blurPercent),
-            blendMode = currentRenderState.duotone.blendMode // Explicitly preserve blendMode
+        // Grain calculation: Scale (0..1) maps to pixel size (1.5..3.0)
+        // We pass the "Grain Count" (How many noise tiles fit in the image) to the shader
+        val grainCounts = if (state.grain.enabled) {
+            val imageWidth = state.imageSet.width.toFloat()
+            val imageHeight = state.imageSet.height.toFloat()
+            val grainSizePx = GRAIN_SIZE_MIN_IMAGE_PX + (GRAIN_SIZE_MAX_IMAGE_PX - GRAIN_SIZE_MIN_IMAGE_PX) * state.grain.scale
+            (imageWidth / grainSizePx) to (imageHeight / grainSizePx)
+        } else {
+            0f to 0f
+        }
+
+        // 5. Process Multitouch / Chromatic Aberration
+        updateTouchPointAnimations() // Updates radius and fade for each active touch
+
+        val touchCount = activeTouches.size.coerceAtMost(maxTouchPoints)
+        val touchPoints = FloatArray(maxTouchPoints * 3)
+        val touchIntensities = FloatArray(maxTouchPoints)
+        val screenSize = floatArrayOf(surfaceWidthPx.toFloat(), surfaceHeightPx.toFloat())
+
+        var idx = 0
+        for (touch in activeTouches.values) {
+            if (idx >= touchCount) break
+            touchPoints[idx * 3] = touch.x
+            touchPoints[idx * 3 + 1] = touch.y
+            touchPoints[idx * 3 + 2] = touch.radius
+            // Apply global intensity slider to individual touch point intensity
+            touchIntensities[idx] = touch.intensity * chromaticAberrationIntensity
+            idx++
+        }
+
+        val touchData = Triple(touchCount, touchPoints, touchIntensities)
+
+        // 6. Draw Previous Image (Fading Out)
+        // We only draw if the crossfade is in progress (alpha > 0)
+        if (imageAlpha < 1f) {
+            previousImage.draw(
+                    handles = pictureHandles,
+                    mvpMatrix = previousMvpMatrix,
+                    blurPercent = blurPercent,
+                    alpha = 1f - imageAlpha,
+                    duotone = effectiveDuotone,
+                    dimAmount = state.dimAmount * blurPercent,
+                    grain = state.grain,
+                    grainCounts = grainCounts,
+                    touchData = touchData,
+                    screenSize = screenSize
+            )
+        }
+
+        // 7. Draw Current Image (Fading In)
+        currentImage.draw(
+                handles = pictureHandles,
+                mvpMatrix = mvpMatrix,
+                blurPercent = blurPercent,
+                alpha = imageAlpha,
+                duotone = effectiveDuotone,
+                dimAmount = state.dimAmount * blurPercent,
+                grain = state.grain,
+                grainCounts = grainCounts,
+                touchData = touchData,
+                screenSize = screenSize
         )
 
-        val finalDimAmount = currentRenderState.dimAmount * blurPercent
-
-        val grainState = currentRenderState.grain
-        // Apply intensity scaling here so the slider (0..1) maps to useful range (0..GRAIN_INTENSITY_MAX)
-        val grainAmount = if (grainState.enabled) grainState.amount * GRAIN_INTENSITY_MAX else 0f
-        
-        var grainCountX = 0f
-        var grainCountY = 0f
-        if (grainAmount > 0f) {
-            val imageWidth = currentRenderState.imageSet.original.width.toFloat()
-            val imageHeight = currentRenderState.imageSet.original.height.toFloat()
-            if (imageWidth > 0 && imageHeight > 0) {
-                val clampedScale = grainState.scale.coerceIn(0f, 1f)
-                val grainSizePx = GRAIN_SIZE_MIN_IMAGE_PX + (GRAIN_SIZE_MAX_IMAGE_PX - GRAIN_SIZE_MIN_IMAGE_PX) * clampedScale
-                grainCountX = imageWidth / grainSizePx
-                grainCountY = imageHeight / grainSizePx
+        // 8. Lifecycle & Cleanup
+        // Once the new image is fully opaque, we release the old textures to free VRAM immediately
+        if (!animationController.imageTransitionAnimator.isRunning && imageAlpha >= 1f) {
+            if (previousImage != null) {
+                previousImage.release()
             }
         }
 
-        val currentImageAlpha = animationController.imageTransitionAnimator.currentValue
-        val previousImageAlpha = 1f - animationController.imageTransitionAnimator.currentValue
-
-        // Update touch point animations
-        updateTouchPointAnimations()
-
-        // Prepare touch point data for shader (reuse arrays)
-        val touchPointCount = activeTouches.size.coerceAtMost(maxTouchPoints)
-        screenSizeArray[0] = surfaceWidthPx.toFloat()
-        screenSizeArray[1] = surfaceHeightPx.toFloat()
-        
-        // Fill existing arrays
-        var i = 0
-        for (touch in activeTouches.values) {
-            if (i >= touchPointCount) break
-            touchPointsArray[i * 3] = touch.x
-            touchPointsArray[i * 3 + 1] = touch.y
-            touchPointsArray[i * 3 + 2] = touch.radius
-            // Apply the global intensity multiplier
-            touchIntensitiesArray[i] = touch.intensity * chromaticAberrationIntensity
-            i++
-        }
-
-        // Draw previous image (fade out during transition)
-        previousPictureSet?.drawFrame(
-            pictureHandles,
-            tileSize,
-            previousMvpMatrix,
-            blurPercent,
-            previousImageAlpha,
-            duotone,
-            finalDimAmount,
-            grainAmount,
-            grainCountX,
-            grainCountY,
-            touchPointCount = touchPointCount,
-            touchPoints = touchPointsArray,
-            touchIntensities = touchIntensitiesArray,
-            screenSize = screenSizeArray,
-        )
-
-        // Draw current image (fade in during transition)
-        pictureSet?.drawFrame(
-            pictureHandles,
-            tileSize,
-            mvpMatrix,
-            blurPercent,
-            currentImageAlpha,
-            duotone,
-            finalDimAmount,
-            grainAmount,
-            grainCountX,
-            grainCountY,
-            touchPointCount = touchPointCount,
-            touchPoints = touchPointsArray,
-            touchIntensities = touchIntensitiesArray,
-            screenSize = screenSizeArray,
-        )
-
-        // Clean up previous picture set after fade completes
-        if (!animationController.imageTransitionAnimator.isRunning && previousImageAlpha <= 0f) {
-            previousPictureSet = null
-            previousBitmapAspect = null
-        }
-
-        // Request another frame if any animation is still running or touch points are animating
-        val touchPointsAnimating = activeTouches.values.any { it.radiusAnimator.isRunning || it.fadeAnimator.isRunning }
-        if (isAnimating || touchPointsAnimating) {
+        // 9. Keep-Alive
+        // If any animation is running (blur transition, image fade, or touch ripples), request next
+        // frame
+        val touchAnimating =
+                activeTouches.values.any {
+                    it.radiusAnimator.isRunning || it.fadeAnimator.isRunning
+                }
+        if (isAnimating || touchAnimating) {
             callbacks.requestRender()
         }
     }
@@ -849,32 +931,16 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param imageSet The image set to load
      */
     private fun updatePictureSet(imageSet: ImageSet) {
-        // Double-check surface is still available before creating textures
-        if (!surfaceCreated) {
-            Log.w(TAG, "updatePictureSet: Surface no longer available, aborting")
-            return
-        }
+        if (!surfaceCreated) return
 
-        previousPictureSet = pictureSet
+        // Transfer current to previous for crossfading
+        previousImage.release()
+        previousImage = currentImage
+        currentImage = GLTextureImage()
 
-        // Build the bitmap list: [original, ...blurLevels]
-        val bitmapList = buildList {
-            add(imageSet.original)
-            addAll(imageSet.blurred)
-        }
-
-        try {
-            pictureSet = GLPictureSet().apply {
-                load(bitmapList, tileSize)
-            }
-            callbacks.requestRender()
-        } catch (e: Exception) {
-            Log.w(TAG, "updatePictureSet: Error loading textures, marking surface as unavailable (will retry on next surface)", e)
-            surfaceCreated = false
-            pendingImageSet = imageSet
-            // Swallow and wait for surface recreation; GL context likely lost.
-            return
-        }
+        // Load new image (this handles its own recycling)
+        currentImage.load(imageSet)
+        callbacks.requestRender()
     }
 
     fun isBlurred(): Boolean {
@@ -904,7 +970,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
         if (baseState.parallaxOffset != newOffset) {
             val newTargetState = baseState.copy(parallaxOffset = newOffset)
             animationController.updateTargetState(newTargetState)
-            // Animation system will handle smooth interpolation; projection matrix 
+            // Animation system will handle smooth interpolation; projection matrix
             // is recalculated on every frame in onDrawFrame() using currentRenderState
             if (surfaceCreated) {
                 callbacks.requestRender()
@@ -913,9 +979,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
-     * Called when the wallpaper visibility changes. Syncs the parallax animator's current value
-     * to match the target value, ensuring smooth animation starts from the correct position.
-     * This prevents lag when the user starts swiping immediately after unlock.
+     * Called when the wallpaper visibility changes. Syncs the parallax animator's current value to
+     * match the target value, ensuring smooth animation starts from the correct position. This
+     * prevents lag when the user starts swiping immediately after unlock.
      */
     fun onVisibilityChanged() {
         val targetOffset = animationController.targetRenderState.parallaxOffset
@@ -923,8 +989,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 
     /**
-     * Recomputes projection matrices for current and previous images.
-     * Handles aspect ratio matching and parallax offset.
+     * Recomputes projection matrices for current and previous images. Handles aspect ratio matching
+     * and parallax offset.
      */
     private fun recomputeProjectionMatrix() {
         val parallaxOffset = animationController.currentRenderState.parallaxOffset
@@ -941,11 +1007,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
             buildProjectionMatrix(previousProjectionMatrix, prevAspectRatio, parallaxOffset)
         } else {
             System.arraycopy(
-                projectionMatrix,
-                0,
-                previousProjectionMatrix,
-                0,
-                projectionMatrix.size
+                    projectionMatrix,
+                    0,
+                    previousProjectionMatrix,
+                    0,
+                    projectionMatrix.size
             )
         }
     }
@@ -956,7 +1022,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
      * @param aspectRatio Ratio of screen aspect to bitmap aspect
      * @param parallaxOffset Parallax offset (0.0 = left, 0.5 = center, 1.0 = right)
      */
-    private fun buildProjectionMatrix(target: FloatArray, aspectRatio: Float, parallaxOffset: Float) {
+    private fun buildProjectionMatrix(
+            target: FloatArray,
+            aspectRatio: Float,
+            parallaxOffset: Float
+    ) {
         if (aspectRatio == 0f) {
             Matrix.orthoM(target, 0, -1f, 1f, -1f, 1f, 0f, 1f)
             return
@@ -984,10 +1054,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) :
     }
 }
 
-
-/**
- * Utility functions for OpenGL ES operations.
- */
+/** Utility functions for OpenGL ES operations. */
 object GLUtil {
     private const val TAG = "GLUtil"
     /** Bytes per float value */
@@ -1005,7 +1072,7 @@ object GLUtil {
         if (shader == 0) {
             throw RuntimeException("Failed to create shader (glCreateShader returned 0)")
         }
-        
+
         GLES30.glShaderSource(shader, shaderCode)
         GLES30.glCompileShader(shader)
 
@@ -1013,11 +1080,12 @@ object GLUtil {
         GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, compileStatus, 0)
         if (compileStatus[0] == 0) {
             val log = GLES30.glGetShaderInfoLog(shader)
-            val shaderTypeName = when (type) {
-                GLES30.GL_VERTEX_SHADER -> "vertex"
-                GLES30.GL_FRAGMENT_SHADER -> "fragment"
-                else -> "unknown"
-            }
+            val shaderTypeName =
+                    when (type) {
+                        GLES30.GL_VERTEX_SHADER -> "vertex"
+                        GLES30.GL_FRAGMENT_SHADER -> "fragment"
+                        else -> "unknown"
+                    }
             val errorMsg = "Shader compilation failed ($shaderTypeName shader):\n$log"
             Log.e(TAG, errorMsg)
             GLES30.glDeleteShader(shader)
@@ -1034,9 +1102,9 @@ object GLUtil {
      * @return Linked program handle
      */
     fun createAndLinkProgram(
-        vertexShader: Int,
-        fragmentShader: Int,
-        attributes: Array<String>? = null,
+            vertexShader: Int,
+            fragmentShader: Int,
+            attributes: Array<String>? = null,
     ): Int {
         val program = GLES30.glCreateProgram()
         checkGlError("glCreateProgram")
@@ -1087,24 +1155,24 @@ object GLUtil {
 
             // Set texture parameters
             GLES30.glTexParameteri(
-                GLES30.GL_TEXTURE_2D,
-                GLES30.GL_TEXTURE_WRAP_S,
-                GLES30.GL_CLAMP_TO_EDGE
+                    GLES30.GL_TEXTURE_2D,
+                    GLES30.GL_TEXTURE_WRAP_S,
+                    GLES30.GL_CLAMP_TO_EDGE
             )
             GLES30.glTexParameteri(
-                GLES30.GL_TEXTURE_2D,
-                GLES30.GL_TEXTURE_WRAP_T,
-                GLES30.GL_CLAMP_TO_EDGE
+                    GLES30.GL_TEXTURE_2D,
+                    GLES30.GL_TEXTURE_WRAP_T,
+                    GLES30.GL_CLAMP_TO_EDGE
             )
             GLES30.glTexParameteri(
-                GLES30.GL_TEXTURE_2D,
-                GLES30.GL_TEXTURE_MIN_FILTER,
-                GLES30.GL_LINEAR
+                    GLES30.GL_TEXTURE_2D,
+                    GLES30.GL_TEXTURE_MIN_FILTER,
+                    GLES30.GL_LINEAR
             )
             GLES30.glTexParameteri(
-                GLES30.GL_TEXTURE_2D,
-                GLES30.GL_TEXTURE_MAG_FILTER,
-                GLES30.GL_LINEAR
+                    GLES30.GL_TEXTURE_2D,
+                    GLES30.GL_TEXTURE_MAG_FILTER,
+                    GLES30.GL_LINEAR
             )
 
             // Upload bitmap data
@@ -1138,9 +1206,9 @@ object GLUtil {
      */
     fun newFloatBuffer(size: Int): FloatBuffer {
         return ByteBuffer.allocateDirect(size * BYTES_PER_FLOAT)
-            .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-            .apply { position(0) }
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer()
+                .apply { position(0) }
     }
 
     /**

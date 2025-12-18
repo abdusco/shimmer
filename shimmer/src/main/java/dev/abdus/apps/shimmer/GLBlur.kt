@@ -18,18 +18,7 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-// Increase to 8 for a much smoother "radius shrinking" feel without OOM risk
-const val BLUR_KEYFRAMES = 8 
-const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 300
-
-// Efficiency Constants
-const val MAX_BLUR_KEYFRAMES = 8 
-private const val PIXELS_PER_STEP = 40f 
-private const val BLUR_SCALE_FACTOR = 6 
-
-// The "Ease-Out" factor. 2.0 means the radius grows quadratically.
-// This puts more keyframes near the "Sharp" end for a smooth finish.
-private const val RADIUS_EXPONENT = 1.8
+const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
 
 private const val TAG = "GLBlur"
 
@@ -38,56 +27,57 @@ data class BlurLevelResult(
     val radii: List<Float>
 )
 
-/**
- * Generates dynamic blur levels with an exponential radius distribution.
- * This creates a natural ease-out effect when the wallpaper clears.
- */
 fun Bitmap.generateBlurLevels(maxRadius: Float): BlurLevelResult {
     if (maxRadius < 1f) return BlurLevelResult(emptyList(), emptyList())
-
-    // Calculate how many frames we need based on intensity
-    val calculatedLevels = ceil(maxRadius / PIXELS_PER_STEP).toInt()
-        .coerceIn(1, MAX_BLUR_KEYFRAMES)
 
     val resultBitmaps = mutableListOf<Bitmap>()
     val resultRadii = mutableListOf<Float>()
     val startTime = System.currentTimeMillis()
 
-    val scaledWidth = max(1, width / BLUR_SCALE_FACTOR)
-    val scaledHeight = max(1, height / BLUR_SCALE_FACTOR)
+    // 1. Calculate number of keyframes: 1 for every 40px, max 4.
+    val numKeyframes = ceil(maxRadius / 40f).toInt().coerceIn(1, 4)
 
     try {
-        val baseDownsampled = this.scale(scaledWidth, scaledHeight)
+        for (i in 1..numKeyframes) {
+            // 2. Exponential distribution
+            // (i/N)^1.5 ensures we have more keyframes at lower blur levels for a smoother finish
+            val progress = (i.toFloat() / numKeyframes).pow(2f)
+            val currentRadius = maxRadius * progress
 
-        GLGaussianRenderer(scaledWidth, scaledHeight).use { renderer ->
-            for (i in 1..calculatedLevels) {
-                // Exponential progress: (i/N)^2
-                // Example with 4 levels: 0.06, 0.25, 0.56, 1.0
-                val linearProgress = i.toFloat() / calculatedLevels
-                val exponentialProgress = linearProgress.toDouble().pow(RADIUS_EXPONENT).toFloat()
-                
-                val currentRadius = maxRadius * exponentialProgress
-                
-                renderer.uploadSource(baseDownsampled)
-                val blurredSmall = renderer.blur(currentRadius / BLUR_SCALE_FACTOR)
+            // 3. Adaptive Scale Divisor
+            // If radius < 40px, we stay at 2:1 to prevent blocky artifacts.
+            // As radius grows, we increase downsampling up to 8x to save memory.
+            val divisor = (currentRadius / 40f).coerceIn(2f, 8f)
+            
+            val sw = max(1, (width / divisor).toInt())
+            val sh = max(1, (height / divisor).toInt())
 
-                if (blurredSmall != null) {
-                    val finalBlurred = blurredSmall.scale(width, height)
-                    resultBitmaps.add(finalBlurred)
+            // Create temporary base for this specific keyframe's resolution
+            val tempBase = if (divisor > 1f) this.scale(sw, sh) else this
+
+            GLGaussianRenderer(sw, sh).use { renderer ->
+                renderer.uploadSource(tempBase)
+                
+                // Radius must be scaled down by the same divisor used for dimensions
+                val blurred = renderer.blur(currentRadius / divisor)
+                if (blurred != null) {
+                    resultBitmaps.add(blurred)
                     resultRadii.add(currentRadius)
-                    blurredSmall.recycle()
                 }
             }
-        }
-        baseDownsampled.recycle()
 
+            // Only recycle if we actually created a new scaled bitmap
+            if (tempBase !== this) {
+                tempBase.recycle()
+            }
+        }
     } catch (e: Throwable) {
-        Log.e(TAG, "generateBlurLevels: Failed", e)
+        Log.e(TAG, "generateBlurLevels failed", e)
         resultBitmaps.forEach { it.recycle() }
         return BlurLevelResult(emptyList(), emptyList())
     }
 
-    Log.d(TAG, "Ease-Out Blur: Generated $calculatedLevels levels (Exp: $RADIUS_EXPONENT) in ${System.currentTimeMillis() - startTime}ms")
+    Log.d(TAG, "Generated $numKeyframes levels for radius $maxRadius in ${System.currentTimeMillis() - startTime}ms")
     return BlurLevelResult(resultBitmaps, resultRadii)
 }
 
@@ -112,7 +102,7 @@ private class GLGaussianRenderer(
         """
 
         // language=glsl
-        private const val FRAGMENT_SHADER = """
+        private var FRAGMENT_SHADER = """
             precision mediump float;
             uniform sampler2D uTexture;
             uniform vec2 uTexelSize;

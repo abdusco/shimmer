@@ -916,7 +916,6 @@ private sealed interface RendererCommand {
 private class RendererCommandQueue {
     private val replaceableTypes: Set<KClass<out RendererCommand>> = setOf(
         RendererCommand.ApplyBlur::class,
-        RendererCommand.SetImage::class,
         RendererCommand.SetDim::class,
         RendererCommand.SetDuotone::class,
         RendererCommand.SetGrain::class,
