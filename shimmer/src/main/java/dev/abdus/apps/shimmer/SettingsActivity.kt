@@ -5,12 +5,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
-import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,10 +32,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Brightness4
 import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material.icons.outlined.Event
@@ -47,8 +44,6 @@ import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,27 +58,22 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,12 +83,7 @@ import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 val PADDING_X = 24.dp
@@ -1520,12 +1505,14 @@ private fun DuotoneBlendModeDropdown(
     onBlendModeSelected: (DuotoneBlendMode) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val blendModes = listOf(
-        DuotoneBlendMode.NORMAL to "Normal",
-        DuotoneBlendMode.SOFT_LIGHT to "Soft Light",
-        DuotoneBlendMode.SCREEN to "Screen"
-    )
-    val selectedName = blendModes.find { it.first == selectedBlendMode }?.second ?: "Normal"
+    val modes = remember {
+        listOf(
+            DuotoneBlendMode.NORMAL to "Normal",
+            DuotoneBlendMode.SOFT_LIGHT to "Soft Light",
+            DuotoneBlendMode.SCREEN to "Screen"
+        )
+    }
+    val selectedName = modes.find { it.first == selectedBlendMode }?.second ?: "Normal"
     
     Box {
         OutlinedButton(onClick = { expanded = true }) {
@@ -1535,12 +1522,12 @@ private fun DuotoneBlendModeDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            blendModes.forEach { (mode, name) ->
+            modes.forEach { pair ->
                 DropdownMenuItem(
-                    text = { Text(name) },
+                    text = { Text(text = pair.second) },
                     onClick = {
                         expanded = false
-                        onBlendModeSelected(mode)
+                        onBlendModeSelected(pair.first)
                     }
                 )
             }

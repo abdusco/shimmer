@@ -14,11 +14,10 @@ import java.nio.FloatBuffer
 import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 200
+const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 250
 
 private const val TAG = "GLBlur"
 
@@ -28,21 +27,25 @@ data class BlurLevelResult(
 )
 
 fun Bitmap.generateBlurLevels(maxRadius: Float): BlurLevelResult {
-    if (maxRadius < 1f) return BlurLevelResult(emptyList(), emptyList())
+    val requestedRadius = maxRadius.coerceAtMost(MAX_SUPPORTED_BLUR_RADIUS_PIXELS.toFloat())
+
+    if (requestedRadius < 1f) {
+        return BlurLevelResult(emptyList(), emptyList())
+    }
 
     val resultBitmaps = mutableListOf<Bitmap>()
     val resultRadii = mutableListOf<Float>()
     val startTime = System.currentTimeMillis()
 
     // 1. Calculate number of keyframes: 1 for every 40px, max 4.
-    val numKeyframes = ceil(maxRadius / 40f).toInt().coerceIn(1, 4)
+    val numKeyframes = ceil(requestedRadius / 40f).toInt().coerceIn(1, 4)
 
     try {
         for (i in 1..numKeyframes) {
             // 2. Exponential distribution
             // (i/N)^1.5 ensures we have more keyframes at lower blur levels for a smoother finish
             val progress = (i.toFloat() / numKeyframes).pow(2f)
-            val currentRadius = maxRadius * progress
+            val currentRadius = requestedRadius * progress
 
             // 3. Adaptive Scale Divisor
             // If radius < 40px, we stay at 2:1 to prevent blocky artifacts.
