@@ -2,6 +2,7 @@ package dev.abdus.apps.shimmer
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.view.animation.DecelerateInterpolator
 import kotlinx.serialization.Serializable
 
 /**
@@ -37,6 +38,18 @@ data class GrainSettings(
     val enabled: Boolean = false,
     val amount: Float = 0.18f,
     val scale: Float = 0.5f,
+)
+
+
+data class TouchPoint(
+    val id: Int,
+    var x: Float,
+    var y: Float,
+    var radius: Float = 0f,
+    var intensity: Float = 1f,
+    var isReleased: Boolean = false,
+    val radiusAnimator: TickingFloatAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
+    val fadeAnimator: TickingFloatAnimator = TickingFloatAnimator(500, DecelerateInterpolator())
 )
 
 

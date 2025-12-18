@@ -1427,7 +1427,7 @@ private fun ChromaticAberrationSettings(
                         onDurationChange = onFadeDurationChange,
                         icon = Icons.Outlined.Timer,
                         durationRange = 0L..3000L,
-                        steps = (2000L / 250L).toInt() - 1,
+                        steps = (3000L / 250L).toInt() - 1,
                     )
                 }
             }

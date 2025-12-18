@@ -9,17 +9,6 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
 
-private data class TouchPoint(
-    val id: Int,
-    var x: Float,
-    var y: Float,
-    var radius: Float = 0f,
-    var intensity: Float = 1f,
-    var isReleased: Boolean = false,
-    val radiusAnimator: TickingFloatAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
-    val fadeAnimator: TickingFloatAnimator = TickingFloatAnimator(500, DecelerateInterpolator())
-)
-
 class ShimmerRenderer(private val callbacks: Callbacks) : GLSurfaceView.Renderer {
 
     interface Callbacks {
@@ -436,7 +425,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLSurfaceView.Renderer
                 vec2 delta = screenPos - uTouchPoints[i].xy;
                 float dist = length(vec2(delta.x * aspect, delta.y));
                 float effect = uTouchIntensities[i] * (1.0 - smoothstep(0.0, uTouchPoints[i].z, dist));
-                if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.05;
+                if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.02;
             }
             
             vec3 cR = applyDuotone(texture(uTexture, vTexCoords + totalOffset).rgb);
