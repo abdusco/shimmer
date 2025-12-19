@@ -40,7 +40,15 @@ data class GrainSettings(
     val enabled: Boolean = false,
     val amount: Float = 0.18f,
     val scale: Float = 0.5f,
-)
+) {
+    companion object {
+        /** Minimum grain size in image pixels (fine grain) */
+        const val GRAIN_SIZE_MIN_IMAGE_PX = 1.5f
+        
+        /** Maximum grain size in image pixels (coarse grain) */
+        const val GRAIN_SIZE_MAX_IMAGE_PX = 3.0f
+    }
+}
 
 
 data class TouchPoint(
@@ -67,6 +75,17 @@ data class ImageSet(
     val height: Int = original.height,
 ) {
     val aspectRatio: Float = if (height == 0) 1f else width.toFloat() / height
+}
+
+/**
+ * Represents surface dimensions with width, height, and computed aspect ratio.
+ */
+data class SurfaceDimensions(
+    val width: Int,
+    val height: Int
+) {
+    val aspectRatio: Float
+        get() = if (height == 0) 1f else width.toFloat() / height
 }
 
 enum class DuotoneBlendMode {

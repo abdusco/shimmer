@@ -18,25 +18,19 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     companion object {
         private const val TAG = "ShimmerRenderer"
-
-        private const val GRAIN_SIZE_MIN_IMAGE_PX = 1.5f
-        private const val GRAIN_SIZE_MAX_IMAGE_PX = 3.0f
     }
 
     private var currentImage = GLTextureImage()
     private var previousImage = GLTextureImage()
     private var pendingImageSet: ImageSet? = null
 
-    private var effectTransitionDurationMillis = 1500
-    private val animationController = AnimationController(effectTransitionDurationMillis).apply {
+    private val animationController = AnimationController().apply {
         onImageAnimationComplete = { callbacks.onReadyForNextImage() }
     }
 
 
     private var surfaceCreated = false
-    private var surfaceWidthPx = 0
-    private var surfaceHeightPx = 0
-    private var surfaceAspect = 1f
+    private var surfaceDimensions = SurfaceDimensions(0, 0)
     private var previousImageSet: ImageSet? = null
 
     private val projectionMatrix = FloatArray(16)
@@ -92,9 +86,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     override fun onSurfaceChanged(width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
-        surfaceWidthPx = width
-        surfaceHeightPx = height
-        surfaceAspect = if (height == 0) 1f else width.toFloat() / height
+        surfaceDimensions = SurfaceDimensions(width, height)
         recomputeProjectionMatrix()
         callbacks.onSurfaceDimensionsChanged(width, height)
     }
@@ -119,13 +111,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         )
 
         val grainCounts = if (state.grain.enabled) {
-            val grainSizePx = GRAIN_SIZE_MIN_IMAGE_PX + (GRAIN_SIZE_MAX_IMAGE_PX - GRAIN_SIZE_MIN_IMAGE_PX) * state.grain.scale
+            val grainSizePx = GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX + (GrainSettings.GRAIN_SIZE_MAX_IMAGE_PX - GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX) * state.grain.scale
             (state.imageSet.width.toFloat() / grainSizePx) to (state.imageSet.height.toFloat() / grainSizePx)
         } else 0f to 0f
 
         val (touchPointsArray, touchIntensitiesArray) = animationController.getTouchPointArrays()
 
-        val screenSize = floatArrayOf(surfaceWidthPx.toFloat(), surfaceHeightPx.toFloat())
+        val screenSize = floatArrayOf(surfaceDimensions.width.toFloat(), surfaceDimensions.height.toFloat())
 
         if (imageAlpha < 1f) {
             previousImage.draw(
@@ -176,7 +168,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     }
 
     fun setEffectTransitionDuration(ms: Int) {
-        effectTransitionDurationMillis = ms
         animationController.setDuration(ms)
     }
 
@@ -240,9 +231,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     private fun recomputeProjectionMatrix() {
         val parallax = animationController.currentRenderState.parallaxOffset
         val currentAspect = animationController.currentRenderState.imageSet.aspectRatio
-        buildProjectionMatrix(projectionMatrix, surfaceAspect / currentAspect, parallax)
+        buildProjectionMatrix(projectionMatrix, surfaceDimensions.aspectRatio / currentAspect, parallax)
         previousImageSet?.let { 
-            buildProjectionMatrix(previousProjectionMatrix, surfaceAspect / it.aspectRatio, parallax) 
+            buildProjectionMatrix(previousProjectionMatrix, surfaceDimensions.aspectRatio / it.aspectRatio, parallax) 
         }
     }
 

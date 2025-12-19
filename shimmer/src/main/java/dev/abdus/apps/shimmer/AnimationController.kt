@@ -4,7 +4,7 @@ import android.graphics.Color
 import android.view.animation.DecelerateInterpolator
 import androidx.core.graphics.createBitmap
 
-class AnimationController(private var durationMillis: Int) {
+class AnimationController(private var durationMillis: Int = 1000) {
     var currentRenderState: RenderState
         private set
 
