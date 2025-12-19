@@ -383,6 +383,16 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLSurfaceView.Renderer
 
         #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
 
+        // A fast, bit-wise hash that is 100% deterministic on all GLES 3.0 devices.
+        // It converts coordinates to integers, eliminating sub-pixel jitter/flicker.
+        float pcg_hash(vec2 p) {
+            uvec2 q = uvec2(ivec2(p)); // Quantize to integer "cells"
+            uint h = q.x * 747796405u + q.y + 2891336453u;
+            h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
+            h = (h >> 22u) ^ h;
+            return float(h) * (1.0 / float(0xffffffffu));
+        }
+
         vec3 applyDuotone(vec3 color) {
             float lum = LUMINOSITY(color);
             vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
@@ -396,30 +406,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLSurfaceView.Renderer
             return mix(color, duotone, uDuotoneOpacity);
         }
 
-        vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
-        float snoise(vec2 v){
-            const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-            vec2 i  = floor(v + dot(v, C.yy) );
-            vec2 x0 = v -   i + dot(i, C.xx);
-            vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-            vec4 x12 = x0.xyxy + C.xxzz;
-            x12.xy -= i1;
-            i = mod(i, 289.0);
-            vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
-            vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-            m = m*m*m*m;
-            vec3 x = 2.0 * fract(p * C.www) - 1.0;
-            vec3 h = abs(x) - 0.5;
-            vec3 a0 = x - floor(x + 0.5);
-            m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
-            vec3 g = vec3(a0.x * x0.x + h.x * x0.y, a0.yz * x12.xz + h.yz * x12.yw);
-            return 130.0 * dot(m, g);
-        }
-
         void main() {
             vec2 screenPos = vPosition * 0.5 + 0.5;
             float aspect = uScreenSize.x / uScreenSize.y;
             vec2 totalOffset = vec2(0.0);
+            
             for (int i = 0; i < 10; i++) {
                 if (i >= uTouchPointCount) break;
                 vec2 delta = screenPos - uTouchPoints[i].xy;
@@ -434,8 +425,23 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLSurfaceView.Renderer
             
             vec3 color = length(totalOffset) > 0.001 ? vec3(cR.r, cG.g, cB.b) : cG;
             color = mix(color, vec3(0.0), uDimAmount);
-            float grain = uGrainAmount > 0.0 ? snoise((vPosition * 0.5 + 0.5) * uGrainCount) * uGrainAmount : 0.0;
-            float dithering = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453) - 0.5) / 64.0;
+
+            float grain = 0.0;
+            if (uGrainAmount > 0.0) {
+                // By flooring the uGrainCount-scaled UVs, we create a stable integer grid
+                // This stops the flickering caused by sub-pixel motion.
+                vec2 grainCoords = floor(vTexCoords * uGrainCount);
+                float noise = pcg_hash(grainCoords);
+                grain = (noise - 0.5) * uGrainAmount;
+            }
+
+            // DITHERING: Fixed to window pixels, no sin() sensitivity
+            // Using a simple XOR-style bit hash for dithering instead of sin()
+            uint x = uint(gl_FragCoord.x);
+            uint y = uint(gl_FragCoord.y);
+            float dithering = float((x ^ y) * 14923u % 256u) / 255.0;
+            dithering = (dithering - 0.5) / 128.0;
+            
             fragColor = vec4(clamp(color + grain + dithering, 0.0, 1.0), uAlpha);
         }
     """.trimIndent()
