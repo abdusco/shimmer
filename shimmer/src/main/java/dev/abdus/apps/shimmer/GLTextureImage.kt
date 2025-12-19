@@ -83,25 +83,25 @@ class GLTextureImage {
         GLES30.glVertexAttribPointer(handles.attribPosition, 3, GLES30.GL_FLOAT, false, 0, vertexBuffer)
         GLES30.glVertexAttribPointer(handles.attribTexCoords, 2, GLES30.GL_FLOAT, false, 0, textureCoordsBuffer)
 
+        // OPTIMIZATION: Bind BOTH textures simultaneously
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-        GLES30.glUniform1i(handles.uniformTexture, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[lo])
+        GLES30.glUniform1i(handles.uniformTexture0, 0) // Tell shader Texture0 is at Unit 0
+
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[hi])
+        GLES30.glUniform1i(handles.uniformTexture1, 1) // Tell shader Texture1 is at Unit 1
+
+        // Send the blend factor (0.0 = all lo, 1.0 = all hi)
+        GLES30.glUniform1f(handles.uniformBlurMix, mix)
+        GLES30.glUniform1f(handles.uniformAlpha, alpha)
 
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
 
-        if (lo == hi) {
-            GLES30.glUniform1f(handles.uniformAlpha, alpha)
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[lo])
-            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
-        } else {
-            GLES30.glUniform1f(handles.uniformAlpha, alpha)
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[lo])
-            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
-
-            GLES30.glUniform1f(handles.uniformAlpha, alpha * mix)
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[hi])
-            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
-        }
+        // SINGLE DRAW CALL
+        // No loops, no double blending, no double vertex processing
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
     }
 
     fun release() {

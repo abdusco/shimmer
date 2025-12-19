@@ -56,7 +56,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
                 attribPosition = GLES30.glGetAttribLocation(program, "aPosition"),
                 attribTexCoords = GLES30.glGetAttribLocation(program, "aTexCoords"),
                 uniformMvpMatrix = GLES30.glGetUniformLocation(program, "uMVPMatrix"),
-                uniformTexture = GLES30.glGetUniformLocation(program, "uTexture"),
+                uniformTexture0 = GLES30.glGetUniformLocation(program, "uTexture0"),
+                uniformTexture1 = GLES30.glGetUniformLocation(program, "uTexture1"),
+                uniformBlurMix = GLES30.glGetUniformLocation(program, "uBlurMix"),
                 uniformAlpha = GLES30.glGetUniformLocation(program, "uAlpha"),
                 uniformDuotoneLight = GLES30.glGetUniformLocation(program, "uDuotoneLightColor"),
                 uniformDuotoneDark = GLES30.glGetUniformLocation(program, "uDuotoneDarkColor"),
@@ -242,7 +244,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     private val PICTURE_FRAGMENT_SHADER_CODE = """
         #version 300 es
         precision highp float;
-        uniform sampler2D uTexture;
+        
+        // OPTIMIZATION: Take two textures for single-pass mixing
+        uniform sampler2D uTexture0;
+        uniform sampler2D uTexture1;
+        uniform float uBlurMix; // 0.0 to 1.0
+        
         uniform float uAlpha;
         uniform vec3 uDuotoneLightColor;
         uniform vec3 uDuotoneDarkColor;
@@ -289,6 +296,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             float aspect = uScreenSize.x / uScreenSize.y;
             vec2 totalOffset = vec2(0.0);
             
+            // 1. Calculate Distortions (Touch Ripples)
             for (int i = 0; i < 10; i++) {
                 if (i >= uTouchPointCount) break;
                 vec2 delta = screenPos - uTouchPoints[i].xy;
@@ -297,11 +305,32 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
                 if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.02;
             }
             
-            vec3 cR = applyDuotone(texture(uTexture, vTexCoords + totalOffset).rgb);
-            vec3 cG = applyDuotone(texture(uTexture, vTexCoords).rgb);
-            vec3 cB = applyDuotone(texture(uTexture, vTexCoords - totalOffset).rgb);
+            // 2. OPTIMIZATION: Sample BOTH textures and mix raw colors first
+            // RGB Separation for Chromatic Aberration
+            vec2 uvR = vTexCoords + totalOffset;
+            vec2 uvG = vTexCoords;
+            vec2 uvB = vTexCoords - totalOffset;
+
+            // Sample Texture 0 (Low Blur)
+            vec3 cR0 = texture(uTexture0, uvR).rgb;
+            vec3 cG0 = texture(uTexture0, uvG).rgb;
+            vec3 cB0 = texture(uTexture0, uvB).rgb;
+
+            // Sample Texture 1 (High Blur)
+            vec3 cR1 = texture(uTexture1, uvR).rgb;
+            vec3 cG1 = texture(uTexture1, uvG).rgb;
+            vec3 cB1 = texture(uTexture1, uvB).rgb;
+
+            // Mix them based on progress
+            vec3 cR = mix(cR0, cR1, uBlurMix);
+            vec3 cG = mix(cG0, cG1, uBlurMix);
+            vec3 cB = mix(cB0, cB1, uBlurMix);
             
+            // Recombine
             vec3 color = length(totalOffset) > 0.001 ? vec3(cR.r, cG.g, cB.b) : cG;
+
+            // 3. Apply expensive effects ONLY ONCE on the mixed result
+            color = applyDuotone(color);
             color = mix(color, vec3(0.0), uDimAmount);
 
             float grain = 0.0;
