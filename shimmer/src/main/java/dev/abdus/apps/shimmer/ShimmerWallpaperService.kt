@@ -53,8 +53,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private var currentImageUri: Uri? = null
         private var sessionBlurEnabled = preferences.getBlurAmount() > 0f
 
-        private var surfaceWidthPx = 0
-        private var surfaceHeightPx = 0
+        private var surfaceDimensions = SurfaceDimensions(0, 0)
 
         private val blurTimeoutHandler = Handler(Looper.getMainLooper())
         private val blurTimeoutRunnable = Runnable {
@@ -303,13 +302,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun processTouches(event: MotionEvent): List<TouchData> {
-            if (surfaceWidthPx <= 0 || surfaceHeightPx <= 0) return emptyList()
+            if (surfaceDimensions.width <= 0 || surfaceDimensions.height <= 0) return emptyList()
             val list = mutableListOf<TouchData>()
             val action = event.actionMasked
             for (i in 0 until event.pointerCount) {
                 val pid = event.getPointerId(i)
-                val x = event.getX(i) / surfaceWidthPx
-                val y = 1f - (event.getY(i) / surfaceHeightPx)
+                val x = event.getX(i) / surfaceDimensions.width
+                val y = 1f - (event.getY(i) / surfaceDimensions.height)
                 val tact =
                         when {
                             (action == MotionEvent.ACTION_UP ||
@@ -346,8 +345,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
             Log.d(TAG, "onSurfaceDimensionsChanged: width=$width height=$height")
-            surfaceWidthPx = width
-            surfaceHeightPx = height
+            surfaceDimensions = SurfaceDimensions(width, height)
             imageLoader.setScreenHeight(height)
         }
 
