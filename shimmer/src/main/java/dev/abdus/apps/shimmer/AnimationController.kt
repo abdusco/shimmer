@@ -162,7 +162,7 @@ class AnimationController(private var durationMillis: Int = 1000) {
         }
 
         // Image transition: animate all image changes (fade in from black or crossfade)
-        if (oldTarget.imageSet.original != newTarget.imageSet.original) {
+        if (oldTarget.imageSet != newTarget.imageSet) { // Object reference check
             // Capture currentRenderState.imageSet.aspectRatio as previous before it gets updated
             previousImageAspectRatio = currentRenderState.imageSet.aspectRatio
             

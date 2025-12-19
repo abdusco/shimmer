@@ -136,13 +136,17 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         val screenSize = floatArrayOf(surfaceDimensions.width.toFloat(), surfaceDimensions.height.toFloat())
 
         if (imageAlpha < 1f) {
+            // 1. Draw the PREVIOUS image as a solid, opaque base.
+            // We do NOT use (1f - imageAlpha) here.
+            // Even if we are at the start of the fade, this image sits there at 100% opacity.
             previousImage.draw(
-                pictureHandles, previousMvpMatrix, blurPercent, 1f - imageAlpha,
+                pictureHandles, previousMvpMatrix, blurPercent, 1f, // FORCE 1.0
                 effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
                 touchPointsArray, touchIntensitiesArray, screenSize
             )
         }
 
+        // 2. Draw the CURRENT image on top with the actual transition alpha (0.0 -> 1.0).
         currentImage.draw(
             pictureHandles, mvpMatrix, blurPercent, imageAlpha,
             effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
