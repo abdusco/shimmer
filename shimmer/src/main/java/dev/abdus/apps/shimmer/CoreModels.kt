@@ -43,10 +43,10 @@ data class GrainSettings(
 ) {
     companion object {
         /** Minimum grain size in image pixels (fine grain) */
-        const val GRAIN_SIZE_MIN_IMAGE_PX = 1.5f
+        const val GRAIN_SIZE_MIN_IMAGE_PX = 0.1f
         
         /** Maximum grain size in image pixels (coarse grain) */
-        const val GRAIN_SIZE_MAX_IMAGE_PX = 3.0f
+        const val GRAIN_SIZE_MAX_IMAGE_PX = 1.5f
     }
 }
 

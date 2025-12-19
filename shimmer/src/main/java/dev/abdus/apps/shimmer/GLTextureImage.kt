@@ -77,7 +77,7 @@ class GLTextureImage {
         GLES30.glUniform1f(handles.uniformDuotoneOpacity, duotone.opacity)
         GLES30.glUniform1i(handles.uniformDuotoneBlendMode, duotone.blendMode.ordinal)
         GLES30.glUniform1f(handles.uniformDimAmount, dimAmount)
-        GLES30.glUniform1f(handles.uniformGrainAmount, if (grain.enabled) grain.amount * 0.30f else 0f)
+        GLES30.glUniform1f(handles.uniformGrainAmount, if (grain.enabled) grain.amount else 0f)
         GLES30.glUniform2f(handles.uniformGrainCount, grainCounts.first, grainCounts.second)
         GLES30.glUniform1i(handles.uniformTouchPointCount, touchCount)
         GLES30.glUniform3fv(handles.uniformTouchPoints, touchCount, touchPoints, 0)

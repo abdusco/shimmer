@@ -126,7 +126,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             opacity = if (state.duotoneAlwaysOn) state.duotone.opacity else (state.duotone.opacity * blurPercent)
         )
 
-        val grainCounts = if (state.grain.enabled) {
+        val grainCounts =
+        if (state.grain.enabled) {
             val grainSizePx = GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX + (GrainSettings.GRAIN_SIZE_MAX_IMAGE_PX - GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX) * state.grain.scale
             (state.imageSet.width.toFloat() / grainSizePx) to (state.imageSet.height.toFloat() / grainSizePx)
         } else 0f to 0f
@@ -287,14 +288,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
 
-        float pcg_hash(vec2 p) {
-            uvec2 q = uvec2(ivec2(p));
-            uint h = q.x * 747796405u + q.y + 2891336453u;
-            h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
-            h = (h >> 22u) ^ h;
-            return float(h) * (1.0 / float(0xffffffffu));
+        // Gold Noise: Very fast, non-repeating, and organic looking
+        // Uses the Golden Ratio and the Square Root of 2
+        highp float organic_noise(vec2 p) {
+            return fract(tan(distance(p * 1.61803398875, p) * 0.70710678118) * p.x);
         }
-
+        
         vec3 applyDuotone(vec3 color) {
             float lum = LUMINOSITY(color);
             vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
@@ -391,9 +390,22 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             }
 
             if (uGrainAmount > 0.0) {
-                vec2 grainCoords = floor(vTexCoords * uGrainCount);
-                float noise = pcg_hash(grainCoords);
-                color += (noise - 0.5) * uGrainAmount;
+                // 1. Calculate base grain using screen-space for stability
+                vec2 grainCoords = vTexCoords * uGrainCount;
+                
+                // 2. Add a small 'jitter' to the coordinates based on the pixel itself
+                // to break up the grid alignment (makes it feel more organic)
+                float noise = organic_noise(floor(grainCoords) + 0.2);
+                
+                // 3. Optional: Mid-tone masking 
+                // Real grain is most visible in mid-tones, less in pure blacks/whites
+                float lum = LUMINOSITY(color);
+                float mask = 1.0 - pow(abs(lum - 0.5) * 2.0, 2.0);
+                
+                // 4. Apply grain with a neutral offset
+                // We multiply by mask to make it look "seated" in the image
+                vec3 grainEffect = vec3(noise - 0.5) * uGrainAmount;
+                color += grainEffect * (0.1 + 0.5 * mask); 
             }
 
             // DITHERING
