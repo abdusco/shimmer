@@ -12,6 +12,7 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,6 +51,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         // Cache state
         private var cachedImageSet: ImageSet? = null
         private var pendingImageUri: Uri? = null
+        private var imageLoadingJob: kotlinx.coroutines.Job? = null
         private var currentImageUri: Uri? = null
         private var sessionBlurEnabled = preferences.getBlurAmount() > 0f
 
@@ -207,18 +209,39 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun loadImage(uri: Uri) {
-            Log.d(TAG, "loadImage: loading image from uri=$uri")
-            scope.launch {
-                val newSet = imageLoader.loadFromUri(uri, preferences.getBlurAmount())
-                if (newSet != null) updateActiveImageSet(newSet, uri)
+            // 1. Cancel the previous job immediately to stop its execution
+            imageLoadingJob?.cancel()
+            
+            imageLoadingJob = scope.launch {
+                Log.d(TAG, "loadImage: loading image from uri=$uri")
+                val blurAmount = preferences.getBlurAmount()
+                
+                // 2. The heavy work (decoding + blur generation)
+                val newSet = imageLoader.loadFromUri(uri, blurAmount)
+                
+                // 3. Check if this coroutine is still the "active" one before updating the UI
+                if (isActive && newSet != null) {
+                    updateActiveImageSet(newSet, uri)
+                } else {
+                    // 4. If cancelled, clean up the bitmaps we created but won't use
+                    newSet?.original?.recycle()
+                    newSet?.blurred?.forEach { it.recycle() }
+                    Log.d(TAG, "loadImage: job cancelled or failed, cleaned up bitmaps for $uri")
+                }
             }
         }
+        
 
         private fun loadDefaultImage() {
-            Log.d(TAG, "loadDefaultImage: loading bundled/default image")
-            scope.launch {
+            imageLoadingJob?.cancel()
+            imageLoadingJob = scope.launch {
                 val newSet = imageLoader.loadDefault(preferences.getBlurAmount())
-                if (newSet != null) updateActiveImageSet(newSet, null)
+                if (isActive && newSet != null) {
+                    updateActiveImageSet(newSet, null)
+                } else {
+                    newSet?.original?.recycle()
+                    newSet?.blurred?.forEach { it.recycle() }
+                }
             }
         }
 
@@ -247,18 +270,19 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun requestImageChange() {
             Log.d(TAG, "requestImageChange: triggered")
-            scope.launch {
-                if (renderer?.isAnimating() == true) {
+            
+            // If we're already animating a transition, just queue the next URI
+            if (renderer?.isAnimating() == true) {
+                scope.launch {
                     val next = folderRepository.nextImageUri()
                     if (next != null) pendingImageUri = next
-                    Log.d(
-                            TAG,
-                            "requestImageChange: renderer animating, queued next=$pendingImageUri"
-                    )
-                    return@launch
                 }
+                return
+            }
+        
+            // Otherwise, cancel any current loading and start the next one
+            scope.launch {
                 val nextUri = folderRepository.nextImageUri()
-                Log.d(TAG, "requestImageChange: nextUri=$nextUri")
                 if (nextUri != null) {
                     loadImage(nextUri)
                     preferences.setImageLastChangedAt(System.currentTimeMillis())

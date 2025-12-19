@@ -7,6 +7,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import kotlin.math.ceil
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 class ImageLoader(
     private val contentResolver: ContentResolver,
@@ -33,7 +35,7 @@ class ImageLoader(
     /**
      * Loads an image from a URI with optimal downsampling.
      */
-    fun loadFromUri(uri: Uri, blurAmount: Float): ImageSet? {
+    suspend fun loadFromUri(uri: Uri, blurAmount: Float): ImageSet? {
         val targetHeight = if (screenHeight > 0) screenHeight else DEFAULT_SCREEN_HEIGHT
         val bitmap = try {
             decodeSampledBitmapFromUri(uri, targetHeight)
@@ -48,7 +50,7 @@ class ImageLoader(
     /**
      * Loads the default wallpaper with optimal downsampling.
      */
-    fun loadDefault(blurAmount: Float): ImageSet? {
+    suspend fun loadDefault(blurAmount: Float): ImageSet? {
         val targetHeight = if (screenHeight > 0) screenHeight else DEFAULT_SCREEN_HEIGHT
         val bitmap = try {
             decodeSampledBitmapFromResource(R.drawable.default_wallpaper, targetHeight)
@@ -113,10 +115,14 @@ class ImageLoader(
         return inSampleSize
     }
 
-    private fun prepareImageSet(bitmap: Bitmap, blurAmount: Float, id: String): ImageSet {
+    private suspend fun prepareImageSet(bitmap: Bitmap, blurAmount: Float, id: String): ImageSet {
         val maxRadius = ceil(blurAmount * MAX_SUPPORTED_BLUR_RADIUS_PIXELS)
 
-        val blurResult = bitmap.generateBlurLevels(maxRadius)
+        // Use currentCoroutineContext() from the kotlinx.coroutines package
+        val context = currentCoroutineContext()
+        val blurResult = bitmap.generateBlurLevels(maxRadius) {
+            context.ensureActive()
+        }
 
         return ImageSet(
             id = id,

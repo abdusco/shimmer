@@ -23,7 +23,7 @@ data class BlurLevelResult(
     val radii: List<Float>
 )
 
-fun Bitmap.generateBlurLevels(maxRadius: Float): BlurLevelResult {
+fun Bitmap.generateBlurLevels(maxRadius: Float, cancellationCheck: (() -> Unit)? = null): BlurLevelResult {
     val requestedRadius = maxRadius.coerceAtMost(MAX_SUPPORTED_BLUR_RADIUS_PIXELS.toFloat())
     if (requestedRadius < 1f) return BlurLevelResult(emptyList(), emptyList())
 
@@ -45,6 +45,8 @@ fun Bitmap.generateBlurLevels(maxRadius: Float): BlurLevelResult {
             renderer.uploadSource(this)
 
             for (i in 1..numKeyframes) {
+                cancellationCheck?.invoke()
+                
                 val progress = (i.toFloat() / numKeyframes).pow(2f)
                 val currentRadius = requestedRadius * progress
                 
