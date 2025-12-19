@@ -23,7 +23,7 @@
                 android:resource="@xml/shortcuts" />
         </activity>
         <activity
-            android:name=".SettingsActivity"
+            android:name=".settings.SettingsActivity"
             android:exported="true" />
         <activity
             android:name=".FolderSelectionActivity"

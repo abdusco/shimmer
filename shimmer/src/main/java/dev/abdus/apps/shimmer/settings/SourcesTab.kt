@@ -1,0 +1,466 @@
+package dev.abdus.apps.shimmer.settings
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import dev.abdus.apps.shimmer.FolderSelectionActivity
+import dev.abdus.apps.shimmer.ImageFolder
+import dev.abdus.apps.shimmer.WallpaperPreferences
+import kotlin.math.roundToInt
+
+@Composable
+fun SourcesTab(
+    modifier: Modifier = Modifier,
+    context: Context,
+    preferences: WallpaperPreferences,
+    currentWallpaperUri: Uri?,
+    imageFolders: List<ImageFolder>,
+    transitionEnabled: Boolean,
+    transitionIntervalMillis: Long,
+    changeImageOnUnlock: Boolean,
+    onTransitionEnabledChange: (Boolean) -> Unit,
+    onTransitionDurationChange: (Long) -> Unit,
+    onChangeImageOnUnlockChange: (Boolean) -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = PADDING_X,
+            top = PADDING_Y,
+            end = PADDING_X,
+            bottom = PADDING_Y,
+        ),
+        verticalArrangement = Arrangement.spacedBy(PADDING_X),
+    ) {
+        item {
+            CurrentWallpaperCard(
+                wallpaperUri = currentWallpaperUri,
+                onViewImage = { uri ->
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "image/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    try {
+                        context.startActivity(viewIntent)
+                    } catch (e: Exception) {
+                        // Handle case where no app can view the image
+                    }
+                }
+            )
+        }
+
+        item {
+            FolderThumbnailSlider(
+                imageFolders = imageFolders,
+                onOpenFolderSelection = {
+                    context.startActivity(Intent(context, FolderSelectionActivity::class.java))
+                }
+            )
+        }
+
+        item {
+            TransitionDurationSetting(
+                enabled = transitionEnabled,
+                durationMillis = transitionIntervalMillis,
+                changeImageOnUnlock = changeImageOnUnlock,
+                onEnabledChange = onTransitionEnabledChange,
+                onDurationChange = onTransitionDurationChange,
+                onChangeImageOnUnlockChange = onChangeImageOnUnlockChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun CurrentWallpaperCard(
+    wallpaperUri: Uri?,
+    onViewImage: (Uri) -> Unit,
+) {
+    val context = LocalContext.current
+    val fileName = remember(wallpaperUri) {
+        wallpaperUri?.let { uri ->
+            try {
+                DocumentFile.fromSingleUri(context, uri)?.name
+                    ?: uri.lastPathSegment
+                    ?: "Unknown"
+            } catch (e: Exception) {
+                uri.lastPathSegment ?: "Unknown"
+            }
+        } ?: "No wallpaper"
+    }
+
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp)
+                .clickable(enabled = wallpaperUri != null) {
+                    wallpaperUri?.let { onViewImage(it) }
+                }
+        ) {
+            AnimatedContent(
+                targetState = wallpaperUri,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(750)) togetherWith
+                            fadeOut(animationSpec = tween(750))
+                },
+                label = "wallpaper_crossfade"
+            ) { currentUri ->
+                if (currentUri != null) {
+                    val imageRequest = remember(currentUri) {
+                        ImageRequest.Builder(context)
+                            .data(currentUri)
+                            .build()
+                    }
+                    AsyncImage(
+                        modifier = Modifier.fillMaxSize(),
+                        model = imageRequest,
+                        contentDescription = "Current wallpaper",
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Image,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "No wallpaper set",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Gradient overlay at the bottom with filename
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.7f)
+                            )
+                        )
+                    )
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderThumbnailSlider(
+    imageFolders: List<ImageFolder>,
+    onOpenFolderSelection: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = PADDING_Y, horizontal = PADDING_X)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Image sources",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Button(onClick = onOpenFolderSelection) {
+                    Text("Manage")
+                }
+            }
+            
+            if (imageFolders.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "No folders selected",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                // Large thumbnail slider without labels
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    items(imageFolders, key = { it.uri }) { folder ->
+                        FolderThumbnailLarge(folder = folder)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderThumbnailLarge(
+    folder: ImageFolder,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val previewUri = remember(folder.thumbnailUri) {
+        folder.thumbnailUri?.toUri()
+    }
+
+    Surface(
+        modifier = modifier.size(160.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        if (previewUri != null) {
+            AsyncImage(
+                modifier = Modifier.fillMaxSize(),
+                model = ImageRequest.Builder(context)
+                    .data(previewUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Folder,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransitionDurationSetting(
+    enabled: Boolean,
+    durationMillis: Long,
+    changeImageOnUnlock: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    onDurationChange: (Long) -> Unit,
+    onChangeImageOnUnlockChange: (Boolean) -> Unit,
+) {
+    val options = TRANSITION_DURATION_OPTIONS
+    val sliderIndex = options.indexOfFirst { it.millis == durationMillis }.takeIf { it >= 0 } ?: 0
+    val selectedOption = options.getOrElse(sliderIndex) { options.first() }
+    Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
+        Column(
+            modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SwapHoriz,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Change images automatically",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange
+                )
+            }
+            Text(
+                text = "Automatically cycle through images from your selected folders at regular intervals",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            androidx.compose.animation.AnimatedVisibility(visible = enabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Timer,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Change every",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Slider(
+                        value = sliderIndex.toFloat(),
+                        onValueChange = { rawValue ->
+                            val nextIndex = rawValue.roundToInt().coerceIn(0, options.lastIndex)
+                            val nextDuration = options[nextIndex].millis
+                            if (nextDuration != durationMillis) {
+                                onDurationChange(nextDuration)
+                            }
+                        },
+                        valueRange = 0f..options.lastIndex.toFloat(),
+                        steps = (options.size - 2).coerceAtLeast(0)
+                    )
+                    Text(
+                        text = "Next change in ${selectedOption.label}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+            }
+            // Change image on screen unlock toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Change when screen unlocks",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Switch(
+                    checked = changeImageOnUnlock,
+                    onCheckedChange = onChangeImageOnUnlockChange
+                )
+            }
+        }
+    }
+}
+
