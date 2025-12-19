@@ -2,6 +2,7 @@ package dev.abdus.apps.shimmer
 
 import android.graphics.Color
 import android.opengl.Matrix
+import android.os.SystemClock
 import android.view.animation.DecelerateInterpolator
 import androidx.core.graphics.createBitmap
 import kotlin.math.max
@@ -45,6 +46,7 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
     companion object {
         private const val MAX_TOUCH_POINTS = 10
+        private const val TOUCH_EFFECT_DELAY_MS = 250L
     }
 
     init {
@@ -285,15 +287,22 @@ class AnimationController(private var durationMillis: Int = 1000) {
     }
 
     fun getTouchPointArrays(): Pair<FloatArray, FloatArray> {
-        val touchCount = activeTouches.size.coerceAtMost(MAX_TOUCH_POINTS)
         val chromaticAberration = currentRenderState.chromaticAberration
         val intensity = if (chromaticAberration.enabled) chromaticAberration.intensity else 0f
         
+        val now = SystemClock.elapsedRealtime()
+        
+        // Filter out touches that haven't been held long enough (skip light touches)
+        val eligibleTouches = activeTouches.filter { touch ->
+            (now - touch.createdAt) >= TOUCH_EFFECT_DELAY_MS
+        }.take(MAX_TOUCH_POINTS)
+        
+        val touchCount = eligibleTouches.size
         val touchPointsArray = FloatArray(touchCount * 3)
         val touchIntensitiesArray = FloatArray(touchCount)
         
         for (i in 0 until touchCount) {
-            val touch = activeTouches[i]
+            val touch = eligibleTouches[i]
             touchPointsArray[i * 3] = touch.x
             touchPointsArray[i * 3 + 1] = touch.y
             touchPointsArray[i * 3 + 2] = touch.radius
@@ -344,6 +353,7 @@ class AnimationController(private var durationMillis: Int = 1000) {
             y = touch.y,
             radius = 0f,
             intensity = 1f,
+            createdAt = SystemClock.elapsedRealtime(),
             radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
             fadeAnimator = TickingFloatAnimator(fadeMs, DecelerateInterpolator())
         )

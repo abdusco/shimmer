@@ -58,6 +58,7 @@ data class TouchPoint(
     var radius: Float = 0f,
     var intensity: Float = 1f,
     var isReleased: Boolean = false,
+    val createdAt: Long,
     val radiusAnimator: TickingFloatAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
     val fadeAnimator: TickingFloatAnimator = TickingFloatAnimator(500, DecelerateInterpolator())
 )
