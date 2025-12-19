@@ -32,12 +32,21 @@ class GLTextureImage {
         GLES30.glGenTextures(textures.size, textures, 0)
 
         for (i in bitmaps.indices) {
+            val bitmap = bitmaps[i]
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[i])
+            
+            // OPTIMIZATION: Use immutable texture storage for better driver optimization
+            // Allocate GPU memory once with immutable format
+            GLES30.glTexStorage2D(GLES30.GL_TEXTURE_2D, 1, GLES30.GL_RGBA8, bitmap.width, bitmap.height)
+            
+            // Upload bitmap data using GLUtils.texSubImage2D (handles ARGB->RGBA conversion natively)
+            GLUtils.texSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, 0, bitmap)
+            
+            // Set texture parameters AFTER allocating storage
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
-            GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmaps[i], 0)
         }
 
         // Handshake: Ensure GPU has read pixels, but we NO LONGER recycle here.
