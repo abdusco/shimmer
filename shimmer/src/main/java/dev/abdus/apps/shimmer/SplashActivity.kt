@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.abdus.apps.shimmer.components.PreviewSurfaceView
 import dev.abdus.apps.shimmer.components.WallpaperPreview
+import dev.abdus.apps.shimmer.ShimmerTheme
 import kotlin.random.Random
 
 class SplashActivity : ComponentActivity() {
@@ -49,22 +50,24 @@ class SplashActivity : ComponentActivity() {
         }
 
         setContent {
-            SplashScreen(
-                onSetWallpaper = { WallpaperUtil.openWallpaperPicker(this) },
-                onRendererCreated = { renderer, surfaceView ->
-                    previewRenderer = renderer
-                    previewSurfaceView = surfaceView as? PreviewSurfaceView
-                },
-                onDestroyRenderer = {
-                    stopDuotoneRotation()
-                    previewRenderer = null
-                    previewSurfaceView = null
-                },
-                onRendererReady = {
-                    loadPreviewImage()
-                    duotoneRotationHandler.postDelayed({ startDuotoneRotation() }, 4000)
-                }
-            )
+            ShimmerTheme {
+                SplashScreen(
+                    onSetWallpaper = { WallpaperUtil.openWallpaperPicker(this) },
+                    onRendererCreated = { renderer, surfaceView ->
+                        previewRenderer = renderer
+                        previewSurfaceView = surfaceView as? PreviewSurfaceView
+                    },
+                    onDestroyRenderer = {
+                        stopDuotoneRotation()
+                        previewRenderer = null
+                        previewSurfaceView = null
+                    },
+                    onRendererReady = {
+                        loadPreviewImage()
+                        duotoneRotationHandler.postDelayed({ startDuotoneRotation() }, 4000)
+                    }
+                )
+            }
         }
     }
 

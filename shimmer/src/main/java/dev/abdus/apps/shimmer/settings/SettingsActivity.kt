@@ -43,6 +43,7 @@ import dev.abdus.apps.shimmer.GrainSettings
 import dev.abdus.apps.shimmer.ImageFolder
 import dev.abdus.apps.shimmer.WallpaperPreferences
 import dev.abdus.apps.shimmer.DUOTONE_PRESETS
+import dev.abdus.apps.shimmer.ShimmerTheme
 import dev.abdus.apps.shimmer.settings.parseColorHex
 
 enum class SettingsTab {
@@ -56,7 +57,9 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawableResource(android.R.color.transparent)
         setContent {
-            ShimmerSettingsScreen()
+            ShimmerTheme {
+                ShimmerSettingsScreen()
+            }
         }
     }
 }

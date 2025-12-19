@@ -63,6 +63,7 @@ import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import dev.abdus.apps.shimmer.ShimmerTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -79,7 +80,9 @@ class FolderSelectionActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawableResource(android.R.color.transparent)
         setContent {
-            FolderSelectionScreen()
+            ShimmerTheme {
+                FolderSelectionScreen()
+            }
         }
     }
 }
