@@ -17,7 +17,7 @@ class GLTextureImage {
     private var loadedImageSetHash: Int = 0
 
     fun load(imageSet: ImageSet) {
-        val newHash = imageSet.original.hashCode()
+        val newHash = imageSet.hashCode()
         // If textures exist and it's the same image, just bail out!
         if (textures.isNotEmpty() && loadedImageSetHash == newHash) {
             return 

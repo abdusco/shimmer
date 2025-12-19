@@ -163,15 +163,12 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
         // Image transition: animate all image changes (fade in from black or crossfade)
         if (oldTarget.imageSet != newTarget.imageSet) { // Object reference check
-            // Capture currentRenderState.imageSet.aspectRatio as previous before it gets updated
             previousImageAspectRatio = currentRenderState.imageSet.aspectRatio
-            
-            val startImageTransitionValue = if (imageTransitionAnimator.isRunning) {
-                imageTransitionAnimator.progress
-            } else {
-                0f // Start fade-in from beginning (transparent)
-            }
-            imageTransitionAnimator.start(startValue = startImageTransitionValue, endValue = 1f)
+        
+            // FIX: If the ImageSet object actually changed (new blur levels generated),
+            // we MUST start from 0f because currentImage is a brand new texture object.
+            // If we start from 'progress' (e.g. 0.9), the new blur snaps in nearly instantly.
+            imageTransitionAnimator.start(startValue = 0f, endValue = 1f)
         }
 
         // Chromatic aberration: clear touches if disabled
