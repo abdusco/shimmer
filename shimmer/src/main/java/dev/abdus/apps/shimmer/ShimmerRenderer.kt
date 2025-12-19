@@ -3,8 +3,8 @@ package dev.abdus.apps.shimmer
 import android.opengl.GLES30
 import android.opengl.Matrix
 import android.util.Log
-import android.view.animation.DecelerateInterpolator
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
+import java.util.concurrent.atomic.AtomicReference
 
 class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Renderer {
 
@@ -22,6 +22,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     private var currentImage = GLTextureImage()
     private var previousImage = GLTextureImage()
     private var pendingImageSet: ImageSet? = null
+    private val pendingParallaxOffset = AtomicReference<Float?>(null)
+    private val pendingTouches = AtomicReference<List<TouchData>?>(null)
+
 
     private val animationController = AnimationController().apply {
         onImageAnimationComplete = { callbacks.onReadyForNextImage() }
@@ -91,6 +94,19 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     override fun onDrawFrame() {
         if (!surfaceCreated) return
+        
+        val newParallax = pendingParallaxOffset.getAndSet(null)
+        if (newParallax != null) {
+            animationController.updateTargetState(
+                animationController.targetRenderState.copy(parallaxOffset = newParallax)
+            )
+        }
+
+        val newTouches = pendingTouches.getAndSet(null)
+        if (newTouches != null) {
+            animationController.setTouchPoints(newTouches)
+        }
+        
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         val isAnimating = animationController.tick()
@@ -191,7 +207,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     }
 
     fun setTouchPoints(touches: List<TouchData>) {
-        animationController.setTouchPoints(touches)
+        pendingTouches.set(touches)
         callbacks.requestRender()
     }
 
@@ -213,7 +229,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     }
 
     fun setParallaxOffset(offset: Float) {
-        animationController.updateTargetState(animationController.targetRenderState.copy(parallaxOffset = offset))
+        pendingParallaxOffset.set(offset)
         callbacks.requestRender()
     }
 
@@ -245,7 +261,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         #version 300 es
         precision highp float;
         
-        // OPTIMIZATION: Take two textures for single-pass mixing
         uniform sampler2D uTexture0;
         uniform sampler2D uTexture1;
         uniform float uBlurMix; // 0.0 to 1.0
@@ -268,10 +283,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
 
-        // A fast, bit-wise hash that is 100% deterministic on all GLES 3.0 devices.
-        // It converts coordinates to integers, eliminating sub-pixel jitter/flicker.
         float pcg_hash(vec2 p) {
-            uvec2 q = uvec2(ivec2(p)); // Quantize to integer "cells"
+            uvec2 q = uvec2(ivec2(p));
             uint h = q.x * 747796405u + q.y + 2891336453u;
             h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
             h = (h >> 22u) ^ h;
@@ -281,11 +294,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         vec3 applyDuotone(vec3 color) {
             float lum = LUMINOSITY(color);
             vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-            if (uDuotoneBlendMode == 1) { // SOFT_LIGHT
+            if (uDuotoneBlendMode == 1) { 
                 vec3 res1 = color - (1.0 - 2.0 * duotone) * color * (1.0 - color);
                 vec3 res2 = color + (2.0 * duotone - 1.0) * (sqrt(color) - color);
                 duotone = mix(res1, res2, step(0.5, duotone));
-            } else if (uDuotoneBlendMode == 2) { // SCREEN
+            } else if (uDuotoneBlendMode == 2) {
                 duotone = 1.0 - (1.0 - color) * (1.0 - duotone);
             }
             return mix(color, duotone, uDuotoneOpacity);
@@ -296,60 +309,96 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             float aspect = uScreenSize.x / uScreenSize.y;
             vec2 totalOffset = vec2(0.0);
             
-            // 1. Calculate Distortions (Touch Ripples)
-            for (int i = 0; i < 10; i++) {
-                if (i >= uTouchPointCount) break;
-                vec2 delta = screenPos - uTouchPoints[i].xy;
-                float dist = length(vec2(delta.x * aspect, delta.y));
-                float effect = uTouchIntensities[i] * (1.0 - smoothstep(0.0, uTouchPoints[i].z, dist));
-                if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.02;
+            // OPTIMIZATION 1: Efficient Touch Loop
+            // Only loop if we actually have touches
+            if (uTouchPointCount > 0) {
+                for (int i = 0; i < 10; i++) {
+                    if (i >= uTouchPointCount) break;
+                    vec2 delta = screenPos - uTouchPoints[i].xy;
+                    float dist = length(vec2(delta.x * aspect, delta.y));
+                    
+                    // Early exit for pixels far from the touch point
+                    if (dist > uTouchPoints[i].z + 0.05) continue;
+                    
+                    float effect = uTouchIntensities[i] * (1.0 - smoothstep(0.0, uTouchPoints[i].z, dist));
+                    if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.02;
+                }
             }
             
-            // 2. OPTIMIZATION: Sample BOTH textures and mix raw colors first
-            // RGB Separation for Chromatic Aberration
-            vec2 uvR = vTexCoords + totalOffset;
-            vec2 uvG = vTexCoords;
-            vec2 uvB = vTexCoords - totalOffset;
-
-            // Sample Texture 0 (Low Blur)
-            vec3 cR0 = texture(uTexture0, uvR).rgb;
-            vec3 cG0 = texture(uTexture0, uvG).rgb;
-            vec3 cB0 = texture(uTexture0, uvB).rgb;
-
-            // Sample Texture 1 (High Blur)
-            vec3 cR1 = texture(uTexture1, uvR).rgb;
-            vec3 cG1 = texture(uTexture1, uvG).rgb;
-            vec3 cB1 = texture(uTexture1, uvB).rgb;
-
-            // Mix them based on progress
-            vec3 cR = mix(cR0, cR1, uBlurMix);
-            vec3 cG = mix(cG0, cG1, uBlurMix);
-            vec3 cB = mix(cB0, cB1, uBlurMix);
+            // OPTIMIZATION 2: Smart Texture Fetching
+            // We drastically reduce texture lookups by checking if we actually need them.
             
-            // Recombine
-            vec3 color = length(totalOffset) > 0.001 ? vec3(cR.r, cG.g, cB.b) : cG;
+            vec3 cR, cG, cB;
+            bool hasDistortion = length(totalOffset) > 0.0001;
 
-            // 3. Apply expensive effects ONLY ONCE on the mixed result
-            color = applyDuotone(color);
-            color = mix(color, vec3(0.0), uDimAmount);
+            if (hasDistortion) {
+                // distortion is active (touching screen), we must pay the cost of 3x fetches for chromatic aberration
+                vec2 uvR = vTexCoords + totalOffset;
+                vec2 uvG = vTexCoords;
+                vec2 uvB = vTexCoords - totalOffset;
 
-            float grain = 0.0;
+                if (uBlurMix < 0.001) {
+                    // Only fetch Sharp
+                    cR = texture(uTexture0, uvR).rgb;
+                    cG = texture(uTexture0, uvG).rgb;
+                    cB = texture(uTexture0, uvB).rgb;
+                } else if (uBlurMix > 0.999) {
+                    // Only fetch Blurred
+                    cR = texture(uTexture1, uvR).rgb;
+                    cG = texture(uTexture1, uvG).rgb;
+                    cB = texture(uTexture1, uvB).rgb;
+                } else {
+                    // Fetch Both & Mix (Most expensive case, but rare)
+                    cR = mix(texture(uTexture0, uvR).rgb, texture(uTexture1, uvR).rgb, uBlurMix);
+                    cG = mix(texture(uTexture0, uvG).rgb, texture(uTexture1, uvG).rgb, uBlurMix);
+                    cB = mix(texture(uTexture0, uvB).rgb, texture(uTexture1, uvB).rgb, uBlurMix);
+                }
+            } else {
+                // NO DISTORTION: The Common Case (99% of the time)
+                // We only need 1 fetch per texture, not 3.
+                
+                vec3 finalColor;
+                if (uBlurMix < 0.001) {
+                    // Super Fast Path: Just draw the sharp image
+                    finalColor = texture(uTexture0, vTexCoords).rgb;
+                } else if (uBlurMix > 0.999) {
+                    // Super Fast Path: Just draw the blurred image
+                    finalColor = texture(uTexture1, vTexCoords).rgb;
+                } else {
+                    // Fast Path: Mix standard textures
+                    vec3 c0 = texture(uTexture0, vTexCoords).rgb;
+                    vec3 c1 = texture(uTexture1, vTexCoords).rgb;
+                    finalColor = mix(c0, c1, uBlurMix);
+                }
+                cR = finalColor;
+                cG = finalColor;
+                cB = finalColor;
+            }
+            
+            vec3 color = vec3(cR.r, cG.g, cB.b);
+
+            // 3. Apply expensive effects ONLY if enabled
+            if (uDuotoneOpacity > 0.0) {
+                color = applyDuotone(color);
+            }
+            
+            if (uDimAmount > 0.0) {
+                color = mix(color, vec3(0.0), uDimAmount);
+            }
+
             if (uGrainAmount > 0.0) {
-                // By flooring the uGrainCount-scaled UVs, we create a stable integer grid
-                // This stops the flickering caused by sub-pixel motion.
                 vec2 grainCoords = floor(vTexCoords * uGrainCount);
                 float noise = pcg_hash(grainCoords);
-                grain = (noise - 0.5) * uGrainAmount;
+                color += (noise - 0.5) * uGrainAmount;
             }
 
-            // DITHERING: Fixed to window pixels, no sin() sensitivity
-            // Using a simple XOR-style bit hash for dithering instead of sin()
+            // DITHERING
             uint x = uint(gl_FragCoord.x);
             uint y = uint(gl_FragCoord.y);
             float dithering = float((x ^ y) * 14923u % 256u) / 255.0;
-            dithering = (dithering - 0.5) / 128.0;
+            color += (dithering - 0.5) / 128.0;
             
-            fragColor = vec4(clamp(color + grain + dithering, 0.0, 1.0), uAlpha);
+            fragColor = vec4(clamp(color, 0.0, 1.0), uAlpha);
         }
     """.trimIndent()
 }

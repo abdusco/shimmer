@@ -54,6 +54,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private var sessionBlurEnabled = preferences.getBlurAmount() > 0f
 
         private var surfaceDimensions = SurfaceDimensions(0, 0)
+        private val touchList = ArrayList<TouchData>(10)
 
         private val blurTimeoutHandler = Handler(Looper.getMainLooper())
         private val blurTimeoutRunnable = Runnable {
@@ -267,7 +268,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onTouchEvent(event: MotionEvent) {
             val touches = processTouches(event)
-            if (touches.isNotEmpty()) queueEvent { renderer?.setTouchPoints(touches) }
+            if (touches.isNotEmpty()) {
+                renderer?.setTouchPoints(touches)
+            }
 
             when (tapGestureDetector.onTouchEvent(event)) {
                 TapEvent.TWO_FINGER_DOUBLE_TAP -> {
@@ -303,7 +306,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun processTouches(event: MotionEvent): List<TouchData> {
             if (surfaceDimensions.width <= 0 || surfaceDimensions.height <= 0) return emptyList()
-            val list = mutableListOf<TouchData>()
+
+            touchList.clear()
             val action = event.actionMasked
             for (i in 0 until event.pointerCount) {
                 val pid = event.getPointerId(i)
@@ -320,9 +324,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
                                     TouchAction.DOWN
                             else -> TouchAction.MOVE
                         }
-                list.add(TouchData(pid, x, y, tact))
+                touchList.add(TouchData(pid, x, y, tact))
             }
-            return list
+            return ArrayList(touchList)
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
@@ -340,7 +344,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onOffsetsChanged(x: Float, y: Float, xs: Float, ys: Float, xp: Int, yp: Int) {
             transitionScheduler.pauseForInteraction()
-            queueEvent { renderer?.setParallaxOffset(x) }
+            renderer?.setParallaxOffset(x)
         }
 
         override fun onSurfaceDimensionsChanged(width: Int, height: Int) {
