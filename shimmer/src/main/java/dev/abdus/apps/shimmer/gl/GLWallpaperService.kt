@@ -260,6 +260,11 @@ private class GLThread(
     private val eglContextClientVersion: Int
 ) : Thread() {
 
+    companion object {
+        private const val TARGET_FPS = 60
+        private val TARGET_FRAME_NANOS = 1_000_000_000L / TARGET_FPS // nanoseconds per frame
+    }
+
     private val threadManager = GLThreadManager()
     private var holder: SurfaceHolder? = null
     private var width = 0
@@ -288,6 +293,10 @@ private class GLThread(
     private var eventsWaiting = false
 
     private var eglHelper: EglHelper? = null
+
+    // Performance monitoring
+    private var frameStartNanos = 0L
+    private var droppedFrames = 0
 
     init {
         name = "GLThread $id"
@@ -411,10 +420,20 @@ private class GLThread(
                 }
 
                 if (w > 0 && h > 0 && !paused) {
+                    frameStartNanos = System.nanoTime()
+                    
                     renderer.onDrawFrame()
                     // eglSwapBuffers will block until VSync when eglSwapInterval(1) is set
                     // No need for Thread.sleep() anymore!
                     eglHelper!!.swap()
+                    
+                    val frameDuration = System.nanoTime() - frameStartNanos
+                    if (frameDuration > TARGET_FRAME_NANOS * 2) {
+                        droppedFrames++
+                        if (droppedFrames % 60 == 0) {
+                            Log.w("GLThread", "Dropped frames: $droppedFrames, last frame: ${frameDuration / 1_000_000}ms")
+                        }
+                    }
                 }
             }
         } finally {
