@@ -1,8 +1,10 @@
 package dev.abdus.apps.shimmer
 
 import android.graphics.Color
+import android.opengl.Matrix
 import android.view.animation.DecelerateInterpolator
 import androidx.core.graphics.createBitmap
+import kotlin.math.max
 
 class AnimationController(private var durationMillis: Int = 1000) {
     var currentRenderState: RenderState
@@ -36,6 +38,10 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
     // Touch point management for chromatic aberration
     private val activeTouches = mutableListOf<TouchPoint>()
+
+    // Surface dimensions for projection matrix calculation
+    private var surfaceAspectRatio: Float = 1f
+    private var previousImageAspectRatio: Float? = null
 
     companion object {
         private const val MAX_TOUCH_POINTS = 10
@@ -155,6 +161,9 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
         // Image transition: animate all image changes (fade in from black or crossfade)
         if (oldTarget.imageSet.original != newTarget.imageSet.original) {
+            // Capture currentRenderState.imageSet.aspectRatio as previous before it gets updated
+            previousImageAspectRatio = currentRenderState.imageSet.aspectRatio
+            
             val startImageTransitionValue = if (imageTransitionAnimator.isRunning) {
                 imageTransitionAnimator.progress
             } else {
@@ -226,6 +235,10 @@ class AnimationController(private var durationMillis: Int = 1000) {
         // Detect when image-relevant animations complete and invoke callback
         val isImageAnimating = blurAnimating || imageAnimating
         if (wasImageAnimatingLastFrame && !isImageAnimating) {
+            // Clear previousImageAspectRatio when image transition completes
+            if (!imageTransitionAnimator.isRunning) {
+                previousImageAspectRatio = null
+            }
             onImageAnimationComplete?.invoke()
         }
         wasImageAnimatingLastFrame = isImageAnimating
@@ -291,6 +304,37 @@ class AnimationController(private var durationMillis: Int = 1000) {
     }
 
     fun hasActiveTouches(): Boolean = activeTouches.isNotEmpty()
+
+    fun setSurfaceDimensions(dimensions: SurfaceDimensions) {
+        surfaceAspectRatio = dimensions.aspectRatio
+    }
+
+    fun recomputeProjectionMatrices(): Pair<FloatArray, FloatArray?> {
+        val parallax = currentRenderState.parallaxOffset
+        
+        // Use targetRenderState for current image (what we're transitioning to)
+        val currentAspect = targetRenderState.imageSet.aspectRatio
+        val projectionMatrix = FloatArray(16)
+        buildProjectionMatrix(projectionMatrix, surfaceAspectRatio / currentAspect, parallax)
+        
+        // Use previousImageAspectRatio for previous image (what's fading out)
+        val previousProjectionMatrix = previousImageAspectRatio?.let {
+            val prevMatrix = FloatArray(16)
+            buildProjectionMatrix(prevMatrix, surfaceAspectRatio / it, parallax)
+            prevMatrix
+        }
+        
+        return projectionMatrix to previousProjectionMatrix
+    }
+
+    private fun buildProjectionMatrix(target: FloatArray, ratio: Float, pan: Float) {
+        val zoom = max(1f, ratio)
+        val scaledAspect = zoom / ratio
+        val panFraction = pan * (scaledAspect - 1f) / scaledAspect
+        val left = -1f + 2f * panFraction
+        val right = left + 2f / scaledAspect
+        Matrix.orthoM(target, 0, left, right, -1f / zoom, 1f / zoom, 0f, 1f)
+    }
 
     private fun createTouchPoint(touch: TouchData): TouchPoint {
         val fadeMs = currentRenderState.chromaticAberration.fadeDurationMillis.toInt()

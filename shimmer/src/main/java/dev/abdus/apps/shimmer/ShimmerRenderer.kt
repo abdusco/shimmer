@@ -5,7 +5,6 @@ import android.opengl.Matrix
 import android.util.Log
 import android.view.animation.DecelerateInterpolator
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
-import kotlin.math.max
 
 class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Renderer {
 
@@ -31,10 +30,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     private var surfaceCreated = false
     private var surfaceDimensions = SurfaceDimensions(0, 0)
-    private var previousImageSet: ImageSet? = null
 
-    private val projectionMatrix = FloatArray(16)
-    private val previousProjectionMatrix = FloatArray(16)
     private val viewMatrix = FloatArray(16)
     private val modelMatrix = FloatArray(16)
     private val viewModelMatrix = FloatArray(16)
@@ -87,7 +83,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     override fun onSurfaceChanged(width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
         surfaceDimensions = SurfaceDimensions(width, height)
-        recomputeProjectionMatrix()
+        animationController.setSurfaceDimensions(surfaceDimensions)
         callbacks.onSurfaceDimensionsChanged(width, height)
     }
 
@@ -99,11 +95,13 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         val state = animationController.currentRenderState
         val imageAlpha = animationController.imageTransitionAnimator.currentValue
 
-        recomputeProjectionMatrix()
+        val (projMatrix, prevProjMatrix) = animationController.recomputeProjectionMatrices()
         Matrix.setIdentityM(modelMatrix, 0)
         Matrix.multiplyMM(viewModelMatrix, 0, viewMatrix, 0, modelMatrix, 0)
-        Matrix.multiplyMM(mvpMatrix, 0, projectionMatrix, 0, viewModelMatrix, 0)
-        Matrix.multiplyMM(previousMvpMatrix, 0, previousProjectionMatrix, 0, viewModelMatrix, 0)
+        Matrix.multiplyMM(mvpMatrix, 0, projMatrix, 0, viewModelMatrix, 0)
+        prevProjMatrix?.let {
+            Matrix.multiplyMM(previousMvpMatrix, 0, it, 0, viewModelMatrix, 0)
+        }
 
         val blurPercent = state.blurPercent.coerceIn(0f, 1f)
         val effectiveDuotone = state.duotone.copy(
@@ -159,11 +157,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         previousImage = currentImage
         currentImage = GLTextureImage()
 
-        previousImageSet = animationController.currentRenderState.imageSet
-
         currentImage.load(imageSet)
         animationController.updateTargetState(animationController.targetRenderState.copy(imageSet = imageSet))
-        recomputeProjectionMatrix()
         callbacks.requestRender()
     }
 
@@ -227,24 +222,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     fun isBlurred(): Boolean = animationController.currentRenderState.blurPercent > 0.01f
     fun isAnimating(): Boolean = animationController.blurAmountAnimator.isRunning || animationController.imageTransitionAnimator.isRunning
-
-    private fun recomputeProjectionMatrix() {
-        val parallax = animationController.currentRenderState.parallaxOffset
-        val currentAspect = animationController.currentRenderState.imageSet.aspectRatio
-        buildProjectionMatrix(projectionMatrix, surfaceDimensions.aspectRatio / currentAspect, parallax)
-        previousImageSet?.let { 
-            buildProjectionMatrix(previousProjectionMatrix, surfaceDimensions.aspectRatio / it.aspectRatio, parallax) 
-        }
-    }
-
-    private fun buildProjectionMatrix(target: FloatArray, ratio: Float, pan: Float) {
-        val zoom = max(1f, ratio)
-        val scaledAspect = zoom / ratio
-        val panFraction = pan * (scaledAspect - 1f) / scaledAspect
-        val left = -1f + 2f * panFraction
-        val right = left + 2f / scaledAspect
-        Matrix.orthoM(target, 0, left, right, -1f / zoom, 1f / zoom, 0f, 1f)
-    }
 
 
 
