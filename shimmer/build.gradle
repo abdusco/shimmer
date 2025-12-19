@@ -77,7 +77,6 @@ android {
 }
 
 dependencies {
-    implementation project(':gl-wallpaper')
     implementation libs.appCompat
     implementation platform(libs.composeBom)
     androidTestImplementation platform(libs.composeBom)

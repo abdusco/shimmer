@@ -14,8 +14,15 @@ class GLTextureImage {
         0f, 0f, 1f, 1f, 1f, 0f
     ))
     private val vertexBuffer: FloatBuffer = GLUtil.newFloatBuffer(18)
+    private var loadedImageSetHash: Int = 0
 
     fun load(imageSet: ImageSet) {
+        val newHash = imageSet.original.hashCode()
+        // If textures exist and it's the same image, just bail out!
+        if (textures.isNotEmpty() && loadedImageSetHash == newHash) {
+            return 
+        }
+
         release()
 
         if (imageSet.original.isRecycled) return
@@ -36,6 +43,8 @@ class GLTextureImage {
         // Handshake: Ensure GPU has read pixels, but we NO LONGER recycle here.
         GLES30.glFlush()
         GLES30.glFinish()
+
+        loadedImageSetHash = newHash
     }
 
     fun draw(

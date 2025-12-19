@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.abdus.apps.shimmer.ShimmerRenderer
-import net.rbgrn.android.glwallpaperservice.GLWallpaperService
+import dev.abdus.apps.shimmer.gl.GLWallpaperService
 
 @Composable
 fun WallpaperPreview(

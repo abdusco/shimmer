@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.abdus.apps.shimmer.components.PreviewSurfaceView
 import dev.abdus.apps.shimmer.components.WallpaperPreview
-import net.rbgrn.android.glwallpaperservice.GLWallpaperService
 import kotlin.random.Random
 
 class SplashActivity : ComponentActivity() {
@@ -121,7 +120,7 @@ class SplashActivity : ComponentActivity() {
     }
 
     private fun navigateToSettings() {
-        val intent = Intent(this, SettingsActivity::class.java)
+        val intent = Intent(this, dev.abdus.apps.shimmer.settings.SettingsActivity::class.java)
         startActivity(intent)
         finish()
     }
