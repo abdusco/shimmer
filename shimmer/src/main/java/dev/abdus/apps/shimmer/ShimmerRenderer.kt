@@ -47,8 +47,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     private var surfaceWidthPx = 0
     private var surfaceHeightPx = 0
     private var surfaceAspect = 1f
-    private var bitmapAspect = 1f
-    private var previousBitmapAspect: Float? = null
+    private var previousImageSet: ImageSet? = null
 
     private val projectionMatrix = FloatArray(16)
     private val previousProjectionMatrix = FloatArray(16)
@@ -216,8 +215,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         previousImage = currentImage
         currentImage = GLTextureImage()
 
-        previousBitmapAspect = bitmapAspect
-        bitmapAspect = if (imageSet.height == 0) 1f else imageSet.width.toFloat() / imageSet.height
+        previousImageSet = animationController.currentRenderState.imageSet
 
         currentImage.load(imageSet)
         animationController.updateTargetState(animationController.targetRenderState.copy(imageSet = imageSet))
@@ -363,8 +361,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     private fun recomputeProjectionMatrix() {
         val parallax = animationController.currentRenderState.parallaxOffset
-        buildProjectionMatrix(projectionMatrix, surfaceAspect / bitmapAspect, parallax)
-        previousBitmapAspect?.let { buildProjectionMatrix(previousProjectionMatrix, surfaceAspect / it, parallax) }
+        val currentAspect = animationController.currentRenderState.imageSet.aspectRatio
+        buildProjectionMatrix(projectionMatrix, surfaceAspect / currentAspect, parallax)
+        previousImageSet?.let { 
+            buildProjectionMatrix(previousProjectionMatrix, surfaceAspect / it.aspectRatio, parallax) 
+        }
     }
 
     private fun buildProjectionMatrix(target: FloatArray, ratio: Float, pan: Float) {

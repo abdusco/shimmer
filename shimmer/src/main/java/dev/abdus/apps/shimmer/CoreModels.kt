@@ -63,7 +63,9 @@ data class ImageSet(
     val id: String = "",
     val width: Int = original.width,
     val height: Int = original.height,
-)
+) {
+    val aspectRatio: Float = if (height == 0) 1f else width.toFloat() / height
+}
 
 enum class DuotoneBlendMode {
     NORMAL, SOFT_LIGHT, SCREEN
