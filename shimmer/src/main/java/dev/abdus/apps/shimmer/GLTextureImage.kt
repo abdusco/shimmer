@@ -50,8 +50,9 @@ class GLTextureImage {
     fun draw(
         handles: PictureHandles, mvpMatrix: FloatArray, blurPercent: Float, alpha: Float,
         duotone: Duotone, dimAmount: Float, grain: GrainSettings, grainCounts: Pair<Float, Float>,
-        touchCount: Int, touchPoints: FloatArray, touchIntensities: FloatArray, screenSize: FloatArray
+        touchPoints: FloatArray, touchIntensities: FloatArray, screenSize: FloatArray
     ) {
+        val touchCount = touchIntensities.size
         if (textures.isEmpty() || alpha <= 0f) return
 
         val keyframes = (textures.size - 1).coerceAtLeast(0)

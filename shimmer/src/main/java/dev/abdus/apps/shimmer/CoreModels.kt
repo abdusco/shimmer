@@ -16,6 +16,7 @@ import kotlinx.serialization.Serializable
  * @property duotoneAlwaysOn Whether duotone is always visible (true) or only when blurred (false)
  * @property parallaxOffset Parallax scroll position (0.0 = left, 0.5 = center, 1.0 = right)
  * @property grain Film grain overlay settings
+ * @property chromaticAberration Chromatic aberration effect settings
  */
 data class RenderState(
     val imageSet: ImageSet,
@@ -25,6 +26,7 @@ data class RenderState(
     val duotoneAlwaysOn: Boolean,
     val parallaxOffset: Float,
     val grain: GrainSettings,
+    val chromaticAberration: ChromaticAberrationSettings,
 )
 
 /**

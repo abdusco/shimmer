@@ -21,8 +21,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     companion object {
         private const val TAG = "ShimmerRenderer"
-        private const val MAX_TOUCH_POINTS = 10
-        private const val TARGET_RADIUS = 0.5f // Maximum spread of the ripple
 
         private const val GRAIN_SIZE_MIN_IMAGE_PX = 1.5f
         private const val GRAIN_SIZE_MAX_IMAGE_PX = 3.0f
@@ -37,11 +35,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         onImageAnimationComplete = { callbacks.onReadyForNextImage() }
     }
 
-    private var chromaticAberrationIntensity = 0.5f
-    private var chromaticAberrationFadeMs = 500
-    private val activeTouches = mutableListOf<TouchPoint>()
-    private val touchPointsArray = FloatArray(MAX_TOUCH_POINTS * 3)
-    private val touchIntensitiesArray = FloatArray(MAX_TOUCH_POINTS)
 
     private var surfaceCreated = false
     private var surfaceWidthPx = 0
@@ -163,15 +156,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             (state.imageSet.width.toFloat() / grainSizePx) to (state.imageSet.height.toFloat() / grainSizePx)
         } else 0f to 0f
 
-        updateTouchPointAnimations()
-        val touchCount = activeTouches.size.coerceAtMost(MAX_TOUCH_POINTS)
-        for (i in 0 until touchCount) {
-            val touch = activeTouches[i]
-            touchPointsArray[i * 3] = touch.x
-            touchPointsArray[i * 3 + 1] = touch.y
-            touchPointsArray[i * 3 + 2] = touch.radius
-            touchIntensitiesArray[i] = touch.intensity * chromaticAberrationIntensity
-        }
+        val (touchPointsArray, touchIntensitiesArray) = animationController.getTouchPointArrays()
 
         val screenSize = floatArrayOf(surfaceWidthPx.toFloat(), surfaceHeightPx.toFloat())
 
@@ -179,21 +164,21 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             previousImage.draw(
                 pictureHandles, previousMvpMatrix, blurPercent, 1f - imageAlpha,
                 effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-                touchCount, touchPointsArray, touchIntensitiesArray, screenSize
+                touchPointsArray, touchIntensitiesArray, screenSize
             )
         }
 
         currentImage.draw(
             pictureHandles, mvpMatrix, blurPercent, imageAlpha,
             effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-            touchCount, touchPointsArray, touchIntensitiesArray, screenSize
+            touchPointsArray, touchIntensitiesArray, screenSize
         )
 
         if (!animationController.imageTransitionAnimator.isRunning && imageAlpha >= 1f) {
             previousImage.release()
         }
 
-        if (isAnimating || activeTouches.isNotEmpty()) callbacks.requestRender()
+        if (isAnimating || animationController.hasActiveTouches()) callbacks.requestRender()
     }
 
     fun updateSettings(
@@ -241,92 +226,18 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     }
 
     fun setChromaticAberrationSettings(enabled: Boolean, intensity: Float, fadeMs: Int) {
-        chromaticAberrationIntensity = if (enabled) intensity.coerceIn(0f, 1f) else 0f
-        chromaticAberrationFadeMs = fadeMs
-        if (!enabled) activeTouches.clear()
+        val newSettings = ChromaticAberrationSettings(
+            enabled = enabled,
+            intensity = intensity.coerceIn(0f, 1f),
+            fadeDurationMillis = fadeMs.toLong()
+        )
+        animationController.updateTargetState(animationController.targetRenderState.copy(chromaticAberration = newSettings))
         callbacks.requestRender()
     }
 
     fun setTouchPoints(touches: List<TouchData>) {
-        if (chromaticAberrationIntensity <= 0) return
-
-        for (touch in touches) {
-            when (touch.action) {
-                TouchAction.DOWN -> {
-                    // Find existing non-released touch with this pointer ID
-                    val existingTouch = activeTouches.find { it.id == touch.id && !it.isReleased }
-                    if (existingTouch != null) {
-                        // Already active, just update position
-                        existingTouch.x = touch.x
-                        existingTouch.y = touch.y
-                    } else if (activeTouches.size < MAX_TOUCH_POINTS) {
-                        // Create new touch point (even if there's a released touch with same ID)
-                        val newTouch = createTouchPoint(touch)
-                        activeTouches.add(newTouch)
-                    }
-                }
-                TouchAction.MOVE -> {
-                    activeTouches.find { it.id == touch.id && !it.isReleased }?.let {
-                        it.x = touch.x
-                        it.y = touch.y
-                    }
-                }
-                TouchAction.UP -> {
-                    activeTouches.find { it.id == touch.id && !it.isReleased }?.let {
-                        releaseTouch(it)
-                    }
-                }
-            }
-        }
-
-        // Don't remove touches here - let updateTouchPointAnimations() handle cleanup
-        // when animations complete. This allows fade-out animations to run.
-
+        animationController.setTouchPoints(touches)
         callbacks.requestRender()
-    }
-
-    private fun createTouchPoint(touch: TouchData): TouchPoint {
-        val newTouch = TouchPoint(
-            id = touch.id,
-            x = touch.x,
-            y = touch.y,
-            radius = 0f,
-            intensity = 1f,
-            radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
-            fadeAnimator = TickingFloatAnimator(chromaticAberrationFadeMs, DecelerateInterpolator())
-        )
-        newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
-        // Set fadeAnimator to not be running, but with intensity at 1.0
-        newTouch.fadeAnimator.reset()
-        newTouch.fadeAnimator.currentValue = 1f
-        return newTouch
-    }
-
-    private fun releaseTouch(touchPoint: TouchPoint) {
-        touchPoint.radiusAnimator.start(startValue = touchPoint.radius, endValue = 0f)
-        touchPoint.fadeAnimator.start(startValue = touchPoint.intensity, endValue = 0f)
-        touchPoint.isReleased = true
-    }
-
-    // Touch point management for chromatic aberration - moved to class body
-    private fun updateTouchPointAnimations() {
-        val touchesToRemove = mutableListOf<TouchPoint>()
-        for (touchPoint in activeTouches) {
-            // Tick animators (they handle their own running state internally)
-            touchPoint.radiusAnimator.tick()
-            touchPoint.radius = touchPoint.radiusAnimator.currentValue
-
-            touchPoint.fadeAnimator.tick()
-            touchPoint.intensity = touchPoint.fadeAnimator.currentValue
-
-            // Remove touch points that have fully faded out AND finished their radius animation
-            if (!touchPoint.radiusAnimator.isRunning && !touchPoint.fadeAnimator.isRunning &&
-                touchPoint.radius <= 0.01f && touchPoint.intensity <= 0.01f) {
-                touchesToRemove.add(touchPoint)
-            }
-        }
-        // Remove completed touch points
-        activeTouches.removeAll(touchesToRemove)
     }
 
 
