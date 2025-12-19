@@ -130,11 +130,11 @@ private class EglHelper(private val eglContextClientVersion: Int) {
         eglDisplay = display
 
         // Modern EGL config optimized for Android 8.0+
+        // Using RGB instead of RGBA - wallpapers are opaque, saves GPU memory
         val configAttribs = intArrayOf(
             EGL14.EGL_RED_SIZE, 8,
             EGL14.EGL_GREEN_SIZE, 8,
             EGL14.EGL_BLUE_SIZE, 8,
-            EGL14.EGL_ALPHA_SIZE, 8,
             EGL14.EGL_RENDERABLE_TYPE, if (eglContextClientVersion == 3) 64 else 4,
             EGL14.EGL_NONE
         )
