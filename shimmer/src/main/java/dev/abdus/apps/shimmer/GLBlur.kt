@@ -15,7 +15,7 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 250
+const val MAX_SUPPORTED_BLUR_RADIUS_PIXELS = 300
 private const val TAG = "GLBlur"
 
 data class BlurLevelResult(
