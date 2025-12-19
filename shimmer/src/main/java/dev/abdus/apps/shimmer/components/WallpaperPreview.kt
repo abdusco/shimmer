@@ -7,6 +7,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.abdus.apps.shimmer.ShimmerRenderer
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
+
+/**
+ * Adapter that wraps ShimmerRenderer to make it compatible with GLSurfaceView.
+ * This keeps ShimmerRenderer decoupled from UI/preview concerns.
+ */
+private class ShimmerRendererAdapter(
+    private val renderer: ShimmerRenderer
+) : GLSurfaceView.Renderer {
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        renderer.onSurfaceCreated()
+    }
+
+    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        renderer.onSurfaceChanged(width, height)
+    }
+
+    override fun onDrawFrame(gl: GL10?) {
+        renderer.onDrawFrame()
+    }
+}
 
 @Composable
 fun WallpaperPreview(
@@ -37,7 +59,8 @@ fun WallpaperPreview(
                     }
                 })
                 renderer.setEffectTransitionDuration(2000)
-                setRenderer(renderer)
+                val adapter = ShimmerRendererAdapter(renderer)
+                setRenderer(adapter)
                 renderMode = GLWallpaperService.RENDERMODE_WHEN_DIRTY
                 onRendererCreated(renderer, this)
             }

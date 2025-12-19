@@ -1,16 +1,13 @@
 package dev.abdus.apps.shimmer
 
 import android.opengl.GLES30
-import android.opengl.GLSurfaceView
 import android.opengl.Matrix
 import android.util.Log
 import android.view.animation.DecelerateInterpolator
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
-import javax.microedition.khronos.egl.EGLConfig
-import javax.microedition.khronos.opengles.GL10
 import kotlin.math.max
 
-class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Renderer, GLSurfaceView.Renderer {
+class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Renderer {
 
     interface Callbacks {
         fun requestRender()
@@ -52,38 +49,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     private lateinit var pictureHandles: PictureHandles
 
-    // Modern GLWallpaperService.Renderer interface (no GL10/EGLConfig)
+
     override fun onSurfaceCreated() {
-        onSurfaceCreatedImpl()
-    }
-
-    override fun onSurfaceChanged(width: Int, height: Int) {
-        onSurfaceChangedImpl(width, height)
-    }
-
-    override fun onDrawFrame() {
-        onDrawFrameImpl()
-    }
-
-    override fun onSurfaceDestroyed() {
-        onSurfaceDestroyedImpl()
-    }
-
-    // Legacy GLSurfaceView.Renderer interface (for preview compatibility)
-    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        onSurfaceCreatedImpl()
-    }
-
-    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-        onSurfaceChangedImpl(width, height)
-    }
-
-    override fun onDrawFrame(gl: GL10?) {
-        onDrawFrameImpl()
-    }
-
-    // Implementation methods
-    private fun onSurfaceCreatedImpl() {
         surfaceCreated = true
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
@@ -123,7 +90,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         callbacks.onRendererReady()
     }
 
-    private fun onSurfaceChangedImpl(width: Int, height: Int) {
+    override fun onSurfaceChanged(width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
         surfaceWidthPx = width
         surfaceHeightPx = height
@@ -132,7 +99,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         callbacks.onSurfaceDimensionsChanged(width, height)
     }
 
-    private fun onDrawFrameImpl() {
+    override fun onDrawFrame() {
         if (!surfaceCreated) return
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
@@ -262,7 +229,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         callbacks.requestRender()
     }
 
-    private fun onSurfaceDestroyedImpl() {
+    override fun onSurfaceDestroyed() {
         previousImage.release()
         surfaceCreated = false
     }
