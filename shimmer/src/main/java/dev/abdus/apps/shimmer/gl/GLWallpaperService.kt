@@ -379,15 +379,6 @@ private class GLThread(
                 }
 
                 if (eventsWaiting) {
-                    // Process events
-                    if (!paused && haveEgl && hasSurface) {
-                        try {
-                            eglHelper!!.createSurface(holder!!)
-                        } catch (e: Exception) {
-                            Log.e("GLThread", "Error creating surface for events", e)
-                        }
-                    }
-
                     var runnable: Runnable?
                     while (getEvent().also { runnable = it } != null) {
                         runnable!!.run()
@@ -421,12 +412,11 @@ private class GLThread(
 
                 if (w > 0 && h > 0 && !paused) {
                     frameStartNanos = System.nanoTime()
-                    
+
                     renderer.onDrawFrame()
                     // eglSwapBuffers will block until VSync when eglSwapInterval(1) is set
-                    // No need for Thread.sleep() anymore!
                     eglHelper!!.swap()
-                    
+
                     val frameDuration = System.nanoTime() - frameStartNanos
                     if (frameDuration > TARGET_FRAME_NANOS * 2) {
                         droppedFrames++
