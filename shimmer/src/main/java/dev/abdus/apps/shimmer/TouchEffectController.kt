@@ -37,18 +37,18 @@ class TouchEffectController(
                 isActive = false
                 handler.removeCallbacks(activationRunnable)
                 handler.postDelayed(activationRunnable, activationDelayMs)
+                // Clear any lingering touch effects from a previous sequence.
+                onTouchPointsChanged(emptyList())
             }
             
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 // Touch sequence ended - cancel pending activation and clear effects
                 handler.removeCallbacks(activationRunnable)
                 
-                if (isActive) {
-                    // Send final touch state or clear if no touches remain
-                    onTouchPointsChanged(
-                        if (currentTouches.isNotEmpty()) currentTouches else emptyList()
-                    )
-                }
+                // Send final touch state or clear if no touches remain
+                onTouchPointsChanged(
+                    if (currentTouches.isNotEmpty()) currentTouches else emptyList()
+                )
                 isActive = false
             }
             

@@ -227,6 +227,30 @@ class AnimationController(private var durationMillis: Int = 1000) {
     fun setTouchPoints(touches: List<TouchData>) {
         val chromaticAberration = currentRenderState.chromaticAberration
         if (!chromaticAberration.enabled || chromaticAberration.intensity <= 0) return
+        if (touches.isEmpty()) {
+            activeTouches.filter { !it.isReleased }.forEach { releaseTouch(it) }
+            return
+        }
+
+        val hasActivePointers = touches.any { it.action != TouchAction.UP }
+        if (!hasActivePointers) {
+            activeTouches.filter { !it.isReleased }.forEach { releaseTouch(it) }
+            return
+        }
+
+        val activeIds = touches.asSequence()
+            .filter { it.action != TouchAction.UP }
+            .map { it.id }
+            .toHashSet()
+        val upIds = touches.asSequence()
+            .filter { it.action == TouchAction.UP }
+            .map { it.id }
+            .toHashSet()
+
+        // Release any touch that no longer appears in the active pointer set.
+        activeTouches
+            .filter { !it.isReleased && it.id !in activeIds && it.id !in upIds }
+            .forEach { releaseTouch(it) }
 
         for (touch in touches) {
             when (touch.action) {
