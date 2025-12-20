@@ -25,18 +25,18 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     private val pendingParallaxOffset = AtomicReference<Float?>(null)
     private val pendingTouches = AtomicReference<List<TouchData>?>(null)
 
+    private val viewportManager = ViewportManager()
+
     private val animationController = AnimationController().apply {
-        onImageAnimationComplete = { callbacks.onReadyForNextImage() }
+        onImageAnimationComplete = { 
+            viewportManager.setImageTransitionState(null)
+            callbacks.onReadyForNextImage() 
+        }
     }
 
     private var surfaceCreated = false
     private var surfaceDimensions = SurfaceDimensions(0, 0)
 
-    private val viewMatrix = FloatArray(16)
-    private val modelMatrix = FloatArray(16)
-    private val viewModelMatrix = FloatArray(16)
-    private val mvpMatrix = FloatArray(16)
-    private val previousMvpMatrix = FloatArray(16)
 
     private lateinit var program: ShimmerProgram
 
@@ -53,7 +53,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             return
         }
 
-        Matrix.setLookAtM(viewMatrix, 0, 0f, 0f, 1f, 0f, 0f, -1f, 0f, 1f, 0f)
         pendingImageSet?.let { setImage(it); pendingImageSet = null }
         callbacks.onRendererReady()
     }
@@ -61,7 +60,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     override fun onSurfaceChanged(width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
         surfaceDimensions = SurfaceDimensions(width, height)
-        animationController.setSurfaceDimensions(surfaceDimensions)
+        viewportManager.setSurfaceDimensions(surfaceDimensions)
         callbacks.onSurfaceDimensionsChanged(width, height)
     }
 
@@ -69,9 +68,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         if (!surfaceCreated) return
         
         pendingParallaxOffset.getAndSet(null)?.let { newParallax ->
-            animationController.updateTargetState(
-                animationController.targetRenderState.copy(parallaxOffset = newParallax)
-            )
+            viewportManager.setParallaxTarget(newParallax)
         }
 
         pendingTouches.getAndSet(null)?.let { newTouches ->
@@ -81,16 +78,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         val isAnimating = animationController.tick()
+        val viewportAnimating = viewportManager.tick()
         val state = animationController.currentRenderState
         val imageAlpha = animationController.imageTransitionAnimator.currentValue
 
-        val (projMatrix, prevProjMatrix) = animationController.recomputeProjectionMatrices()
-        Matrix.setIdentityM(modelMatrix, 0)
-        Matrix.multiplyMM(viewModelMatrix, 0, viewMatrix, 0, modelMatrix, 0)
-        Matrix.multiplyMM(mvpMatrix, 0, projMatrix, 0, viewModelMatrix, 0)
-        prevProjMatrix?.let {
-            Matrix.multiplyMM(previousMvpMatrix, 0, it, 0, viewModelMatrix, 0)
-        }
+        val (mvp, prevMvp) = viewportManager.getMvpMatrices()
 
         val blurPercent = state.blurPercent.coerceIn(0f, 1f)
         val effectiveDuotone = state.duotone.copy(
@@ -107,16 +99,16 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         val (touchPointsArray, touchIntensitiesArray) = animationController.getTouchPointArrays()
         val aspectRatio = surfaceDimensions.aspectRatio
 
-        if (imageAlpha < 1f) {
+        if (imageAlpha < 1f && prevMvp != null) {
             previousImage.draw(
-                program.handles, previousMvpMatrix, blurPercent, 1f,
+                program.handles, prevMvp, blurPercent, 1f,
                 effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
                 touchPointsArray, touchIntensitiesArray, aspectRatio
             )
         }
 
         currentImage.draw(
-            program.handles, mvpMatrix, blurPercent, imageAlpha,
+            program.handles, mvp, blurPercent, imageAlpha,
             effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
             touchPointsArray, touchIntensitiesArray, aspectRatio
         )
@@ -125,7 +117,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             previousImage.release()
         }
 
-        if (isAnimating || animationController.hasActiveTouches()) callbacks.requestRender()
+        if (isAnimating || viewportAnimating || animationController.hasActiveTouches()) {
+            callbacks.requestRender()
+        }
     }
 
     fun updateSettings(
@@ -147,11 +141,16 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             pendingImageSet = imageSet
             return
         }
+        
+        val previousAspect = currentImage.aspectRatio
         previousImage.release()
         previousImage = currentImage
         currentImage = GLTextureImage()
 
         currentImage.load(imageSet)
+        viewportManager.setCurrentImageAspectRatio(imageSet.aspectRatio)
+        viewportManager.setImageTransitionState(previousAspect)
+        
         animationController.updateTargetState(
             animationController.targetRenderState.copy(imageSet = imageSet)
         )
@@ -208,9 +207,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     }
 
     fun onVisibilityChanged() {
-        animationController.parallaxOffsetAnimator.reset(
-            animationController.targetRenderState.parallaxOffset
-        )
+        // Reset parallax to target without animation
+        viewportManager.resetParallax(animationController.targetRenderState.parallaxOffset)
     }
 
     fun setParallaxOffset(offset: Float) {

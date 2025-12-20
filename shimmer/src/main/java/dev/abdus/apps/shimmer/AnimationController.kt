@@ -1,10 +1,8 @@
 package dev.abdus.apps.shimmer
 
 import android.graphics.Color
-import android.opengl.Matrix
 import android.view.animation.DecelerateInterpolator
 import androidx.core.graphics.createBitmap
-import kotlin.math.max
 
 class AnimationController(private var durationMillis: Int = 1000) {
     var currentRenderState: RenderState
@@ -18,8 +16,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
     val dimAmountAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
     val duotoneOpacityAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
     val imageTransitionAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
-    // Exponential smoothing for parallax provides natural, adaptive motion for both dragging and flinging
-    val parallaxOffsetAnimator = SmoothingFloatAnimator()
 
     // Duotone color animators (manual interpolation within tick)
     private var currentDuotoneLightColor: Int = 0
@@ -38,10 +34,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
     // Touch point management for chromatic aberration
     private val activeTouches = mutableListOf<TouchPoint>()
-
-    // Surface dimensions for projection matrix calculation
-    private var surfaceAspectRatio: Float = 1f
-    private var previousImageAspectRatio: Float? = null
 
     companion object {
         private const val MAX_TOUCH_POINTS = 10
@@ -69,7 +61,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
         )
         currentRenderState = defaultState
         targetRenderState = defaultState
-        parallaxOffsetAnimator.reset(0.5f)
     }
 
     fun setDuration(durationMillis: Int) {
@@ -110,12 +101,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
                 endValue = newTarget.dimAmount
             )
         }
-
-        // Parallax offset (exponential smoothing for natural motion)
-        if (oldTarget.parallaxOffset != newTarget.parallaxOffset) {
-            parallaxOffsetAnimator.setTarget(newTarget.parallaxOffset)
-        }
-
 
         // Duotone properties (opacity and colors)
         if (oldTarget.duotone != newTarget.duotone) {
@@ -161,8 +146,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
         // Image transition: animate all image changes (fade in from black or crossfade)
         if (oldTarget.imageSet != newTarget.imageSet) { // Object reference check
-            previousImageAspectRatio = currentRenderState.imageSet.aspectRatio
-        
             // FIX: If the ImageSet object actually changed (new blur levels generated),
             // we MUST start from 0f because currentImage is a brand new texture object.
             // If we start from 'progress' (e.g. 0.9), the new blur snaps in nearly instantly.
@@ -179,7 +162,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
     fun setRenderStateImmediately(newState: RenderState) {
         currentRenderState = newState
         targetRenderState = newState
-        parallaxOffsetAnimator.reset(newState.parallaxOffset)
     }
 
     fun setDuotoneColorsImmediately(lightColor: Int, darkColor: Int) {
@@ -195,7 +177,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
         val dimAnimating = dimAmountAnimator.tick()
         val duotoneOpacityAnimating = duotoneOpacityAnimator.tick()
         val imageAnimating = imageTransitionAnimator.tick()
-        val parallaxAnimating = parallaxOffsetAnimator.tick()
         
         // Update touch point animations
         updateTouchPointAnimations()
@@ -224,7 +205,7 @@ class AnimationController(private var durationMillis: Int = 1000) {
                 blendMode = targetRenderState.duotone.blendMode
             ),
             duotoneAlwaysOn = targetRenderState.duotoneAlwaysOn,
-            parallaxOffset = parallaxOffsetAnimator.currentValue,
+            parallaxOffset = targetRenderState.parallaxOffset,
             grain = targetRenderState.grain,
             chromaticAberration = targetRenderState.chromaticAberration,
         )
@@ -232,16 +213,12 @@ class AnimationController(private var durationMillis: Int = 1000) {
         // Detect when image-relevant animations complete and invoke callback
         val isImageAnimating = blurAnimating || imageAnimating
         if (wasImageAnimatingLastFrame && !isImageAnimating) {
-            // Clear previousImageAspectRatio when image transition completes
-            if (!imageTransitionAnimator.isRunning) {
-                previousImageAspectRatio = null
-            }
             onImageAnimationComplete?.invoke()
         }
         wasImageAnimatingLastFrame = isImageAnimating
 
         val touchAnimating = activeTouches.isNotEmpty()
-        val keepAlive = forceUpdateOneFrame || blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating || parallaxAnimating || touchAnimating
+        val keepAlive = forceUpdateOneFrame || blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating || touchAnimating
         forceUpdateOneFrame = false
         return keepAlive
     }
@@ -308,37 +285,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
     }
 
     fun hasActiveTouches(): Boolean = activeTouches.isNotEmpty()
-
-    fun setSurfaceDimensions(dimensions: SurfaceDimensions) {
-        surfaceAspectRatio = dimensions.aspectRatio
-    }
-
-    fun recomputeProjectionMatrices(): Pair<FloatArray, FloatArray?> {
-        val parallax = currentRenderState.parallaxOffset
-        
-        // Use targetRenderState for current image (what we're transitioning to)
-        val currentAspect = targetRenderState.imageSet.aspectRatio
-        val projectionMatrix = FloatArray(16)
-        buildProjectionMatrix(projectionMatrix, surfaceAspectRatio / currentAspect, parallax)
-        
-        // Use previousImageAspectRatio for previous image (what's fading out)
-        val previousProjectionMatrix = previousImageAspectRatio?.let {
-            val prevMatrix = FloatArray(16)
-            buildProjectionMatrix(prevMatrix, surfaceAspectRatio / it, parallax)
-            prevMatrix
-        }
-        
-        return projectionMatrix to previousProjectionMatrix
-    }
-
-    private fun buildProjectionMatrix(target: FloatArray, ratio: Float, pan: Float) {
-        val zoom = max(1f, ratio)
-        val scaledAspect = zoom / ratio
-        val panFraction = pan * (scaledAspect - 1f) / scaledAspect
-        val left = -1f + 2f * panFraction
-        val right = left + 2f / scaledAspect
-        Matrix.orthoM(target, 0, left, right, -1f / zoom, 1f / zoom, 0f, 1f)
-    }
 
     private fun createTouchPoint(touch: TouchData): TouchPoint {
         val fadeMs = currentRenderState.chromaticAberration.fadeDurationMillis.toInt()

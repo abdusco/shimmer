@@ -11,6 +11,7 @@ class GLTextureImage {
     private var textures = IntArray(0)
     private var textureAspectRatio = 0f
     private var textureCount = 0
+    val aspectRatio: Float get() = textureAspectRatio
     
     private val textureCoordsBuffer: FloatBuffer = GLUtil.asFloatBuffer(floatArrayOf(
         0f, 0f, 0f, 1f, 1f, 1f,
