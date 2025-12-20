@@ -382,6 +382,14 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         when (intent.action) {
                             Actions.ACTION_NEXT_IMAGE -> requestImageChange()
                             Actions.ACTION_NEXT_DUOTONE -> applyNextDuotone()
+                            Actions.ACTION_REFRESH_FOLDERS -> folderRepository.updateFolders(preferences.getImageFolders().map { it.uri })
+                            Actions.ACTION_SET_BLUR_PERCENT -> {
+                                intent?.let { it ->
+                                    Actions.BlurPercentAction.fromIntent(it!!)?.let { action ->
+                                        preferences.setBlurAmount(action.percent!!)
+                                    }
+                                }
+                            }
                             Actions.ACTION_ENABLE_BLUR -> {
                                 sessionBlurEnabled = true
                                 applyBlurState(false)
