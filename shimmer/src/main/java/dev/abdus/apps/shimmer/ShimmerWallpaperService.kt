@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 class ShimmerWallpaperService : GLWallpaperService() {
     companion object {
         const val TAG = "ShimmerWallpaperService"
+        private const val TOUCH_EFFECT_DELAY_MS = 500L
     }
 
     override fun onCreateEngine(): Engine = ShimmerWallpaperEngine()
@@ -63,6 +64,15 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (preferences.isBlurTimeoutEnabled() && engineVisible) {
                 sessionBlurEnabled = true
                 applyBlurState(immediate = false)
+            }
+        }
+
+        private val touchDelayHandler = Handler(Looper.getMainLooper())
+        private var isTouchEffectActive = false
+        private val startTouchEffectRunnable = Runnable{
+            isTouchEffectActive = true
+            if (touchList.isNotEmpty()) {
+                renderer?.setTouchPoints(ArrayList(touchList))
             }
         }
 
@@ -288,9 +298,32 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         override fun onTouchEvent(event: MotionEvent) {
-            val touches = processTouches(event)
-            if (touches.isNotEmpty()) {
-                renderer?.setTouchPoints(touches)
+            val currentTouches = processTouches(event)
+            val action = event.actionMasked
+
+            when (action) {
+                MotionEvent.ACTION_DOWN -> {
+                    isTouchEffectActive = false
+                    touchDelayHandler.removeCallbacks(startTouchEffectRunnable)
+                    touchDelayHandler.postDelayed(startTouchEffectRunnable, TOUCH_EFFECT_DELAY_MS)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    touchDelayHandler.removeCallbacks(startTouchEffectRunnable)
+
+                    if (isTouchEffectActive) {
+                        if (currentTouches.isNotEmpty()) {
+                            renderer?.setTouchPoints(currentTouches)
+                        } else {
+                            renderer?.setTouchPoints(emptyList())
+                        }
+                    }
+                    isTouchEffectActive = false
+                }
+                else -> {
+                    if (isTouchEffectActive && currentTouches.isNotEmpty()) {
+                        renderer?.setTouchPoints(currentTouches)
+                    }
+                }
             }
 
             when (tapGestureDetector.onTouchEvent(event)) {
@@ -300,7 +333,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             "onTouchEvent: TWO_FINGER_DOUBLE_TAP detected, requesting image change"
                     )
                     requestImageChange()
-                    // Don't call pauseForInteraction here - requestImageChange will reset the timer
                 }
                 TapEvent.TRIPLE_TAP -> {
                     sessionBlurEnabled = !sessionBlurEnabled
@@ -448,6 +480,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onDestroy() {
             Log.d(TAG, "Engine onDestroy: cleaning up resources")
+            
+            // Remove the touch delay callback
+            touchDelayHandler.removeCallbacks(startTouchEffectRunnable)
+            
             preferences.unregisterListener(preferenceListener)
             try {
                 unregisterReceiver(shortcutReceiver)
@@ -458,7 +494,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             transitionScheduler.cancel()
             scope.cancel()
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
-            // Final Cleanup
+            
             cachedImageSet?.let {
                 it.original.recycle()
                 it.blurred.forEach { b -> b.recycle() }
