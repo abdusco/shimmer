@@ -95,6 +95,12 @@ class ShimmerProgram {
                 return mix(color, duotone, uDuotoneOpacity);
             }
 
+            vec3 sampleBlurred(vec2 uv) {
+                if (uBlurMix < 0.001) return texture(uTexture0, uv).rgb;
+                if (uBlurMix > 0.999) return texture(uTexture1, uv).rgb;
+                return mix(texture(uTexture0, uv).rgb, texture(uTexture1, uv).rgb, uBlurMix);
+            }
+
             void main() {
                 vec2 screenPos = vPosition * 0.5 + 0.5;
                 vec2 totalOffset = vec2(0.0);
@@ -113,44 +119,18 @@ class ShimmerProgram {
                     }
                 }
 
-                vec3 cR, cG, cB;
                 bool hasDistortion = length(totalOffset) > 0.0001;
 
+                vec3 color;
                 if (hasDistortion) {
-                    vec2 uvR = vTexCoords + totalOffset;
-                    vec2 uvG = vTexCoords;
-                    vec2 uvB = vTexCoords - totalOffset;
-
-                    if (uBlurMix < 0.001) {
-                        cR = texture(uTexture0, uvR).rgb;
-                        cG = texture(uTexture0, uvG).rgb;
-                        cB = texture(uTexture0, uvB).rgb;
-                    } else if (uBlurMix > 0.999) {
-                        cR = texture(uTexture1, uvR).rgb;
-                        cG = texture(uTexture1, uvG).rgb;
-                        cB = texture(uTexture1, uvB).rgb;
-                    } else {
-                        cR = mix(texture(uTexture0, uvR).rgb, texture(uTexture1, uvR).rgb, uBlurMix);
-                        cG = mix(texture(uTexture0, uvG).rgb, texture(uTexture1, uvG).rgb, uBlurMix);
-                        cB = mix(texture(uTexture0, uvB).rgb, texture(uTexture1, uvB).rgb, uBlurMix);
-                    }
+                    vec3 cR = sampleBlurred(vTexCoords + totalOffset);
+                    vec3 cG = sampleBlurred(vTexCoords);
+                    vec3 cB = sampleBlurred(vTexCoords - totalOffset);
+                    color = vec3(cR.r, cG.g, cB.b);
                 } else {
-                    vec3 finalColor;
-                    if (uBlurMix < 0.001) {
-                        finalColor = texture(uTexture0, vTexCoords).rgb;
-                    } else if (uBlurMix > 0.999) {
-                        finalColor = texture(uTexture1, vTexCoords).rgb;
-                    } else {
-                        vec3 c0 = texture(uTexture0, vTexCoords).rgb;
-                        vec3 c1 = texture(uTexture1, vTexCoords).rgb;
-                        finalColor = mix(c0, c1, uBlurMix);
-                    }
-                    cR = finalColor;
-                    cG = finalColor;
-                    cB = finalColor;
+                    color = sampleBlurred(vTexCoords);
                 }
 
-                vec3 color = vec3(cR.r, cG.g, cB.b);
                 float lum = LUMINOSITY(color);
 
                 if (uDuotoneOpacity > 0.0) {
