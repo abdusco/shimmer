@@ -5,5 +5,4 @@ pluginManagement {
     }
 }
 
-include ':gl-wallpaper'
 include ':shimmer'
