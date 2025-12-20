@@ -267,9 +267,16 @@ class AnimationController(private var durationMillis: Int = 1000) {
                     }
                 }
                 TouchAction.MOVE -> {
-                    activeTouches.find { it.id == touch.id && !it.isReleased }?.let {
-                        it.x = touch.x
-                        it.y = touch.y
+                    val existingTouch = activeTouches.find { it.id == touch.id && !it.isReleased }
+                    if (existingTouch != null) {
+                        // Update existing touch position
+                        existingTouch.x = touch.x
+                        existingTouch.y = touch.y
+                    } else if (activeTouches.size < MAX_TOUCH_POINTS) {
+                        // First event for this pointer was a MOVE (user started moving immediately)
+                        // Treat it as a DOWN to create the touch point
+                        val newTouch = createTouchPoint(touch)
+                        activeTouches.add(newTouch)
                     }
                 }
                 TouchAction.UP -> {
