@@ -10,27 +10,28 @@ import android.view.MotionEvent
  */
 class TouchEffectController(
     private val onTouchPointsChanged: (List<TouchData>) -> Unit,
-    private val activationDelayMs: Long = 250L
+    private val activationDelayMs: Long = 100L
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private val touchList = ArrayList<TouchData>(10)
     private var isActive = false
-    
+
     private val activationRunnable = Runnable {
         isActive = true
         if (touchList.isNotEmpty()) {
-            onTouchPointsChanged(ArrayList(touchList))
+            onTouchPointsChanged(snapshotTouches())
         }
     }
-    
+
     /**
      * Process a touch event and update touch effects accordingly.
      * Returns the current list of touch points for other gesture processing.
+     * The returned list is reused on subsequent calls; copy it if you need a stable snapshot.
      */
     fun onTouchEvent(event: MotionEvent, surfaceWidth: Int, surfaceHeight: Int): List<TouchData> {
         val currentTouches = extractTouchPoints(event, surfaceWidth, surfaceHeight)
         val action = event.actionMasked
-        
+
         when (action) {
             MotionEvent.ACTION_DOWN -> {
                 // New touch sequence - schedule activation after delay
@@ -40,29 +41,29 @@ class TouchEffectController(
                 // Clear any lingering touch effects from a previous sequence.
                 onTouchPointsChanged(emptyList())
             }
-            
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 // Touch sequence ended - cancel pending activation and clear effects
                 handler.removeCallbacks(activationRunnable)
-                
+
                 // Send final touch state or clear if no touches remain
                 onTouchPointsChanged(
-                    if (currentTouches.isNotEmpty()) currentTouches else emptyList()
+                    if (currentTouches.isNotEmpty()) snapshotTouches() else emptyList()
                 )
                 isActive = false
             }
-            
+
             else -> {
                 // Touch move - update effects if already active
                 if (isActive && currentTouches.isNotEmpty()) {
-                    onTouchPointsChanged(currentTouches)
+                    onTouchPointsChanged(snapshotTouches())
                 }
             }
         }
-        
+
         return currentTouches
     }
-    
+
     /**
      * Extract normalized touch points from a MotionEvent.
      * Coordinates are normalized to [0, 1] with Y flipped for OpenGL.
@@ -72,35 +73,41 @@ class TouchEffectController(
         surfaceWidth: Int,
         surfaceHeight: Int
     ): List<TouchData> {
-        if (surfaceWidth <= 0 || surfaceHeight <= 0) return emptyList()
-        
+        if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+            touchList.clear()
+            return emptyList()
+        }
+
         touchList.clear()
         val action = event.actionMasked
-        
+
         for (i in 0 until event.pointerCount) {
             val pointerId = event.getPointerId(i)
             val x = event.getX(i) / surfaceWidth
             val y = 1f - (event.getY(i) / surfaceHeight) // Flip Y for OpenGL
-            
+
             val touchAction = when {
-                action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL -> 
+                action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL ->
                     TouchAction.UP
-                action == MotionEvent.ACTION_POINTER_UP && i == event.actionIndex -> 
+                action == MotionEvent.ACTION_POINTER_UP && i == event.actionIndex ->
                     TouchAction.UP
-                action == MotionEvent.ACTION_DOWN && i == 0 -> 
+                action == MotionEvent.ACTION_DOWN && i == 0 ->
                     TouchAction.DOWN
-                action == MotionEvent.ACTION_POINTER_DOWN && i == event.actionIndex -> 
+                action == MotionEvent.ACTION_POINTER_DOWN && i == event.actionIndex ->
                     TouchAction.DOWN
-                else -> 
+                else ->
                     TouchAction.MOVE
             }
-            
+
             touchList.add(TouchData(pointerId, x, y, touchAction))
         }
-        
-        return ArrayList(touchList)
+
+        return touchList
     }
-    
+
+    private fun snapshotTouches(): List<TouchData> =
+        if (touchList.isEmpty()) emptyList() else ArrayList(touchList)
+
     /**
      * Cancel any pending activation and clear effects.
      * Call this when the engine is being destroyed.

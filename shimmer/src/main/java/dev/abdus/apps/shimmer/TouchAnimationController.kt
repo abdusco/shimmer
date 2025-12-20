@@ -9,6 +9,10 @@ class TouchAnimationController {
         intensity = 0f,
         fadeDurationMillis = 0L
     )
+    private val activeIdBuffer = IntArray(MAX_TOUCH_POINTS)
+    private val upIdBuffer = IntArray(MAX_TOUCH_POINTS)
+    private var touchPointsArray = FloatArray(0)
+    private var touchIntensitiesArray = FloatArray(0)
 
     companion object {
         private const val MAX_TOUCH_POINTS = 10
@@ -30,34 +34,43 @@ class TouchAnimationController {
     fun setActiveTouches(touches: List<TouchData>) {
         if (!chromaticSettings.enabled || chromaticSettings.intensity <= 0f) return
         if (touches.isEmpty()) {
-            activeTouches.filter { !it.isReleased }.forEach { releaseTouch(it) }
+            releaseAllActiveTouches()
             return
         }
 
-        val hasActivePointers = touches.any { it.action != TouchAction.UP }
+        var hasActivePointers = false
+        var activeCount = 0
+        var upCount = 0
+        for (touch in touches) {
+            if (touch.action == TouchAction.UP) {
+                if (upCount < MAX_TOUCH_POINTS) {
+                    upIdBuffer[upCount++] = touch.id
+                }
+            } else {
+                hasActivePointers = true
+                if (activeCount < MAX_TOUCH_POINTS) {
+                    activeIdBuffer[activeCount++] = touch.id
+                }
+            }
+        }
         if (!hasActivePointers) {
-            activeTouches.filter { !it.isReleased }.forEach { releaseTouch(it) }
+            releaseAllActiveTouches()
             return
         }
-
-        val activeIds = touches.asSequence()
-            .filter { it.action != TouchAction.UP }
-            .map { it.id }
-            .toHashSet()
-        val upIds = touches.asSequence()
-            .filter { it.action == TouchAction.UP }
-            .map { it.id }
-            .toHashSet()
 
         // Release any touch that no longer appears in the active pointer set.
-        activeTouches
-            .filter { !it.isReleased && it.id !in activeIds && it.id !in upIds }
-            .forEach { releaseTouch(it) }
+        for (touchPoint in activeTouches) {
+            if (!touchPoint.isReleased &&
+                !containsId(activeIdBuffer, activeCount, touchPoint.id) &&
+                !containsId(upIdBuffer, upCount, touchPoint.id)) {
+                releaseTouch(touchPoint)
+            }
+        }
 
         for (touch in touches) {
             when (touch.action) {
                 TouchAction.DOWN -> {
-                    val existingTouch = activeTouches.find { it.id == touch.id && !it.isReleased }
+                    val existingTouch = findActiveTouch(touch.id)
                     if (existingTouch != null) {
                         existingTouch.x = touch.x
                         existingTouch.y = touch.y
@@ -66,7 +79,7 @@ class TouchAnimationController {
                     }
                 }
                 TouchAction.MOVE -> {
-                    val existingTouch = activeTouches.find { it.id == touch.id && !it.isReleased }
+                    val existingTouch = findActiveTouch(touch.id)
                     if (existingTouch != null) {
                         existingTouch.x = touch.x
                         existingTouch.y = touch.y
@@ -75,7 +88,7 @@ class TouchAnimationController {
                     }
                 }
                 TouchAction.UP -> {
-                    activeTouches.find { it.id == touch.id && !it.isReleased }?.let {
+                    findActiveTouch(touch.id)?.let {
                         releaseTouch(it)
                     }
                 }
@@ -92,8 +105,13 @@ class TouchAnimationController {
         val touchCount = activeTouches.size.coerceAtMost(MAX_TOUCH_POINTS)
         val intensity = if (chromaticSettings.enabled) chromaticSettings.intensity else 0f
 
-        val touchPointsArray = FloatArray(touchCount * 3)
-        val touchIntensitiesArray = FloatArray(touchCount)
+        val pointsSize = touchCount * 3
+        if (touchPointsArray.size != pointsSize) {
+            touchPointsArray = FloatArray(pointsSize)
+        }
+        if (touchIntensitiesArray.size != touchCount) {
+            touchIntensitiesArray = FloatArray(touchCount)
+        }
 
         for (i in 0 until touchCount) {
             val touch = activeTouches[i]
@@ -130,8 +148,9 @@ class TouchAnimationController {
     }
 
     private fun updateTouchPointAnimations() {
-        val touchesToRemove = mutableListOf<TouchPoint>()
-        for (touchPoint in activeTouches) {
+        var i = activeTouches.size - 1
+        while (i >= 0) {
+            val touchPoint = activeTouches[i]
             touchPoint.radiusAnimator.tick()
             touchPoint.radius = touchPoint.radiusAnimator.currentValue
 
@@ -140,9 +159,31 @@ class TouchAnimationController {
 
             if (!touchPoint.radiusAnimator.isRunning && !touchPoint.fadeAnimator.isRunning &&
                 touchPoint.radius <= 0.01f && touchPoint.intensity <= 0.01f) {
-                touchesToRemove.add(touchPoint)
+                activeTouches.removeAt(i)
+            }
+            i--
+        }
+    }
+
+    private fun releaseAllActiveTouches() {
+        for (touchPoint in activeTouches) {
+            if (!touchPoint.isReleased) {
+                releaseTouch(touchPoint)
             }
         }
-        activeTouches.removeAll(touchesToRemove)
+    }
+
+    private fun findActiveTouch(id: Int): TouchPoint? {
+        for (touchPoint in activeTouches) {
+            if (touchPoint.id == id && !touchPoint.isReleased) return touchPoint
+        }
+        return null
+    }
+
+    private fun containsId(ids: IntArray, count: Int, id: Int): Boolean {
+        for (i in 0 until count) {
+            if (ids[i] == id) return true
+        }
+        return false
     }
 }
