@@ -59,7 +59,7 @@ class GLTextureImage {
     fun draw(
         handles: PictureHandles, mvpMatrix: FloatArray, blurPercent: Float, alpha: Float,
         duotone: Duotone, dimAmount: Float, grain: GrainSettings, grainCounts: Pair<Float, Float>,
-        touchPoints: FloatArray, touchIntensities: FloatArray, screenSize: FloatArray
+        touchPoints: FloatArray, touchIntensities: FloatArray, aspectRatio: Float
     ) {
         val touchCount = touchIntensities.size
         if (textures.isEmpty() || alpha <= 0f) return
@@ -82,7 +82,7 @@ class GLTextureImage {
         GLES30.glUniform1i(handles.uniformTouchPointCount, touchCount)
         GLES30.glUniform3fv(handles.uniformTouchPoints, touchCount, touchPoints, 0)
         GLES30.glUniform1fv(handles.uniformTouchIntensities, touchCount, touchIntensities, 0)
-        GLES30.glUniform2f(handles.uniformScreenSize, screenSize[0], screenSize[1])
+        GLES30.glUniform1f(handles.uniformAspectRatio, aspectRatio)
 
         GLES30.glEnableVertexAttribArray(handles.attribPosition)
         GLES30.glEnableVertexAttribArray(handles.attribTexCoords)

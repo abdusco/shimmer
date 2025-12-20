@@ -130,5 +130,5 @@ data class PictureHandles(
     val uniformTouchPointCount: Int,
     val uniformTouchPoints: Int,
     val uniformTouchIntensities: Int,
-    val uniformScreenSize: Int,
+    val uniformAspectRatio: Int,
 )

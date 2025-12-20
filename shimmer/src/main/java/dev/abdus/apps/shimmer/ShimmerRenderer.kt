@@ -73,7 +73,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
                 uniformTouchPointCount = GLES30.glGetUniformLocation(program, "uTouchPointCount"),
                 uniformTouchPoints = GLES30.glGetUniformLocation(program, "uTouchPoints"),
                 uniformTouchIntensities = GLES30.glGetUniformLocation(program, "uTouchIntensities"),
-                uniformScreenSize = GLES30.glGetUniformLocation(program, "uScreenSize")
+                uniformAspectRatio = GLES30.glGetUniformLocation(program, "uAspectRatio")
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize shaders", e)
@@ -134,7 +134,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         val (touchPointsArray, touchIntensitiesArray) = animationController.getTouchPointArrays()
 
-        val screenSize = floatArrayOf(surfaceDimensions.width.toFloat(), surfaceDimensions.height.toFloat())
+        val aspectRatio = surfaceDimensions.aspectRatio
 
         if (imageAlpha < 1f) {
             // 1. Draw the PREVIOUS image as a solid, opaque base.
@@ -143,7 +143,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             previousImage.draw(
                 pictureHandles, previousMvpMatrix, blurPercent, 1f, // FORCE 1.0
                 effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-                touchPointsArray, touchIntensitiesArray, screenSize
+                touchPointsArray, touchIntensitiesArray, aspectRatio
             )
         }
 
@@ -151,7 +151,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         currentImage.draw(
             pictureHandles, mvpMatrix, blurPercent, imageAlpha,
             effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-            touchPointsArray, touchIntensitiesArray, screenSize
+            touchPointsArray, touchIntensitiesArray, aspectRatio
         )
 
         if (!animationController.imageTransitionAnimator.isRunning && imageAlpha >= 1f) {
@@ -281,7 +281,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         uniform int uTouchPointCount;
         uniform vec3 uTouchPoints[10];
         uniform float uTouchIntensities[10];
-        uniform vec2 uScreenSize;
+        uniform float uAspectRatio;
         in vec2 vTexCoords;
         in vec2 vPosition;
         out vec4 fragColor;
@@ -309,7 +309,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         void main() {
             vec2 screenPos = vPosition * 0.5 + 0.5;
-            float aspect = uScreenSize.x / uScreenSize.y;
             vec2 totalOffset = vec2(0.0);
             
             // OPTIMIZATION 1: Efficient Touch Loop
@@ -318,7 +317,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
                 for (int i = 0; i < 10; i++) {
                     if (i >= uTouchPointCount) break;
                     vec2 delta = screenPos - uTouchPoints[i].xy;
-                    float dist = length(vec2(delta.x * aspect, delta.y));
+                    float dist = length(vec2(delta.x * uAspectRatio, delta.y));
                     
                     // Early exit for pixels far from the touch point
                     if (dist > uTouchPoints[i].z + 0.05) continue;
