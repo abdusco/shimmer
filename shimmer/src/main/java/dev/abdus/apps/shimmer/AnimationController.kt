@@ -25,19 +25,12 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
     // Callback invoked when image-relevant animations complete
     var onImageAnimationComplete: (() -> Unit)? = null
-    
+
     // Track animation state to detect transitions
     private var wasImageAnimatingLastFrame = false
-    
+
     // Force a re-render for one tick after target state updates (handles non-animated property changes)
     private var forceUpdateOneFrame = false
-
-    // Touch point management for chromatic aberration
-    private val activeTouches = mutableListOf<TouchPoint>()
-
-    companion object {
-        private const val MAX_TOUCH_POINTS = 10
-    }
 
     init {
         val defaultState = RenderState(
@@ -152,10 +145,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
             imageTransitionAnimator.start(startValue = 0f, endValue = 1f)
         }
 
-        // Chromatic aberration: clear touches if disabled
-        if (oldTarget.chromaticAberration.enabled && !newTarget.chromaticAberration.enabled) {
-            activeTouches.clear()
-        }
     }
 
     // Public methods to immediately set state (for initial preference load)
@@ -177,9 +166,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
         val dimAnimating = dimAmountAnimator.tick()
         val duotoneOpacityAnimating = duotoneOpacityAnimator.tick()
         val imageAnimating = imageTransitionAnimator.tick()
-        
-        // Update touch point animations
-        updateTouchPointAnimations()
 
         // Linearly interpolate duotone colors if duotoneOpacityAnimator is running
         val animatedDuotoneLightColor = if (duotoneOpacityAnimating && duotoneOpacityAnimator.progress < 1f) {
@@ -217,141 +203,9 @@ class AnimationController(private var durationMillis: Int = 1000) {
         }
         wasImageAnimatingLastFrame = isImageAnimating
 
-        val touchAnimating = activeTouches.isNotEmpty()
-        val keepAlive = forceUpdateOneFrame || blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating || touchAnimating
+        val keepAlive = forceUpdateOneFrame || blurAnimating || dimAnimating || duotoneOpacityAnimating || imageAnimating
         forceUpdateOneFrame = false
         return keepAlive
-    }
-
-
-    fun setTouchPoints(touches: List<TouchData>) {
-        val chromaticAberration = currentRenderState.chromaticAberration
-        if (!chromaticAberration.enabled || chromaticAberration.intensity <= 0) return
-        if (touches.isEmpty()) {
-            activeTouches.filter { !it.isReleased }.forEach { releaseTouch(it) }
-            return
-        }
-
-        val hasActivePointers = touches.any { it.action != TouchAction.UP }
-        if (!hasActivePointers) {
-            activeTouches.filter { !it.isReleased }.forEach { releaseTouch(it) }
-            return
-        }
-
-        val activeIds = touches.asSequence()
-            .filter { it.action != TouchAction.UP }
-            .map { it.id }
-            .toHashSet()
-        val upIds = touches.asSequence()
-            .filter { it.action == TouchAction.UP }
-            .map { it.id }
-            .toHashSet()
-
-        // Release any touch that no longer appears in the active pointer set.
-        activeTouches
-            .filter { !it.isReleased && it.id !in activeIds && it.id !in upIds }
-            .forEach { releaseTouch(it) }
-
-        for (touch in touches) {
-            when (touch.action) {
-                TouchAction.DOWN -> {
-                    // Find existing non-released touch with this pointer ID
-                    val existingTouch = activeTouches.find { it.id == touch.id && !it.isReleased }
-                    if (existingTouch != null) {
-                        // Already active, just update position
-                        existingTouch.x = touch.x
-                        existingTouch.y = touch.y
-                    } else if (activeTouches.size < MAX_TOUCH_POINTS) {
-                        // Create new touch point (even if there's a released touch with same ID)
-                        val newTouch = createTouchPoint(touch)
-                        activeTouches.add(newTouch)
-                    }
-                }
-                TouchAction.MOVE -> {
-                    val existingTouch = activeTouches.find { it.id == touch.id && !it.isReleased }
-                    if (existingTouch != null) {
-                        // Update existing touch position
-                        existingTouch.x = touch.x
-                        existingTouch.y = touch.y
-                    } else if (activeTouches.size < MAX_TOUCH_POINTS) {
-                        // First event for this pointer was a MOVE (user started moving immediately)
-                        // Treat it as a DOWN to create the touch point
-                        val newTouch = createTouchPoint(touch)
-                        activeTouches.add(newTouch)
-                    }
-                }
-                TouchAction.UP -> {
-                    activeTouches.find { it.id == touch.id && !it.isReleased }?.let {
-                        releaseTouch(it)
-                    }
-                }
-            }
-        }
-    }
-
-    fun getTouchPointArrays(): Pair<FloatArray, FloatArray> {
-        val touchCount = activeTouches.size.coerceAtMost(MAX_TOUCH_POINTS)
-        val chromaticAberration = currentRenderState.chromaticAberration
-        val intensity = if (chromaticAberration.enabled) chromaticAberration.intensity else 0f
-        
-        val touchPointsArray = FloatArray(touchCount * 3)
-        val touchIntensitiesArray = FloatArray(touchCount)
-        
-        for (i in 0 until touchCount) {
-            val touch = activeTouches[i]
-            touchPointsArray[i * 3] = touch.x
-            touchPointsArray[i * 3 + 1] = touch.y
-            touchPointsArray[i * 3 + 2] = touch.radius
-            touchIntensitiesArray[i] = touch.intensity * intensity
-        }
-        
-        return touchPointsArray to touchIntensitiesArray
-    }
-
-    fun hasActiveTouches(): Boolean = activeTouches.isNotEmpty()
-
-    private fun createTouchPoint(touch: TouchData): TouchPoint {
-        val fadeMs = currentRenderState.chromaticAberration.fadeDurationMillis.toInt()
-        val newTouch = TouchPoint(
-            id = touch.id,
-            x = touch.x,
-            y = touch.y,
-            radius = 0f,
-            intensity = 1f,
-            radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
-            fadeAnimator = TickingFloatAnimator(fadeMs, DecelerateInterpolator())
-        )
-        newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
-        // Set fadeAnimator to not be running, but with intensity at 1.0
-        newTouch.fadeAnimator.reset()
-        newTouch.fadeAnimator.currentValue = 1f
-        return newTouch
-    }
-
-    private fun releaseTouch(touchPoint: TouchPoint) {
-        touchPoint.radiusAnimator.start(startValue = touchPoint.radius, endValue = 0f)
-        touchPoint.fadeAnimator.start(startValue = touchPoint.intensity, endValue = 0f)
-        touchPoint.isReleased = true
-    }
-
-    private fun updateTouchPointAnimations() {
-        val touchesToRemove = mutableListOf<TouchPoint>()
-        for (touchPoint in activeTouches) {
-            // Tick animators (they handle their own running state internally)
-            touchPoint.radiusAnimator.tick()
-            touchPoint.radius = touchPoint.radiusAnimator.currentValue
-
-            touchPoint.fadeAnimator.tick()
-            touchPoint.intensity = touchPoint.fadeAnimator.currentValue
-
-            // Remove touch points that have fully faded out AND finished their radius animation
-            if (!touchPoint.radiusAnimator.isRunning && !touchPoint.fadeAnimator.isRunning &&
-                touchPoint.radius <= 0.01f && touchPoint.intensity <= 0.01f) {
-                touchesToRemove.add(touchPoint)
-            }
-        }
-        // Remove completed touch points
-        activeTouches.removeAll(touchesToRemove)
     }
 
     // Helper for color interpolation (copied from ShimmerRenderer)

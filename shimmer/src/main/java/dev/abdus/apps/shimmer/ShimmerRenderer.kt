@@ -33,10 +33,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             callbacks.onReadyForNextImage() 
         }
     }
+    private val touchAnimator = TouchAnimationController()
 
     private var surfaceCreated = false
     private var surfaceDimensions = SurfaceDimensions(0, 0)
-
 
     private lateinit var program: ShimmerProgram
 
@@ -72,13 +72,14 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         }
 
         pendingTouches.getAndSet(null)?.let { newTouches ->
-            animationController.setTouchPoints(newTouches)
+            touchAnimator.setActiveTouches(newTouches)
         }
         
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         val isAnimating = animationController.tick()
         val viewportAnimating = viewportManager.tick()
+        val touchAnimating = touchAnimator.tick()
         val state = animationController.currentRenderState
         val imageAlpha = animationController.imageTransitionAnimator.currentValue
 
@@ -96,7 +97,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             (state.imageSet.width.toFloat() / grainSizePx) to (state.imageSet.height.toFloat() / grainSizePx)
         } else 0f to 0f
 
-        val (touchPointsArray, touchIntensitiesArray) = animationController.getTouchPointArrays()
+        val (touchPointsArray, touchIntensitiesArray) = touchAnimator.getTouchPointArrays()
         val aspectRatio = surfaceDimensions.aspectRatio
 
         if (imageAlpha < 1f && prevMvp != null) {
@@ -117,7 +118,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             previousImage.release()
         }
 
-        if (isAnimating || viewportAnimating || animationController.hasActiveTouches()) {
+        if (isAnimating || viewportAnimating || touchAnimating) {
             callbacks.requestRender()
         }
     }
@@ -187,6 +188,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         animationController.updateTargetState(
             animationController.targetRenderState.copy(chromaticAberration = newSettings)
         )
+        touchAnimator.setSettings(newSettings)
         callbacks.requestRender()
     }
 
