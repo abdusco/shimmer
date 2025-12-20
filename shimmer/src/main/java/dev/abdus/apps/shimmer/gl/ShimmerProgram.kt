@@ -165,14 +165,14 @@ class ShimmerProgram {
                     vec2 grainCoords = vTexCoords * uGrainCount;
                     float noise = organic_noise(floor(grainCoords) + 0.2);
                     float mask = 1.0 - pow(abs(lum - 0.5) * 2.0, 2.0);
-                    vec3 grainEffect = vec3(noise - 0.5) * uGrainAmount;
-                    color += grainEffect * (0.1 + 0.5 * mask);
+                    color += (noise - 0.5) * uGrainAmount * (0.1 + 0.5 * mask);
+                } else {
+                    // Apply dithering only if grain is not enabled, because grain itself provides good enough dithering
+                    uint x = uint(gl_FragCoord.x);
+                    uint y = uint(gl_FragCoord.y);
+                    float dithering = float((x ^ y) * 14923u % 256u) / 255.0;
+                    color += (dithering - 0.5) / 128.0;
                 }
-
-                uint x = uint(gl_FragCoord.x);
-                uint y = uint(gl_FragCoord.y);
-                float dithering = float((x ^ y) * 14923u % 256u) / 255.0;
-                color += (dithering - 0.5) / 128.0;
 
                 fragColor = vec4(clamp(color, 0.0, 1.0), uAlpha);
             }
