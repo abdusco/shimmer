@@ -1,9 +1,9 @@
 package dev.abdus.apps.shimmer
 
 import android.opengl.GLES30
-import android.opengl.Matrix
 import android.util.Log
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
+import dev.abdus.apps.shimmer.gl.ShimmerProgram
 import java.util.concurrent.atomic.AtomicReference
 
 class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Renderer {
@@ -19,8 +19,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         private const val TAG = "ShimmerRenderer"
     }
 
-    private var currentImage = GLTextureImage()
-    private var previousImage = GLTextureImage()
+    private var currentImage = ImageRenderer()
+    private var previousImage = ImageRenderer()
     private var pendingImageSet: ImageSet? = null
     private val pendingParallaxOffset = AtomicReference<Float?>(null)
     private val pendingTouches = AtomicReference<List<TouchData>?>(null)
@@ -145,9 +145,10 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         val previousAspect = currentImage.aspectRatio
         previousImage.release()
         previousImage = currentImage
-        currentImage = GLTextureImage()
+        currentImage = ImageRenderer().apply {
+            load(imageSet)
+        }
 
-        currentImage.load(imageSet)
         viewportManager.setCurrentImageAspectRatio(imageSet.aspectRatio)
         viewportManager.setImageTransitionState(previousAspect)
         

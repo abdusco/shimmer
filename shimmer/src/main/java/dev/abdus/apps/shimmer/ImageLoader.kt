@@ -6,9 +6,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
-import kotlin.math.ceil
+import dev.abdus.apps.shimmer.gl.MAX_SUPPORTED_BLUR_RADIUS_PIXELS
+import dev.abdus.apps.shimmer.gl.generateBlurLevels
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlin.math.ceil
 
 class ImageLoader(
     private val contentResolver: ContentResolver,

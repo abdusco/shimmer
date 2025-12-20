@@ -1,15 +1,15 @@
-package dev.abdus.apps.shimmer
+package dev.abdus.apps.shimmer.gl
 
 import android.opengl.GLES30
 
 class ShimmerProgram {
     val handles: PictureHandles
-    
+
     init {
-        val vertexShader = GLUtil.loadShader(GLES30.GL_VERTEX_SHADER, VERTEX_SHADER)
-        val fragmentShader = GLUtil.loadShader(GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER)
-        val program = GLUtil.createAndLinkProgram(vertexShader, fragmentShader)
-        
+        val vertexShader = ShaderCompiler.compile(GLES30.GL_VERTEX_SHADER, VERTEX_SHADER)
+        val fragmentShader = ShaderCompiler.compile(GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER)
+        val program = ShaderCompiler.linkProgram(vertexShader, fragmentShader)
+
         handles = PictureHandles(
             program = program,
             attribPosition = GLES30.glGetAttribLocation(program, "aPosition"),
@@ -32,11 +32,11 @@ class ShimmerProgram {
             uniformAspectRatio = GLES30.glGetUniformLocation(program, "uAspectRatio")
         )
     }
-    
+
     fun release() {
         GLES30.glDeleteProgram(handles.program)
     }
-    
+
     companion object {
         private val VERTEX_SHADER = """
             #version 300 es
@@ -51,7 +51,7 @@ class ShimmerProgram {
                 gl_Position = uMVPMatrix * aPosition;
             }
         """.trimIndent()
-        
+
         private val FRAGMENT_SHADER = """
             #version 300 es
             precision highp float;
