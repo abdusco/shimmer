@@ -83,8 +83,7 @@ class ShimmerProgram {
                 return fract(tan(distance(p * 1.61803398875, p) * 0.70710678118) * p.x);
             }
 
-            vec3 applyDuotone(vec3 color) {
-                float lum = LUMINOSITY(color);
+            vec3 applyDuotone(vec3 color, float lum) {
                 vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
                 if (uDuotoneBlendMode == 1) {
                     vec3 res1 = color - (1.0 - 2.0 * duotone) * color * (1.0 - color);
@@ -152,9 +151,10 @@ class ShimmerProgram {
                 }
 
                 vec3 color = vec3(cR.r, cG.g, cB.b);
+                float lum = LUMINOSITY(color);
 
                 if (uDuotoneOpacity > 0.0) {
-                    color = applyDuotone(color);
+                    color = applyDuotone(color, lum);
                 }
 
                 if (uDimAmount > 0.0) {
@@ -164,7 +164,6 @@ class ShimmerProgram {
                 if (uGrainAmount > 0.0) {
                     vec2 grainCoords = vTexCoords * uGrainCount;
                     float noise = organic_noise(floor(grainCoords) + 0.2);
-                    float lum = LUMINOSITY(color);
                     float mask = 1.0 - pow(abs(lum - 0.5) * 2.0, 2.0);
                     vec3 grainEffect = vec3(noise - 0.5) * uGrainAmount;
                     color += grainEffect * (0.1 + 0.5 * mask);
