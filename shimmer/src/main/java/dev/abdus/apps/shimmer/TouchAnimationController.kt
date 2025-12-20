@@ -15,7 +15,9 @@ class TouchAnimationController {
     private var touchIntensitiesArray = FloatArray(0)
 
     companion object {
-        private const val MAX_TOUCH_POINTS = 10
+        // Realistically, we don't need more than 5 touches for a good effect.
+        // People don't tend to use both their hands at the same time.
+        private const val MAX_TOUCH_POINTS = 5
     }
 
     fun setSettings(settings: ChromaticAberrationSettings) {

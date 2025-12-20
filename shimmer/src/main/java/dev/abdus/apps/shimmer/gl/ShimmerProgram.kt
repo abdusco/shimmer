@@ -55,11 +55,11 @@ class ShimmerProgram {
         private val FRAGMENT_SHADER = """
             #version 300 es
             precision highp float;
-            
+
             uniform sampler2D uTexture0;
             uniform sampler2D uTexture1;
             uniform float uBlurMix;
-            
+
             uniform float uAlpha;
             uniform vec3 uDuotoneLightColor;
             uniform vec3 uDuotoneDarkColor;
@@ -77,15 +77,16 @@ class ShimmerProgram {
             out vec4 fragColor;
 
             #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
+            #define MAX_FINGERS 5
 
             highp float organic_noise(vec2 p) {
                 return fract(tan(distance(p * 1.61803398875, p) * 0.70710678118) * p.x);
             }
-            
+
             vec3 applyDuotone(vec3 color) {
                 float lum = LUMINOSITY(color);
                 vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-                if (uDuotoneBlendMode == 1) { 
+                if (uDuotoneBlendMode == 1) {
                     vec3 res1 = color - (1.0 - 2.0 * duotone) * color * (1.0 - color);
                     vec3 res2 = color + (2.0 * duotone - 1.0) * (sqrt(color) - color);
                     duotone = mix(res1, res2, step(0.5, duotone));
@@ -98,20 +99,21 @@ class ShimmerProgram {
             void main() {
                 vec2 screenPos = vPosition * 0.5 + 0.5;
                 vec2 totalOffset = vec2(0.0);
-                
+
                 if (uTouchPointCount > 0) {
-                    for (int i = 0; i < 10; i++) {
+                    // we need both the dynamic count and the max count for loops for unrolling
+                    for (int i = 0; i < MAX_FINGERS; i++) {
                         if (i >= uTouchPointCount) break;
                         vec2 delta = screenPos - uTouchPoints[i].xy;
                         float dist = length(vec2(delta.x * uAspectRatio, delta.y));
-                        
+
                         if (dist > uTouchPoints[i].z + 0.05) continue;
-                        
+
                         float effect = uTouchIntensities[i] * (1.0 - smoothstep(0.0, uTouchPoints[i].z, dist));
                         if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.02;
                     }
                 }
-                
+
                 vec3 cR, cG, cB;
                 bool hasDistortion = length(totalOffset) > 0.0001;
 
@@ -148,13 +150,13 @@ class ShimmerProgram {
                     cG = finalColor;
                     cB = finalColor;
                 }
-                
+
                 vec3 color = vec3(cR.r, cG.g, cB.b);
 
                 if (uDuotoneOpacity > 0.0) {
                     color = applyDuotone(color);
                 }
-                
+
                 if (uDimAmount > 0.0) {
                     color = mix(color, vec3(0.0), uDimAmount);
                 }
@@ -165,14 +167,14 @@ class ShimmerProgram {
                     float lum = LUMINOSITY(color);
                     float mask = 1.0 - pow(abs(lum - 0.5) * 2.0, 2.0);
                     vec3 grainEffect = vec3(noise - 0.5) * uGrainAmount;
-                    color += grainEffect * (0.1 + 0.5 * mask); 
+                    color += grainEffect * (0.1 + 0.5 * mask);
                 }
 
                 uint x = uint(gl_FragCoord.x);
                 uint y = uint(gl_FragCoord.y);
                 float dithering = float((x ^ y) * 14923u % 256u) / 255.0;
                 color += (dithering - 0.5) / 128.0;
-                
+
                 fragColor = vec4(clamp(color, 0.0, 1.0), uAlpha);
             }
         """.trimIndent()
