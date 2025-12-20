@@ -12,8 +12,13 @@ import kotlin.math.max
 /**
  * Owns the scheduled task that advances images on a fixed cadence. This keeps
  * the wallpaper engine focused on rendering concerns.
+ * 
+ * Design principles:
+ * - When user interacts (touch/parallax), pause the timer but DON'T reset it
+ * - When user manually changes image, RESET the timer completely
+ * - When wallpaper becomes invisible, pause but preserve remaining time
+ * - When wallpaper becomes visible, resume from where we left off
  */
-
 class ImageTransitionScheduler(
     private val scope: CoroutineScope,
     private val preferences: WallpaperPreferences,
@@ -21,57 +26,124 @@ class ImageTransitionScheduler(
 ) {
     private var job: Job? = null
     private var isEnabled = false
-
-    // In-memory only! No disk I/O for interaction pauses.
-    private var userInteractingUntil = 0L
+    private var isWallpaperVisible = true
+    
+    // Track when the current interval started
+    private var intervalStartTime = 0L
+    
+    // Track accumulated pause time during user interaction
+    private var accumulatedPauseMillis = 0L
+    private var pauseStartTime = 0L
+    private var isPaused = false
 
     fun updateEnabled(enabled: Boolean) {
         isEnabled = enabled
         if (isEnabled) start() else stop()
     }
+    
+    fun onWallpaperVisible() {
+        isWallpaperVisible = true
+        if (isEnabled) {
+            start() // Resume if we were running
+        }
+    }
+    
+    fun onWallpaperHidden() {
+        isWallpaperVisible = false
+        // When going invisible, pause but preserve state
+        pauseTimer()
+    }
 
     fun start() {
         stop()
-        if (!isEnabled) return
+        if (!isEnabled || !isWallpaperVisible) return
+        
+        // If this is a fresh start (not a resume), reset timing
+        if (intervalStartTime == 0L) {
+            resetTimer()
+        }
 
         job = scope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
-
-                // 1. Check Interaction Pause (In-Memory)
-                if (now < userInteractingUntil) {
-                    delay(max(userInteractingUntil - now, 1000L))
-                    continue
-                }
-
-                // 2. Check Persistence (Disk Read - infrequent)
-                val lastTime = preferences.getImageLastChangedAt()
                 val interval = preferences.getTransitionIntervalMillis()
-                val elapsed = now - lastTime
+                
+                // Calculate actual elapsed time, accounting for pauses
+                val elapsed = if (isPaused) {
+                    // While paused, don't advance elapsed time
+                    (pauseStartTime - intervalStartTime) - accumulatedPauseMillis
+                } else {
+                    (now - intervalStartTime) - accumulatedPauseMillis
+                }
+                
                 val remaining = interval - elapsed
-
-                if (remaining <= 0) {
+                
+                if (remaining <= 0 && !isPaused && isWallpaperVisible) {
                     // Time to change!
                     withContext(Dispatchers.Main) {
                         onAdvanceRequest()
                     }
-                    // This is a rare event (minutes/hours), so disk write is fine here
-                    preferences.setImageLastChangedAt(System.currentTimeMillis())
+                    // Auto-reset timer after successful transition
+                    resetTimer()
+                    delay(1000L) // Small delay before next check
                 } else {
-                    // Wait for the next check
-                    delay(max(remaining, 1000L))
+                    // Wait and check again
+                    delay(max(1000L, remaining.coerceAtMost(5000L)))
                 }
             }
         }
     }
 
     /**
-     * Prevents image changes for the next [interval] milliseconds.
-     * Called on every touch/parallax update. FAST (No disk I/O).
+     * Pause the timer during user interaction (touch/parallax).
+     * This temporarily stops the countdown but preserves progress.
+     * The timer auto-resumes after a short debounce period.
      */
     fun pauseForInteraction() {
-        val interval = preferences.getTransitionIntervalMillis()
-        userInteractingUntil = System.currentTimeMillis() + interval
+        if (!isPaused) {
+            isPaused = true
+            pauseStartTime = System.currentTimeMillis()
+        }
+        
+        // Auto-resume after 2 seconds of no interaction
+        scope.launch {
+            delay(2000L)
+            resumeTimer()
+        }
+    }
+    
+    /**
+     * Pause the timer (used when wallpaper goes invisible).
+     */
+    private fun pauseTimer() {
+        if (!isPaused) {
+            isPaused = true
+            pauseStartTime = System.currentTimeMillis()
+        }
+    }
+    
+    /**
+     * Resume the timer after a pause.
+     */
+    private fun resumeTimer() {
+        if (isPaused) {
+            val pauseDuration = System.currentTimeMillis() - pauseStartTime
+            accumulatedPauseMillis += pauseDuration
+            isPaused = false
+        }
+    }
+
+    /**
+     * Reset the timer completely. Called when:
+     * - User manually changes the image
+     * - Automatic transition completes
+     * - Scheduler is started fresh
+     */
+    fun resetTimer() {
+        intervalStartTime = System.currentTimeMillis()
+        accumulatedPauseMillis = 0L
+        isPaused = false
+        pauseStartTime = 0L
     }
 
     fun stop() {
@@ -79,5 +151,12 @@ class ImageTransitionScheduler(
         job = null
     }
 
-    fun cancel() = stop()
+    fun cancel() {
+        stop()
+        // Clear all state
+        intervalStartTime = 0L
+        accumulatedPauseMillis = 0L
+        isPaused = false
+        pauseStartTime = 0L
+    }
 }

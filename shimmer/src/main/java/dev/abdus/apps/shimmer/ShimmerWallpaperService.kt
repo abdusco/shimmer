@@ -264,10 +264,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
         }
 
-        private fun requestRenderIfVisible() {
-            if (engineVisible) requestRender()
-        }
-
         private fun requestImageChange() {
             Log.d(TAG, "requestImageChange: triggered")
             
@@ -285,6 +281,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 val nextUri = folderRepository.nextImageUri()
                 if (nextUri != null) {
                     loadImage(nextUri)
+                    transitionScheduler.resetTimer()
                     preferences.setImageLastChangedAt(System.currentTimeMillis())
                 }
             }
@@ -303,7 +300,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             "onTouchEvent: TWO_FINGER_DOUBLE_TAP detected, requesting image change"
                     )
                     requestImageChange()
-                    transitionScheduler.pauseForInteraction()
+                    // Don't call pauseForInteraction here - requestImageChange will reset the timer
                 }
                 TapEvent.TRIPLE_TAP -> {
                     sessionBlurEnabled = !sessionBlurEnabled
@@ -358,11 +355,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             super.onVisibilityChanged(visible)
             engineVisible = visible
             if (visible) {
+                transitionScheduler.onWallpaperVisible()
                 applyBlurState(immediate = false)
                 transitionScheduler.start()
                 queueEvent { renderer?.onVisibilityChanged() }
             } else {
-                transitionScheduler.stop()
+                transitionScheduler.onWallpaperHidden()
             }
         }
 
