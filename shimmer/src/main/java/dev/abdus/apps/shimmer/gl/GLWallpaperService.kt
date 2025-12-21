@@ -241,7 +241,7 @@ private class EglHelper(private val eglContextClientVersion: Int) {
     }
 
     fun finish() {
-        destroySurface() 
+        destroySurface()
 
         if (eglContext != null) {
             EGL14.eglDestroyContext(eglDisplay, eglContext)
@@ -382,9 +382,13 @@ private class GLThread(
 
                 if (eventsWaiting) {
                     var runnable: Runnable?
-                    while (getEvent().also { runnable = it } != null) {
-                        runnable!!.run()
-                        if (isDone()) return
+                    if (haveEgl) {
+                        while (getEvent().also { runnable = it } != null) {
+                            runnable!!.run()
+                            if (isDone()) return
+                        }
+                    } else {
+                        this.eventsWaiting = true
                     }
                     continue
                 }

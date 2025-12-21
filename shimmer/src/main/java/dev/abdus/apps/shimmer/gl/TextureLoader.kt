@@ -2,9 +2,12 @@ package dev.abdus.apps.shimmer.gl
 
 import android.graphics.Bitmap
 import android.opengl.GLES30
+import android.opengl.EGL14
+import android.util.Log
 import android.opengl.GLUtils
 
 object TextureLoader {
+    private const val TAG = "TextureLoader"
     // Simple texture loading for one-time use
     fun load(bitmap: Bitmap): Int {
         val handle = IntArray(1)
@@ -20,6 +23,11 @@ object TextureLoader {
 
     // Allocate immutable storage for reusable textures
     fun allocate(width: Int, height: Int): Int {
+        if (EGL14.eglGetCurrentContext() == EGL14.EGL_NO_CONTEXT) {
+            Log.e(TAG, "Attempted to allocate texture without EGL Context")
+            return 0
+        }
+
         val handle = IntArray(1)
         GLES30.glGenTextures(1, handle, 0)
         require(handle[0] != 0) { "glGenTextures failed" }
