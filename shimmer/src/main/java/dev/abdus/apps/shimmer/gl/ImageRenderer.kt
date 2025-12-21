@@ -96,7 +96,7 @@ class ImageRenderer {
                            Color.green(duotone.darkColor)/255f,
                            Color.blue(duotone.darkColor)/255f)
         GLES30.glUniform1f(h.uniformDuotoneOpacity, duotone.opacity)
-        GLES30.glUniform1i(h.uniformDuotoneBlendMode, duotone.blendMode.ordinal)
+        GLES30.glUniform1i(h.uniformDuotoneBlendMode, duotone.blendMode.value)
         GLES30.glUniform1f(h.uniformDimAmount, dim)
         GLES30.glUniform1f(h.uniformGrainAmount, if (grain.enabled) grain.amount else 0f)
         GLES30.glUniform2f(h.uniformGrainCount, grainCounts.first, grainCounts.second)

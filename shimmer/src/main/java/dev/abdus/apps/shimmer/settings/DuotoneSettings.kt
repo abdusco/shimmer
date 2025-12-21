@@ -136,12 +136,11 @@ private fun DuotoneBlendModeDropdown(
     val modes = remember {
         listOf(
             DuotoneBlendMode.NORMAL to "Normal",
-            DuotoneBlendMode.SOFT_LIGHT to "Soft Light",
             DuotoneBlendMode.SCREEN to "Screen"
         )
     }
     val selectedName = modes.find { it.first == selectedBlendMode }?.second ?: "Normal"
-    
+
     Box {
         OutlinedButton(onClick = { expanded = true }) {
             Text(text = "Blend mode: $selectedName")
@@ -217,4 +216,3 @@ private fun PresetColorSwatch(color: Color) {
         shadowElevation = 0.dp
     ) {}
 }
-

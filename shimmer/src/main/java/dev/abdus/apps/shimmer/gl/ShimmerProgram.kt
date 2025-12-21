@@ -80,6 +80,7 @@ class ShimmerProgram {
 
             #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
             #define MAX_FINGERS 5
+            #define DUOTONE_BLEND_MODE_SCREEN 1
 
             highp float organic_noise(vec2 p) {
                 return fract(tan(distance(p * 1.61803398875, p) * 0.70710678118) * p.x);
@@ -106,11 +107,7 @@ class ShimmerProgram {
 
             vec3 applyDuotone(vec3 color, float lum) {
                 vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum); // normal
-                if (uDuotoneBlendMode == 1) { // soft light
-                    vec3 res1 = color - (1.0 - 2.0 * duotone) * color * (1.0 - color);
-                    vec3 res2 = color + (2.0 * duotone - 1.0) * (sqrt(color) - color);
-                    duotone = mix(res1, res2, step(0.5, duotone));
-                } else if (uDuotoneBlendMode == 2) { // screen
+                if (uDuotoneBlendMode == DUOTONE_BLEND_MODE_SCREEN) {
                     duotone = 1.0 - (1.0 - color) * (1.0 - duotone);
                 }
                 return mix(color, duotone, uDuotoneOpacity);

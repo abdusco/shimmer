@@ -37,7 +37,7 @@ A live wallpaper for Android that displays your photos with smooth GPU-based eff
 - **Duotone**
   - Color tinting with customizable light and dark colors
   - 25+ predefined color presets
-  - Three blend modes: Normal, Soft Light, Screen
+  - Three blend modes: Normal, Screen
   - Smooth color interpolation during transitions
 
 - **Chromatic Aberration**

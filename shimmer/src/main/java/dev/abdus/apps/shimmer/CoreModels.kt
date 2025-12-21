@@ -44,7 +44,7 @@ data class GrainSettings(
     companion object {
         /** Minimum grain size in image pixels (fine grain) */
         const val GRAIN_SIZE_MIN_IMAGE_PX = 0.1f
-        
+
         /** Maximum grain size in image pixels (coarse grain) */
         const val GRAIN_SIZE_MAX_IMAGE_PX = 1.5f
     }
@@ -93,8 +93,9 @@ data class SurfaceDimensions(
         get() = if (height == 0) 1f else width.toFloat() / height
 }
 
-enum class DuotoneBlendMode {
-    NORMAL, SOFT_LIGHT, SCREEN
+enum class DuotoneBlendMode(val value: Int) {
+    NORMAL(0),
+    SCREEN(1),
 }
 
 data class Duotone(
@@ -114,6 +115,3 @@ data class TouchData(
     val y: Float,
     val action: TouchAction,
 )
-
-
-
