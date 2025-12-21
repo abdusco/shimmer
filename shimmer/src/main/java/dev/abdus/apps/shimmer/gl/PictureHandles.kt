@@ -20,4 +20,5 @@ data class PictureHandles(
     val uniformTouchPoints: Int,
     val uniformTouchIntensities: Int,
     val uniformAspectRatio: Int,
+    val uniformTime: Int,
 )

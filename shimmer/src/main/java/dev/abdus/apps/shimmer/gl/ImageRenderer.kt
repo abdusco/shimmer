@@ -48,7 +48,8 @@ class ImageRenderer {
         grainCounts: Pair<Float, Float>,
         touchPoints: FloatArray,
         touchIntensities: FloatArray,
-        aspectRatio: Float
+        aspectRatio: Float,
+        timeSeconds: Float,
     ) {
         if (textures.isEmpty || alpha <= 0f) return
 
@@ -60,7 +61,7 @@ class ImageRenderer {
 
         GLES30.glUseProgram(handles.program)
         setUniforms(handles, mvpMatrix, duotone, dimAmount, grain, grainCounts,
-                    touchPoints, touchIntensities, aspectRatio, mix, alpha)
+                    touchPoints, touchIntensities, aspectRatio, timeSeconds, mix, alpha)
 
         textures.bind(lo, 0)
         GLES30.glUniform1i(handles.uniformTexture0, 0)
@@ -81,6 +82,7 @@ class ImageRenderer {
         touchPoints: FloatArray,
         touchIntensities: FloatArray,
         aspectRatio: Float,
+        timeSeconds: Float,
         blurMix: Float,
         alpha: Float
     ) {
@@ -102,6 +104,7 @@ class ImageRenderer {
         GLES30.glUniform3fv(h.uniformTouchPoints, touchIntensities.size, touchPoints, 0)
         GLES30.glUniform1fv(h.uniformTouchIntensities, touchIntensities.size, touchIntensities, 0)
         GLES30.glUniform1f(h.uniformAspectRatio, aspectRatio)
+        GLES30.glUniform1f(h.uniformTime, timeSeconds)
         GLES30.glUniform1f(h.uniformBlurMix, blurMix)
         GLES30.glUniform1f(h.uniformAlpha, alpha)
     }

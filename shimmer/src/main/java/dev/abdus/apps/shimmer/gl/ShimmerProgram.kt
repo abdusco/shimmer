@@ -29,7 +29,8 @@ class ShimmerProgram {
             uniformTouchPointCount = GLES30.glGetUniformLocation(program, "uTouchPointCount"),
             uniformTouchPoints = GLES30.glGetUniformLocation(program, "uTouchPoints"),
             uniformTouchIntensities = GLES30.glGetUniformLocation(program, "uTouchIntensities"),
-            uniformAspectRatio = GLES30.glGetUniformLocation(program, "uAspectRatio")
+            uniformAspectRatio = GLES30.glGetUniformLocation(program, "uAspectRatio"),
+            uniformTime = GLES30.glGetUniformLocation(program, "uTime")
         )
     }
 
@@ -72,6 +73,7 @@ class ShimmerProgram {
             uniform vec3 uTouchPoints[10];
             uniform float uTouchIntensities[10];
             uniform float uAspectRatio;
+            uniform float uTime;
             in vec2 vTexCoords;
             in vec2 vPosition;
             out vec4 fragColor;
@@ -83,13 +85,32 @@ class ShimmerProgram {
                 return fract(tan(distance(p * 1.61803398875, p) * 0.70710678118) * p.x);
             }
 
+            float hash12(vec2 p) {
+                vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+                p3 += dot(p3, p3.yzx + 33.33);
+                return fract((p3.x + p3.y) * p3.z);
+            }
+
+            float valueNoise(vec2 p) {
+                vec2 i = floor(p);
+                vec2 f = fract(p);
+                vec2 u = f * f * (3.0 - 2.0 * f);
+
+                float a = hash12(i);
+                float b = hash12(i + vec2(1.0, 0.0));
+                float c = hash12(i + vec2(0.0, 1.0));
+                float d = hash12(i + vec2(1.0, 1.0));
+
+                return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+            }
+
             vec3 applyDuotone(vec3 color, float lum) {
-                vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum);
-                if (uDuotoneBlendMode == 1) {
+                vec3 duotone = mix(uDuotoneDarkColor, uDuotoneLightColor, lum); // normal
+                if (uDuotoneBlendMode == 1) { // soft light
                     vec3 res1 = color - (1.0 - 2.0 * duotone) * color * (1.0 - color);
                     vec3 res2 = color + (2.0 * duotone - 1.0) * (sqrt(color) - color);
                     duotone = mix(res1, res2, step(0.5, duotone));
-                } else if (uDuotoneBlendMode == 2) {
+                } else if (uDuotoneBlendMode == 2) { // screen
                     duotone = 1.0 - (1.0 - color) * (1.0 - duotone);
                 }
                 return mix(color, duotone, uDuotoneOpacity);
@@ -120,6 +141,14 @@ class ShimmerProgram {
                 }
 
                 bool hasDistortion = length(totalOffset) > 0.0001;
+
+                if (hasDistortion) {
+                    float t = uTime * 0.6;
+                    float n1 = valueNoise(screenPos * 3.0 + vec2(t, t * 1.7));
+                    float n2 = valueNoise(screenPos * 3.0 + vec2(13.7, 9.2) + vec2(t * 1.3, t * 0.8));
+                    float noiseStrength = clamp(length(totalOffset) / 0.02, 0.0, 1.0);
+                    totalOffset += (vec2(n1, n2) - 0.5) * 0.02 * noiseStrength;
+                }
 
                 vec3 color;
                 if (hasDistortion) {

@@ -1,6 +1,7 @@
 package dev.abdus.apps.shimmer
 
 import android.opengl.GLES30
+import android.os.SystemClock
 import android.util.Log
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
 import dev.abdus.apps.shimmer.gl.ShimmerProgram
@@ -99,19 +100,20 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         val (touchPointsArray, touchIntensitiesArray) = touchAnimator.getTouchPointArrays()
         val aspectRatio = surfaceDimensions.aspectRatio
+        val timeSeconds = SystemClock.elapsedRealtime() / 1000f
 
         if (imageAlpha < 1f && prevMvp != null) {
             previousImage.draw(
                 program.handles, prevMvp, blurPercent, 1f,
                 effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-                touchPointsArray, touchIntensitiesArray, aspectRatio
+                touchPointsArray, touchIntensitiesArray, aspectRatio, timeSeconds,
             )
         }
 
         currentImage.draw(
             program.handles, mvp, blurPercent, imageAlpha,
             effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-            touchPointsArray, touchIntensitiesArray, aspectRatio
+            touchPointsArray, touchIntensitiesArray, aspectRatio, timeSeconds,
         )
 
         if (!animationController.imageTransitionAnimator.isRunning && imageAlpha >= 1f) {
