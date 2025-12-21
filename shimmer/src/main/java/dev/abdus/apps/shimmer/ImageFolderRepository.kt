@@ -43,9 +43,9 @@ class ImageFolderRepository(
         val previousUris = folderUris.toSet()
         val newUris = uris.filter { it !in previousUris }
         val removedUris = previousUris.filter { it !in uris }
-        
+
         folderUris = uris
-        
+
         // Only remove cache for folders that are no longer in the list
         synchronized(folderContents) {
             removedUris.forEach { folderContents.remove(it) }
@@ -53,10 +53,10 @@ class ImageFolderRepository(
         synchronized(folderImagePositions) {
             removedUris.forEach { folderImagePositions.remove(it) }
         }
-        
+
         lastDisplayedUri = null
         currentFolderIndex = 0
-        
+
         // Initialize counts from preferences (for immediate display)
         val updatedCounts = _imageCounts.value.toMutableMap()
         removedUris.forEach { updatedCounts.remove(it) }
@@ -66,14 +66,14 @@ class ImageFolderRepository(
             }
         }
         _imageCounts.value = updatedCounts
-        
+
         // Scan newly added folders asynchronously in the background
         newUris.forEach { uri ->
             repositoryScope.launch {
                 getFolderImages(uri)
             }
         }
-        
+
         // Also scan existing folders that don't have cached contents (for refresh scenarios)
         uris.forEach { uri ->
             val hasCache = synchronized(folderContents) {
@@ -177,11 +177,11 @@ class ImageFolderRepository(
             try {
                 val folderUri = Uri.parse(folderUriString)
                 val folderDocumentId = DocumentsContract.getTreeDocumentId(folderUri)
-                
+
                 // Check if image is a descendant of this folder
                 // Document IDs use format "storage:path/to/file", so we check if the image
                 // document ID starts with the folder document ID followed by "/" or equals it
-                if (imageDocumentId == folderDocumentId || 
+                if (imageDocumentId == folderDocumentId ||
                     imageDocumentId.startsWith("$folderDocumentId/")) {
                     return true
                 }
@@ -210,14 +210,14 @@ class ImageFolderRepository(
 
             if (images.isNotEmpty()) {
                 val candidate = selectNextImage(folderUri, images)
-                
+
                 // Validate URI as safety net (should be rare since scanFolder validates)
                 if (isImageUriValid(candidate)) {
                     currentFolderIndex = (currentFolderIndex + 1) % folderUris.size
                     lastDisplayedUri = candidate
                     return candidate
                 }
-                
+
                 // Invalid URI detected, clear cache and rescan
                 Log.w(TAG, "nextImageUri: Invalid URI detected: $candidate, clearing cache for folder")
                 synchronized(folderContents) {
@@ -251,12 +251,12 @@ class ImageFolderRepository(
         synchronized(folderImagePositions) {
             folderImagePositions[folderUri] = 0
         }
-        
+
         // Update image counts flow
         val updatedCounts = _imageCounts.value.toMutableMap()
         updatedCounts[folderUri] = count
         _imageCounts.value = updatedCounts
-        
+
         return shuffled
     }
 
@@ -278,12 +278,12 @@ class ImageFolderRepository(
                     exists && canRead
                 }
                 .map { it.uri }
-            
+
             Log.d(TAG, "scanFolder: Scanned $folderUri, found ${uris.size} images")
             if (uris.isNotEmpty()) {
                 Log.d(TAG, "scanFolder: First URI: ${uris.first()}")
             }
-            
+
             uris
         } catch (e: Exception) {
             Log.e(TAG, "Failed to scan folder $folderUri", e)
@@ -300,37 +300,41 @@ class ImageFolderRepository(
         if (images.isEmpty()) {
             throw IllegalArgumentException("Cannot select from empty image list")
         }
-        
+
         if (images.size == 1) {
             return images[0]
         }
-        
+
         // Get current position for this folder
         val currentPosition = synchronized(folderImagePositions) {
             folderImagePositions.getOrDefault(folderUri, 0)
         }
-        
-        // If we've reached the end, reshuffle and reset
+
+        // If we've reached the end, rescan folder, reshuffle, and reset
         if (currentPosition >= images.size) {
-            val reshuffled = shuffleImages(images.toMutableList())
+            val rescanned = scanFolder(folderUri)
+            val reshuffled = shuffleImages(rescanned.toMutableList())
             synchronized(folderContents) {
                 folderContents[folderUri] = reshuffled
             }
             synchronized(folderImagePositions) {
                 folderImagePositions[folderUri] = 0
             }
+            val updatedCounts = _imageCounts.value.toMutableMap()
+            updatedCounts[folderUri] = reshuffled.size
+            _imageCounts.value = updatedCounts
             return reshuffled[0]
         }
-        
+
         // Get the image at current position and advance
         val selectedImage = images[currentPosition]
         synchronized(folderImagePositions) {
             folderImagePositions[folderUri] = currentPosition + 1
         }
-        
+
         return selectedImage
     }
-    
+
     /**
      * Shuffles a list of URIs using Fisher-Yates algorithm for uniform random distribution.
      */
@@ -338,7 +342,7 @@ class ImageFolderRepository(
         if (images.size <= 1) {
             return images
         }
-        
+
         // Fisher-Yates shuffle
         for (i in images.size - 1 downTo 1) {
             val j = Random.nextInt(i + 1)
@@ -346,7 +350,7 @@ class ImageFolderRepository(
             images[i] = images[j]
             images[j] = temp
         }
-        
+
         return images
     }
 }
