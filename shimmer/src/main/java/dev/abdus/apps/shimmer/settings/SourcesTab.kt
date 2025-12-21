@@ -3,6 +3,7 @@ package dev.abdus.apps.shimmer.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -131,13 +132,17 @@ private fun CurrentWallpaperCard(
     val context = LocalContext.current
     val fileName = remember(wallpaperUri) {
         wallpaperUri?.let { uri ->
-            try {
-                DocumentFile.fromSingleUri(context, uri)?.name
-                    ?: uri.lastPathSegment
-                    ?: "Unknown"
-            } catch (e: Exception) {
-                uri.lastPathSegment ?: "Unknown"
-            }
+            runCatching {
+                context.contentResolver.query(
+                    uri,
+                    arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                    null,
+                    null,
+                    null
+                )?.use { c ->
+                    if (c.moveToFirst()) c.getString(0) else null
+                }
+            }.getOrNull() ?: uri.lastPathSegment ?: "Unknown"
         } ?: "No wallpaper"
     }
 
@@ -268,7 +273,7 @@ private fun FolderThumbnailSlider(
                     Text("Manage")
                 }
             }
-            
+
             if (imageFolders.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -463,4 +468,3 @@ private fun TransitionDurationSetting(
         }
     }
 }
-
