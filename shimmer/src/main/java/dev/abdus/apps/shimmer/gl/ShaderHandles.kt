@@ -1,6 +1,6 @@
 package dev.abdus.apps.shimmer.gl
 
-data class PictureHandles(
+data class ShaderHandles(
     val program: Int,
     val attribPosition: Int,
     val attribTexCoords: Int,

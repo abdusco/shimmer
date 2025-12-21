@@ -2,7 +2,7 @@ package dev.abdus.apps.shimmer
 
 import android.graphics.Color
 import android.opengl.GLES30
-import dev.abdus.apps.shimmer.gl.PictureHandles
+import dev.abdus.apps.shimmer.gl.ShaderHandles
 import dev.abdus.apps.shimmer.gl.QuadMesh
 import dev.abdus.apps.shimmer.gl.TextureArray
 import kotlin.math.ceil
@@ -38,7 +38,7 @@ class ImageRenderer {
     }
 
     fun draw(
-        handles: PictureHandles,
+        handles: ShaderHandles,
         mvpMatrix: FloatArray,
         blurPercent: Float,
         alpha: Float,
@@ -73,7 +73,7 @@ class ImageRenderer {
     }
 
     private fun setUniforms(
-        h: PictureHandles,
+        h: ShaderHandles,
         mvp: FloatArray,
         duotone: Duotone,
         dim: Float,

@@ -3,14 +3,14 @@ package dev.abdus.apps.shimmer.gl
 import android.opengl.GLES30
 
 class ShimmerProgram {
-    val handles: PictureHandles
+    val handles: ShaderHandles
 
     init {
         val vertexShader = ShaderCompiler.compile(GLES30.GL_VERTEX_SHADER, VERTEX_SHADER)
         val fragmentShader = ShaderCompiler.compile(GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER)
         val program = ShaderCompiler.linkProgram(vertexShader, fragmentShader)
 
-        handles = PictureHandles(
+        handles = ShaderHandles(
             program = program,
             attribPosition = GLES30.glGetAttribLocation(program, "aPosition"),
             attribTexCoords = GLES30.glGetAttribLocation(program, "aTexCoords"),
@@ -133,7 +133,7 @@ class ShimmerProgram {
                         vec2 delta = screenPos - uTouchPoints[i].xy;
                         float dist = length(vec2(delta.x * uAspectRatio, delta.y));
 
-                        if (dist > uTouchPoints[i].z + 0.05) continue;
+                        if (dist > uTouchPoints[i].z) continue;
 
                         float effect = uTouchIntensities[i] * (1.0 - smoothstep(0.0, uTouchPoints[i].z, dist));
                         if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.02;
