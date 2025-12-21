@@ -29,9 +29,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     private val viewportManager = ViewportManager()
 
     private val animationController = AnimationController().apply {
-        onImageAnimationComplete = { 
+        onImageAnimationComplete = {
             viewportManager.setImageTransitionState(null)
-            callbacks.onReadyForNextImage() 
+            callbacks.onReadyForNextImage()
         }
     }
     private val touchAnimator = TouchAnimationController()
@@ -67,7 +67,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     override fun onDrawFrame() {
         if (!surfaceCreated) return
-        
+
         pendingParallaxOffset.getAndSet(null)?.let { newParallax ->
             viewportManager.setParallaxTarget(newParallax)
         }
@@ -75,7 +75,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         pendingTouches.getAndSet(null)?.let { newTouches ->
             touchAnimator.setActiveTouches(newTouches)
         }
-        
+
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         val isAnimating = animationController.tick()
@@ -88,12 +88,12 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         val blurPercent = state.blurPercent.coerceIn(0f, 1f)
         val effectiveDuotone = state.duotone.copy(
-            opacity = if (state.duotoneAlwaysOn) state.duotone.opacity 
+            opacity = if (state.duotoneAlwaysOn) state.duotone.opacity
                      else (state.duotone.opacity * blurPercent)
         )
 
         val grainCounts = if (state.grain.enabled) {
-            val grainSizePx = GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX + 
+            val grainSizePx = GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX +
                 (GrainSettings.GRAIN_SIZE_MAX_IMAGE_PX - GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX) * state.grain.scale
             (state.imageSet.width.toFloat() / grainSizePx) to (state.imageSet.height.toFloat() / grainSizePx)
         } else 0f to 0f
@@ -131,11 +131,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     ) {
         setEffectTransitionDuration(transitionDuration.toInt())
         setUserDimAmount(dimAmount)
-        setDuotoneSettings(duotone.enabled, duotone.alwaysOn, 
-            Duotone(duotone.lightColor, duotone.darkColor, 
+        setDuotoneSettings(duotone.enabled, duotone.alwaysOn,
+            Duotone(duotone.lightColor, duotone.darkColor,
                    if (duotone.enabled) 1f else 0f, duotone.blendMode))
         setGrainSettings(grain.enabled, grain.amount, grain.scale)
-        setChromaticAberrationSettings(chromatic.enabled, chromatic.intensity, 
+        setChromaticAberrationSettings(chromatic.enabled, chromatic.intensity,
                                       chromatic.fadeDurationMillis.toInt())
     }
 
@@ -144,9 +144,21 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             pendingImageSet = imageSet
             return
         }
-        
+
         val previousAspect = currentImage.aspectRatio
-        previousImage.release()
+
+        // TRIPLE-BUFFER PREVENTION / MEMORY MANAGEMENT:
+        // If a transition was already in progress (e.g., A is fading out, B is fading in)
+        // and we receive a new image C, we must release A immediately.
+        //
+        // Technical Note: glDeleteTextures is asynchronous. When we call release() on A,
+        // the texture ID is invalidated for the CPU, but the OpenGL driver keeps the
+        // texture data alive in VRAM until the GPU finishes executing all pending
+        // draw commands that reference it. This prevents "tripling" our memory usage
+        // during rapid image changes while avoiding a crash mid-draw.
+        if (animationController.imageTransitionAnimator.isRunning) {
+            previousImage.release()
+        }
         previousImage = currentImage
         currentImage = ImageRenderer().apply {
             load(imageSet)
@@ -154,7 +166,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         viewportManager.setCurrentImageAspectRatio(imageSet.aspectRatio)
         viewportManager.setImageTransitionState(previousAspect)
-        
+
         animationController.updateTargetState(
             animationController.targetRenderState.copy(imageSet = imageSet)
         )
@@ -229,7 +241,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     }
 
     fun isBlurred() = animationController.currentRenderState.blurPercent > 0.01f
-    
-    fun isAnimating() = animationController.blurAmountAnimator.isRunning || 
+
+    fun isAnimating() = animationController.blurAmountAnimator.isRunning ||
                        animationController.imageTransitionAnimator.isRunning
 }
