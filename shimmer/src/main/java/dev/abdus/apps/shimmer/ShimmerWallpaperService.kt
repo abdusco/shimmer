@@ -255,8 +255,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 renderer?.setImage(newSet)
                 // Once pushed to GL thread, we can safely dispose of the OLD bitmaps
                 scope.launch(Dispatchers.Default) {
-                    oldSet?.original?.recycle()
-                    oldSet?.blurred?.forEach { b -> b.recycle() }
+                    oldSet?.recycleAll()
                 }
             }
         }
@@ -424,12 +423,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
             transitionScheduler.cancel()
             scope.cancel()
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
-            
-            cachedImageSet?.let {
-                it.original.recycle()
-                it.blurred.forEach { b -> b.recycle() }
-            }
+
             super.onDestroy()
+            cachedImageSet?.recycleAll()
         }
     }
 }

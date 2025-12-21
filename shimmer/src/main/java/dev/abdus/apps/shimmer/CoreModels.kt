@@ -77,6 +77,11 @@ data class ImageSet(
     val aspectRatio: Float = if (height == 0) 1f else width.toFloat() / height
 }
 
+fun ImageSet.recycleAll() {
+    if (!original.isRecycled) original.recycle()
+    blurred.forEach { if (!it.isRecycled) it.recycle() }
+}
+
 /**
  * Represents surface dimensions with width, height, and computed aspect ratio.
  */
