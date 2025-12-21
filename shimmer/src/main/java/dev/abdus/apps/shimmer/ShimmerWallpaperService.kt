@@ -51,7 +51,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 renderer?.setTouchPoints(touchPoints)
             },
         )
-        
+
         private var cachedImageSet: ImageSet? = null
         private var pendingImageUri: Uri? = null
         private var imageLoadingJob: kotlinx.coroutines.Job? = null
@@ -174,7 +174,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 Log.d(TAG, "Restoring cached ImageSet")
                 queueEvent { renderer?.setImage(cached) }
                 return
-            } 
+            }
 
             scope.launch {
                 Log.d(TAG, "onRendererReady: performing cold boot image load")
@@ -192,11 +192,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private fun reBlurCurrentImage() {
             Log.d(TAG, "reBlurCurrentImage: reloading blurred version for current image")
             val uri = currentImageUri
-            scope.launch {
-                val newSet =
-                        if (uri != null) imageLoader.loadFromUri(uri, preferences.getBlurAmount())
-                        else imageLoader.loadDefault(preferences.getBlurAmount())
-                if (newSet != null) updateActiveImageSet(newSet, uri)
+            scope.launch(Dispatchers.IO) {
+                val newSet = if (uri != null) {
+                    imageLoader.loadFromUri(uri, preferences.getBlurAmount())
+                } else {
+                    imageLoader.loadDefault(preferences.getBlurAmount())
+                }
+
+                if (newSet != null) {
+                    updateActiveImageSet(newSet, uri)
+                }
             }
         }
 
@@ -212,13 +217,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun loadImage(uri: Uri) {
             imageLoadingJob?.cancel()
-            
+
             imageLoadingJob = scope.launch {
                 Log.d(TAG, "loadImage: loading image from uri=$uri")
                 val blurAmount = preferences.getBlurAmount()
-                
+
                 val newSet = imageLoader.loadFromUri(uri, blurAmount)
-                
+
                 if (isActive && newSet != null) {
                     updateActiveImageSet(newSet, uri)
                 } else {
@@ -228,7 +233,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
             }
         }
-        
+
 
         private fun loadDefaultImage() {
             imageLoadingJob?.cancel()
@@ -262,7 +267,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun requestImageChange() {
             Log.d(TAG, "requestImageChange: triggered")
-            
+
             // If we're already animating a transition, just queue the next URI
             if (renderer?.isAnimating() == true) {
                 scope.launch {
@@ -271,7 +276,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
                 return
             }
-        
+
             // Otherwise, cancel any current loading and start the next one
             scope.launch {
                 val nextUri = folderRepository.nextImageUri()
@@ -289,7 +294,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 surfaceDimensions.width,
                 surfaceDimensions.height
             )
-    
+
             when (tapGestureDetector.onTouchEvent(event)) {
                 TapEvent.TWO_FINGER_DOUBLE_TAP -> {
                     Log.d(TAG, "onTouchEvent: TWO_FINGER_DOUBLE_TAP detected, requesting image change")
@@ -303,7 +308,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
                 else -> {}
             }
-    
+
             if (preferences.isBlurTimeoutEnabled()) {
                 blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
                 if (!sessionBlurEnabled) {
@@ -313,7 +318,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     )
                 }
             }
-            
+
             super.onTouchEvent(event)
         }
 
@@ -410,9 +415,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         override fun onDestroy() {
             Log.d(TAG, "Engine onDestroy: cleaning up resources")
-            
+
             touchEffectController.cleanup()
-            
+
             preferences.unregisterListener(preferenceListener)
             try {
                 unregisterReceiver(shortcutReceiver)

@@ -83,7 +83,7 @@ private class GLGaussianRenderer : Closeable {
             void main() {
                 vTexCoord = aTexCoords;
                 // Flip the Y-axis. This renders the image upside down in the FBO.
-                // Since glReadPixels reads from the bottom-up, the resulting 
+                // Since glReadPixels reads from the bottom-up, the resulting
                 // Bitmap will be correctly oriented.
                 gl_Position = vec4(aPosition.x, -aPosition.y, aPosition.z, 1.0);
             }
@@ -106,12 +106,12 @@ private class GLGaussianRenderer : Closeable {
             uniform sampler2D uTexture;
             uniform vec2 uTexelSize;
             uniform vec2 uDirection;
-            uniform int uSampleCount; 
+            uniform int uSampleCount;
             uniform float uOffsets[$MAX_SAMPLES];
             uniform float uWeights[$MAX_SAMPLES];
             in vec2 vTexCoord;
             out vec4 fragColor;
-            
+
             void main() {
                 vec4 color = texture(uTexture, vTexCoord) * uWeights[0];
                 for (int i = 1; i < $MAX_SAMPLES; i++) {
@@ -130,10 +130,8 @@ private class GLGaussianRenderer : Closeable {
     private var eglContext = EGL14.EGL_NO_CONTEXT
     private var eglSurface = EGL14.EGL_NO_SURFACE
 
-    private val oldDisplay = EGL14.eglGetCurrentDisplay()
     private val oldDrawSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW)
     private val oldReadSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
-    private val oldContext = EGL14.eglGetCurrentContext()
 
     // Program Handles
     private var programBlur: Int = 0
@@ -158,6 +156,14 @@ private class GLGaussianRenderer : Closeable {
     private val weightsCache = mutableMapOf<Int, Pair<FloatArray, FloatArray>>()
 
     init {
+        val currentContext = EGL14.eglGetCurrentContext()
+        if (currentContext != EGL14.EGL_NO_CONTEXT) {
+             val threadName = Thread.currentThread().name
+             if (threadName.contains("GLThread")) {
+                 error("GLGaussianRenderer MUST NOT be used on the main GLThread")
+             }
+        }
+
         initEGL()
 
         // 1. Setup Programs using ShaderCompiler
@@ -201,10 +207,14 @@ private class GLGaussianRenderer : Closeable {
         val ctxAttr = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE)
         eglContext = EGL14.eglCreateContext(eglDisplay, configs[0], EGL14.EGL_NO_CONTEXT, ctxAttr, 0)
 
+        // Make the Pbuffer tiny - we only need it to make the context current.
+        // We do our actual rendering into Framebuffers (FBOs).
         val surfAttr = intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE)
         eglSurface = EGL14.eglCreatePbufferSurface(eglDisplay, configs[0], surfAttr, 0)
 
-        EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
+        if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) {
+            error("Failed to make blur context current")
+        }
     }
 
     private fun resizeInternal(w: Int, h: Int) {
@@ -319,13 +329,28 @@ private class GLGaussianRenderer : Closeable {
     }
 
     override fun close() {
+        // 1. Delete GL objects
         GLES30.glDeleteFramebuffers(2, framebuffers, 0)
         GLES30.glDeleteTextures(3, textures, 0)
         GLES30.glDeleteProgram(programBlur)
         GLES30.glDeleteProgram(programCopy)
 
-        EGL14.eglMakeCurrent(oldDisplay, oldReadSurface, oldDrawSurface, oldContext)
-        EGL14.eglDestroySurface(eglDisplay, eglSurface)
-        EGL14.eglDestroyContext(eglDisplay, eglContext)
+        // 2. UNBIND the context from this thread completely.
+        // This prevents "Zombie" context issues when Dispatchers.IO reuses this thread.
+        EGL14.eglMakeCurrent(
+            eglDisplay,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_CONTEXT
+        )
+
+        // 3. Destroy resources
+        if (eglSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, eglSurface)
+        if (eglContext != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(eglDisplay, eglContext)
+        if (eglDisplay != EGL14.EGL_NO_DISPLAY) EGL14.eglTerminate(eglDisplay)
+
+        eglDisplay = EGL14.EGL_NO_DISPLAY
+        eglContext = EGL14.EGL_NO_CONTEXT
+        eglSurface = EGL14.EGL_NO_SURFACE
     }
 }
