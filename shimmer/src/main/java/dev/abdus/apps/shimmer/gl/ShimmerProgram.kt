@@ -147,20 +147,27 @@ class ShimmerProgram {
                     totalOffset += (vec2(n1, n2) - 0.5) * 0.02 * noiseStrength;
                 }
 
-                vec3 color;
-                if (hasDistortion) {
-                    vec3 cR = sampleBlurred(vTexCoords + totalOffset);
-                    vec3 cG = sampleBlurred(vTexCoords);
-                    vec3 cB = sampleBlurred(vTexCoords - totalOffset);
-                    color = vec3(cR.r, cG.g, cB.b);
-                } else {
-                    color = sampleBlurred(vTexCoords);
-                }
-
+                vec3 color = sampleBlurred(vTexCoords);
                 float lum = LUMINOSITY(color);
 
                 if (uDuotoneOpacity > 0.0) {
                     color = applyDuotone(color, lum);
+                }
+
+                if (hasDistortion) {
+                    vec3 cR = sampleBlurred(vTexCoords + totalOffset);
+                    vec3 cG = color;
+                    vec3 cB = sampleBlurred(vTexCoords - totalOffset);
+                    
+                    float lumR = LUMINOSITY(cR);
+                    float lumB = LUMINOSITY(cB);
+                    
+                    if (uDuotoneOpacity > 0.0) {
+                        cR = applyDuotone(cR, lumR);
+                        cB = applyDuotone(cB, lumB);
+                    }
+                    
+                    color = vec3(cR.r, cG.g, cB.b);
                 }
 
                 if (uDimAmount > 0.0) {
