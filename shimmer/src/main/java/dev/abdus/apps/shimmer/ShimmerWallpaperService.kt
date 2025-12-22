@@ -61,6 +61,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private var surfaceDimensions = SurfaceDimensions(0, 0)
 
+        private var gestureActionMap: Map<TapEvent, GestureAction> = emptyMap()
+
         private val blurTimeoutHandler = Handler(Looper.getMainLooper())
         private val blurTimeoutRunnable = Runnable {
             if (preferences.isBlurTimeoutEnabled() && engineVisible) {
@@ -85,6 +87,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             setTouchEventsEnabled(true)
             setOffsetNotificationsEnabled(true)
 
+            refreshGestureActionCache()
             preferences.registerListener(preferenceListener)
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
             registerReceiver(screenUnlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
@@ -97,6 +100,14 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (key != null) Log.d(TAG, "syncRendererSettings key=$key")
             val r = renderer ?: return
             if (!rendererReady) return
+
+            if (key == WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION ||
+                key == WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION ||
+                key == WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION
+            ) {
+                refreshGestureActionCache()
+                return
+            }
 
             if (key == WallpaperPreferences.KEY_BLUR_AMOUNT) {
                 Log.d(TAG, "syncRendererSettings: BLUR_AMOUNT changed, re-blurring current image")
@@ -296,18 +307,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 surfaceDimensions.height
             )
 
-            when (tapGestureDetector.onTouchEvent(event)) {
-                TapEvent.TWO_FINGER_DOUBLE_TAP -> {
-                    Log.d(TAG, "onTouchEvent: TWO_FINGER_DOUBLE_TAP detected, requesting image change")
-                    requestImageChange()
-                }
-                TapEvent.TRIPLE_TAP -> {
-                    sessionBlurEnabled = !sessionBlurEnabled
-                    Log.d(TAG, "onTouchEvent: TRIPLE_TAP toggled sessionBlurEnabled=$sessionBlurEnabled")
-                    applyBlurState(immediate = false)
-                    transitionScheduler.pauseForInteraction()
-                }
-                else -> {}
+            val tapEvent = tapGestureDetector.onTouchEvent(event)
+            if (tapEvent != TapEvent.NONE) {
+                val action = gestureActionMap[tapEvent] ?: GestureAction.NONE
+                handleGestureAction(action, tapEvent)
             }
 
             if (preferences.isBlurTimeoutEnabled()) {
@@ -321,6 +324,38 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
 
             super.onTouchEvent(event)
+        }
+
+        private fun refreshGestureActionCache() {
+            gestureActionMap = mapOf(
+                TapEvent.TRIPLE_TAP to preferences.getGestureAction(TapEvent.TRIPLE_TAP),
+                TapEvent.TWO_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP),
+                TapEvent.THREE_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP)
+            )
+        }
+
+        private fun handleGestureAction(action: GestureAction, tapEvent: TapEvent) {
+            when (action) {
+                GestureAction.NEXT_IMAGE -> {
+                    Log.d(TAG, "onTouchEvent: $tapEvent -> NEXT_IMAGE")
+                    requestImageChange()
+                }
+                GestureAction.TOGGLE_BLUR -> {
+                    sessionBlurEnabled = !sessionBlurEnabled
+                    Log.d(TAG, "onTouchEvent: $tapEvent -> TOGGLE_BLUR sessionBlurEnabled=$sessionBlurEnabled")
+                    applyBlurState(immediate = false)
+                    transitionScheduler.pauseForInteraction()
+                }
+                GestureAction.RANDOM_DUOTONE -> {
+                    Log.d(TAG, "onTouchEvent: $tapEvent -> RANDOM_DUOTONE")
+                    applyNextDuotone()
+                }
+                GestureAction.FAVORITE -> {
+                    Log.d(TAG, "onTouchEvent: $tapEvent -> FAVORITE")
+                    addCurrentImageToFavorites()
+                }
+                GestureAction.NONE -> {}
+            }
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
@@ -416,7 +451,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             if (currentImageUri == null) {
                 return
             }
-            
+
             scope.launch {
                 val result = favoritesRepository.saveFavorite(currentImageUri!!)
                 if (result.isSuccess) {

@@ -1,8 +1,6 @@
 package dev.abdus.apps.shimmer.settings
 
-import android.content.Context
 import android.content.SharedPreferences
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +12,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +40,7 @@ import dev.abdus.apps.shimmer.DuotonePreset
 import dev.abdus.apps.shimmer.DuotoneSettings
 import dev.abdus.apps.shimmer.GrainSettings
 import dev.abdus.apps.shimmer.ImageFolder
+import dev.abdus.apps.shimmer.TapEvent
 import dev.abdus.apps.shimmer.WallpaperPreferences
 import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.ShimmerTheme
@@ -48,7 +48,8 @@ import dev.abdus.apps.shimmer.settings.parseColorHex
 
 enum class SettingsTab {
     SOURCES,
-    EFFECTS
+    EFFECTS,
+    GESTURES
 }
 
 class SettingsActivity : ComponentActivity() {
@@ -100,6 +101,15 @@ private fun ShimmerSettingsScreen(
     }
     var currentWallpaperUri by remember {
         mutableStateOf(preferences.getLastImageUri())
+    }
+    var tripleTapAction by remember {
+        mutableStateOf(preferences.getGestureAction(TapEvent.TRIPLE_TAP))
+    }
+    var twoFingerDoubleTapAction by remember {
+        mutableStateOf(preferences.getGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP))
+    }
+    var threeFingerDoubleTapAction by remember {
+        mutableStateOf(preferences.getGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP))
     }
 
     DisposableEffect(preferences) {
@@ -155,6 +165,18 @@ private fun ShimmerSettingsScreen(
 
                 WallpaperPreferences.KEY_LAST_IMAGE_URI -> {
                     currentWallpaperUri = preferences.getLastImageUri()
+                }
+
+                WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION -> {
+                    tripleTapAction = preferences.getGestureAction(TapEvent.TRIPLE_TAP)
+                }
+
+                WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION -> {
+                    twoFingerDoubleTapAction = preferences.getGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP)
+                }
+
+                WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION -> {
+                    threeFingerDoubleTapAction = preferences.getGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP)
                 }
             }
         }
@@ -218,6 +240,12 @@ private fun ShimmerSettingsScreen(
                     onClick = { selectedTab = SettingsTab.EFFECTS },
                     text = { Text("Effects") },
                     icon = { Icon(Icons.Default.Palette, contentDescription = null) }
+                )
+                Tab(
+                    selected = selectedTab == SettingsTab.GESTURES,
+                    onClick = { selectedTab = SettingsTab.GESTURES },
+                    text = { Text("Gestures") },
+                    icon = { Icon(Icons.Default.TouchApp, contentDescription = null) }
                 )
             }
         }
@@ -306,7 +334,7 @@ private fun ShimmerSettingsScreen(
                     },
                     onBlurOnScreenLockChange = {
                         preferences.setBlurOnScreenLock(it)
-                },
+                    },
                     onBlurTimeoutEnabledChange = {
                         preferences.setBlurTimeoutEnabled(it)
                     },
@@ -323,8 +351,23 @@ private fun ShimmerSettingsScreen(
                         preferences.setChromaticAberrationFadeDuration(it)
                     }
                 )
+
+                SettingsTab.GESTURES -> GesturesTab(
+                    modifier = Modifier.padding(paddingValues),
+                    tripleTapAction = tripleTapAction,
+                    twoFingerDoubleTapAction = twoFingerDoubleTapAction,
+                    threeFingerDoubleTapAction = threeFingerDoubleTapAction,
+                    onTripleTapActionChange = {
+                        preferences.setGestureAction(TapEvent.TRIPLE_TAP, it)
+                    },
+                    onTwoFingerDoubleTapActionChange = {
+                        preferences.setGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP, it)
+                    },
+                    onThreeFingerDoubleTapActionChange = {
+                        preferences.setGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP, it)
+                    }
+                )
             }
         }
     }
 }
-

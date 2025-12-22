@@ -8,8 +8,9 @@ import android.view.ViewConfiguration
 import kotlin.math.abs
 
 enum class TapEvent {
-    TRIPLE_TAP,
-    TWO_FINGER_DOUBLE_TAP,
+    TRIPLE_TAP,              // 1 finger, 3 taps
+    TWO_FINGER_DOUBLE_TAP,   // 2 fingers, 2 taps
+    THREE_FINGER_DOUBLE_TAP, // 3 fingers, 2 taps
     NONE
 }
 
@@ -100,8 +101,7 @@ class TapGestureDetector(context: Context) {
     }
 
     private fun handleTapCompleted(fingerCount: Int): TapEvent {
-        // If the number of fingers changed mid-sequence (e.g. 1-finger tap then 2-finger tap),
-        // we treat this as the start of a brand new sequence.
+        // Check if the finger count changed mid-sequence
         if (fingerCount != lastTapFingerCount) {
             tapCount = 1
         } else {
@@ -111,6 +111,12 @@ class TapGestureDetector(context: Context) {
         lastTapFingerCount = fingerCount
 
         return when {
+            // --- Added: Three-finger double tap ---
+            fingerCount == 3 && tapCount == 2 -> {
+                reset()
+                TapEvent.THREE_FINGER_DOUBLE_TAP
+            }
+
             fingerCount == 2 && tapCount == 2 -> {
                 reset()
                 TapEvent.TWO_FINGER_DOUBLE_TAP
@@ -121,8 +127,8 @@ class TapGestureDetector(context: Context) {
                 TapEvent.TRIPLE_TAP
             }
 
-            // Abort if finger count is unsupported or tap sequence is too long
-            fingerCount > 2 || tapCount > 3 -> {
+            // Adjust the abort threshold to allow 3 fingers
+            fingerCount > 3 || tapCount > 3 -> {
                 tapCount = 0
                 TapEvent.NONE
             }

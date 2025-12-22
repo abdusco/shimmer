@@ -115,3 +115,11 @@ data class TouchData(
     val y: Float,
     val action: TouchAction,
 )
+
+enum class GestureAction {
+    TOGGLE_BLUR,
+    FAVORITE,
+    RANDOM_DUOTONE,
+    NEXT_IMAGE,
+    NONE,
+}
