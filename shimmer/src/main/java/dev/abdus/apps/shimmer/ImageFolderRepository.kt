@@ -15,453 +15,246 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Simplified image folder repository.
- * Scans folders, caches contents, and returns random images in round-robin fashion.
- */
-class ImageFolderRepository(
-    private val context: Context
-) {
+class ImageFolderRepository(private val context: Context) {
     companion object {
-        // Use the same TAG as ShimmerWallpaperService so logs appear in the same filter
         private const val TAG = "ShimmerWallpaperService"
     }
 
-    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    @Volatile
-    private var enabledFolderUris: List<String> = emptyList()
-    @Volatile
-    private var allFolderUris: List<String> = emptyList()
-    private val folderContents = mutableMapOf<String, List<Uri>>()
-    private val folderImagePositions = mutableMapOf<String, Int>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val cache = mutableMapOf<String, FolderState>()
     private val _imageCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val imageCounts: StateFlow<Map<String, Int>> = _imageCounts.asStateFlow()
-    @Volatile
-    private var lastDisplayedUri: Uri? = null
-    @Volatile
-    private var currentFolderIndex = 0
+    val imageCounts = _imageCounts.asStateFlow()
+
+    @Volatile private var enabledUris = emptyList<String>()
+    @Volatile private var currentFolderIdx = 0
+
+    private data class FolderState(val shuffled: List<Uri>, var position: Int = 0)
 
     fun updateFolders(folders: List<ImageFolder>, initialCounts: Map<String, Int> = emptyMap()) {
         val allUris = folders.map { it.uri }.distinct()
-        val enabledUris = folders.filter { it.enabled }.map { it.uri }.distinct()
+        enabledUris = folders.filter { it.enabled }.map { it.uri }.distinct()
 
-        val previousUris = allFolderUris.toSet()
-        val newUris = allUris.filter { it !in previousUris }
-        val removedUris = previousUris.filter { it !in allUris }
-
-        allFolderUris = allUris
-        enabledFolderUris = enabledUris
-
-        // Only remove cache for folders that are no longer in the list
-        synchronized(folderContents) {
-            removedUris.forEach { folderContents.remove(it) }
-        }
-        synchronized(folderImagePositions) {
-            removedUris.forEach { folderImagePositions.remove(it) }
+        synchronized(cache) {
+            cache.keys.retainAll(allUris.toSet())
         }
 
-        lastDisplayedUri = null
-        currentFolderIndex = 0
+        currentFolderIdx = 0
+        _imageCounts.value = initialCounts.filterKeys { it in allUris }.toMutableMap()
 
-        // Initialize counts from preferences (for immediate display)
-        val updatedCounts = _imageCounts.value.toMutableMap()
-        removedUris.forEach { updatedCounts.remove(it) }
-        initialCounts.forEach { (uri, count) ->
-            if (uri in allUris) {
-                updatedCounts[uri] = count
-            }
-        }
-        _imageCounts.value = updatedCounts
-
-        // Scan newly added folders asynchronously in the background
-        newUris.forEach { uri ->
-            repositoryScope.launch {
-                getFolderImages(uri)
-            }
-        }
-
-        // Also scan existing folders that don't have cached contents (for refresh scenarios)
         allUris.forEach { uri ->
-            val hasCache = synchronized(folderContents) {
-                folderContents.containsKey(uri)
-            }
-            if (!hasCache && uri !in newUris) {
-                repositoryScope.launch {
-                    getFolderImages(uri)
-                }
+            if (!synchronized(cache) { cache.containsKey(uri) }) {
+                scope.launch { scanAndCache(uri) }
             }
         }
     }
 
-    fun cleanup() {
-        // No-op now that polling is removed
-    }
-
-    /**
-     * Get the number of images in a folder. This will scan the folder if not cached.
-     */
-    fun getImageCount(folderUri: String): Int {
-        return getFolderImages(folderUri).size
-    }
-
-    /**
-     * Force refresh the cache for a specific folder by scanning it again.
-     * This runs asynchronously in the background.
-     */
     fun refreshFolder(folderUri: String) {
-        Log.d(TAG, "Refreshing folder: $folderUri")
-        synchronized(folderContents) {
-            folderContents.remove(folderUri)
-        }
-        synchronized(folderImagePositions) {
-            folderImagePositions.remove(folderUri)
-        }
-        // Trigger a scan asynchronously
-        repositoryScope.launch {
-            getFolderImages(folderUri)
-        }
+        synchronized(cache) { cache.remove(folderUri) }
+        scope.launch { scanAndCache(folderUri) }
     }
 
-    /**
-     * Refresh all folders by clearing their cache and scanning them again.
-     * This runs asynchronously in the background.
-     */
     fun refreshAllFolders() {
-        Log.d(TAG, "Refreshing all folders")
-        val urisToRefresh = allFolderUris.toList() // Make a copy to avoid concurrent modification
-        synchronized(folderContents) {
-            folderContents.clear()
-        }
-        synchronized(folderImagePositions) {
-            folderImagePositions.clear()
-        }
-        // Reset state to ensure fresh start after refresh
-        lastDisplayedUri = null
-        currentFolderIndex = 0
-        // Trigger scans asynchronously for all folders
-        urisToRefresh.forEach { uri ->
-            repositoryScope.launch {
-                getFolderImages(uri)
-            }
+        synchronized(cache) { cache.clear() }
+        currentFolderIdx = 0
+        enabledUris.forEach { scope.launch { scanAndCache(it) } }
+    }
+
+    fun hasFolders() = enabledUris.isNotEmpty()
+
+    fun getImageCount(folderUri: String): Int {
+        return synchronized(cache) { cache[folderUri]?.shuffled?.size } ?: run {
+            scanAndCache(folderUri)
+            synchronized(cache) { cache[folderUri]?.shuffled?.size ?: 0 }
         }
     }
 
-    fun hasFolders(): Boolean {
-        return enabledFolderUris.isNotEmpty()
-    }
-
-    /**
-     * Checks if a given image URI is valid and belongs to any of the current folders.
-     * Returns true if the URI exists, is readable, and is a descendant of any folder.
-     * Uses document ID prefix matching for efficient checking without scanning folders.
-     */
     fun isImageUriValid(uri: Uri): Boolean {
-        if (enabledFolderUris.isEmpty()) return false
+        if (enabledUris.isEmpty()) return false
 
+        // File URIs
         if (uri.scheme == "file") {
             val file = File(uri.path ?: return false)
             if (!file.exists() || !file.canRead()) return false
             val filePath = runCatching { file.canonicalPath }.getOrNull() ?: return false
-            enabledFolderUris.forEach { folderUriString ->
-                val folderUri = Uri.parse(folderUriString)
+
+            return enabledUris.any { folderUriStr ->
+                val folderUri = Uri.parse(folderUriStr)
                 if (folderUri.scheme == "file") {
                     val folderPath = runCatching {
                         File(folderUri.path ?: return@runCatching null).canonicalPath
-                    }.getOrNull() ?: return@forEach
-                    if (filePath.startsWith(folderPath.trimEnd('/') + "/") || filePath == folderPath) {
-                        return true
-                    }
-                }
+                    }.getOrNull() ?: return@any false
+                    filePath.startsWith("$folderPath/") || filePath == folderPath
+                } else false
             }
-            return false
         }
 
+        // MediaStore favorites
         if (uri.scheme == "content") {
-            val defaultFavoritesEnabled = enabledFolderUris.any { folderUriString ->
-                FavoritesFolderResolver.isDefaultFavoritesUri(Uri.parse(folderUriString))
-            }
-            if (defaultFavoritesEnabled && isMediaStoreFavorite(uri)) {
+            if (enabledUris.any { FavoritesFolderResolver.isDefaultFavoritesUri(Uri.parse(it)) }
+                && isMediaStoreFavorite(uri)) {
                 return true
             }
         }
 
-        // First verify the file exists and is readable
-        val file = try {
-            DocumentFile.fromSingleUri(context, uri)
-        } catch (e: Exception) {
-            Log.w(TAG, "isImageUriValid: Failed to access URI: $uri", e)
-            return false
+        // Document URIs
+        val file = runCatching { DocumentFile.fromSingleUri(context, uri) }.getOrNull()
+        if (file == null || !file.exists() || !file.canRead()) return false
+
+        val imageDocId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull() ?: return false
+
+        return enabledUris.any { folderUriStr ->
+            runCatching {
+                val folderDocId = DocumentsContract.getTreeDocumentId(Uri.parse(folderUriStr))
+                imageDocId == folderDocId || imageDocId.startsWith("$folderDocId/")
+            }.getOrDefault(false)
         }
-
-        if (file == null || !file.exists() || !file.canRead()) {
-            return false
-        }
-
-        // Get the document ID of the image file
-        val imageDocumentId = try {
-            DocumentsContract.getDocumentId(uri)
-        } catch (e: Exception) {
-            Log.w(TAG, "isImageUriValid: Could not get document ID for $uri", e)
-            return false
-        }
-
-        // Check if the image's document ID starts with any folder's document ID
-        enabledFolderUris.forEach { folderUriString ->
-            try {
-                val folderUri = Uri.parse(folderUriString)
-                val folderDocumentId = DocumentsContract.getTreeDocumentId(folderUri)
-
-                // Check if image is a descendant of this folder
-                // Document IDs use format "storage:path/to/file", so we check if the image
-                // document ID starts with the folder document ID followed by "/" or equals it
-                if (imageDocumentId == folderDocumentId ||
-                    imageDocumentId.startsWith("$folderDocumentId/")) {
-                    return true
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "isImageUriValid: Failed to process folder URI $folderUriString", e)
-                // Skip invalid folder URI
-                return@forEach
-            }
-        }
-
-        return false
     }
 
-    /**
-     * Returns next image from folders in round-robin order.
-     * Uses shuffle-based selection to ensure uniform distribution:
-     * each image appears exactly once before any image repeats.
-     */
     fun nextImageUri(): Uri? {
-        if (enabledFolderUris.isEmpty()) return null
+        if (enabledUris.isEmpty()) return null
 
-        // Try each folder once in round-robin order
-        repeat(enabledFolderUris.size) {
-            val folderUri = enabledFolderUris[currentFolderIndex]
-            val images = getFolderImages(folderUri)
+        repeat(enabledUris.size) {
+            val uri = enabledUris[currentFolderIdx]
+            val state = getOrCreateState(uri)
 
-            if (images.isNotEmpty()) {
-                val candidate = selectNextImage(folderUri, images)
+            if (state.shuffled.isNotEmpty()) {
+                if (state.position >= state.shuffled.size) {
+                    rescanAndReshuffle(uri)
+                    state.position = 0
+                }
 
-                // Validate URI as safety net (should be rare since scanFolder validates)
+                val candidate = state.shuffled[state.position++]
                 if (isImageUriValid(candidate)) {
-                    currentFolderIndex = (currentFolderIndex + 1) % enabledFolderUris.size
-                    lastDisplayedUri = candidate
+                    currentFolderIdx = (currentFolderIdx + 1) % enabledUris.size
                     return candidate
                 }
 
-                // Invalid URI detected, clear cache and rescan
-                Log.w(TAG, "nextImageUri: Invalid URI detected: $candidate, clearing cache for folder")
-                synchronized(folderContents) {
-                    folderContents.remove(folderUri)
-                }
-                synchronized(folderImagePositions) {
-                    folderImagePositions.remove(folderUri)
-                }
+                // Invalid URI, clear cache and retry
+                synchronized(cache) { cache.remove(uri) }
             }
 
-            // No images in this folder, try next
-            currentFolderIndex = (currentFolderIndex + 1) % enabledFolderUris.size
+            currentFolderIdx = (currentFolderIdx + 1) % enabledUris.size
         }
 
         return null
     }
 
-    private fun getFolderImages(folderUri: String): List<Uri> {
-        // Return cached if available
-        synchronized(folderContents) {
-            folderContents[folderUri]?.let { return it }
+    private fun getOrCreateState(uri: String): FolderState {
+        return synchronized(cache) {
+            cache.getOrPut(uri) {
+                val images = scanFolder(uri)
+                updateCount(uri, images.size)
+                FolderState(shuffle(images))
+            }
         }
+    }
 
-        // Scan and cache
-        val scanned = scanFolder(folderUri)
-        val shuffled = shuffleImages(scanned.toMutableList())
-        val count = shuffled.size
-        synchronized(folderContents) {
-            folderContents[folderUri] = shuffled
+    private fun scanAndCache(uri: String) {
+        val images = scanFolder(uri)
+        synchronized(cache) {
+            cache[uri] = FolderState(shuffle(images))
         }
-        synchronized(folderImagePositions) {
-            folderImagePositions[folderUri] = 0
+        updateCount(uri, images.size)
+    }
+
+    private fun rescanAndReshuffle(uri: String) {
+        val images = scanFolder(uri)
+        synchronized(cache) {
+            cache[uri] = FolderState(shuffle(images))
         }
-
-        // Update image counts flow
-        val updatedCounts = _imageCounts.value.toMutableMap()
-        updatedCounts[folderUri] = count
-        _imageCounts.value = updatedCounts
-
-        return shuffled
+        updateCount(uri, images.size)
     }
 
     private fun scanFolder(folderUri: String): List<Uri> {
-        return try {
-            val uri = Uri.parse(folderUri)
-            if (FavoritesFolderResolver.isDefaultFavoritesUri(uri)) {
-                return scanMediaStoreFavorites()
-            }
-            val uris = if (uri.scheme == "file") {
-                val dir = File(uri.path ?: return emptyList())
-                if (!dir.exists() || !dir.isDirectory) {
-                    emptyList()
-                } else {
-                    dir.listFiles()
-                        ?.filter { it.isFile && isImageFileName(it.name) }
-                        ?.map { Uri.fromFile(it) }
-                        ?: emptyList()
-                }
-            } else {
-                val documentFile = DocumentFile.fromTreeUri(context, uri)
-                    ?: return emptyList()
+        val uri = Uri.parse(folderUri)
 
-                documentFile.listFiles()
-                    .filter { it.isFile && (it.type?.startsWith("image/") == true || isImageFileName(it.name ?: "")) }
-                    .filter { file ->
-                        // Validate file exists and is readable before caching its URI
-                        // This prevents caching stale URIs for deleted files
-                        val exists = file.exists()
-                        val canRead = file.canRead()
-                        if (!exists || !canRead) {
-                            Log.w(TAG, "scanFolder: Skipping invalid file (exists=$exists, canRead=$canRead): ${file.uri}")
-                        }
-                        exists && canRead
-                    }
-                    .map { it.uri }
+        return runCatching {
+            when {
+                FavoritesFolderResolver.isDefaultFavoritesUri(uri) -> scanMediaStoreFavorites()
+                uri.scheme == "file" -> scanFileFolder(uri)
+                else -> scanDocumentFolder(uri)
             }
-
-            Log.d(TAG, "scanFolder: Scanned $folderUri, found ${uris.size} images")
-            if (uris.isNotEmpty()) {
-                Log.d(TAG, "scanFolder: First URI: ${uris.first()}")
-            }
-
-            uris
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to scan folder $folderUri", e)
+        }.getOrElse {
+            Log.e(TAG, "Failed to scan $folderUri", it)
             emptyList()
         }
     }
 
+    private fun scanFileFolder(uri: Uri): List<Uri> {
+        val dir = File(uri.path ?: return emptyList())
+        if (!dir.exists() || !dir.isDirectory) return emptyList()
+
+        return dir.listFiles()
+            ?.filter { it.isFile && isImageFile(it.name) }
+            ?.map { Uri.fromFile(it) }
+            ?: emptyList()
+    }
+
+    private fun scanDocumentFolder(uri: Uri): List<Uri> {
+        val doc = DocumentFile.fromTreeUri(context, uri) ?: return emptyList()
+
+        return doc.listFiles()
+            .filter { it.isFile && (it.type?.startsWith("image/") == true || isImageFile(it.name ?: "")) }
+            .filter { it.exists() && it.canRead() }
+            .map { it.uri }
+    }
+
     private fun scanMediaStoreFavorites(): List<Uri> {
-        val resolver = context.contentResolver
-        val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.RELATIVE_PATH
-        )
+        val projection = arrayOf(MediaStore.Images.Media._ID)
         val selection = "${MediaStore.Images.Media.RELATIVE_PATH}=?"
         val selectionArgs = arrayOf(FavoritesFolderResolver.getDefaultRelativePath())
-        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
-        val uris = mutableListOf<Uri>()
 
-        resolver.query(
+        return context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             projection,
             selection,
             selectionArgs,
-            sortOrder
+            "${MediaStore.Images.Media.DATE_ADDED} DESC"
         )?.use { cursor ->
-            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idIndex)
-                uris.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id))
+            val idIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(idIdx)))
+                }
             }
-        }
-
-        return uris
-    }
-
-    private fun isImageFileName(name: String): Boolean {
-        val extension = name.substringAfterLast('.', "").lowercase()
-        if (extension.isBlank()) return false
-        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: return false
-        return mimeType.startsWith("image/")
+        } ?: emptyList()
     }
 
     private fun isMediaStoreFavorite(uri: Uri): Boolean {
         val id = uri.lastPathSegment?.toLongOrNull() ?: return false
-        val resolver = context.contentResolver
         val projection = arrayOf(MediaStore.Images.Media.RELATIVE_PATH)
         val selection = "${MediaStore.Images.Media._ID}=?"
-        val selectionArgs = arrayOf(id.toString())
-        return resolver.query(
+
+        return context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             projection,
             selection,
-            selectionArgs,
+            arrayOf(id.toString()),
             null
         )?.use { cursor ->
-            val pathIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.RELATIVE_PATH)
-            if (!cursor.moveToFirst()) {
-                false
-            } else {
-                val path = cursor.getString(pathIndex)
-                path == FavoritesFolderResolver.getDefaultRelativePath()
-            }
+            cursor.moveToFirst() && cursor.getString(0) == FavoritesFolderResolver.getDefaultRelativePath()
         } ?: false
     }
 
-    /**
-     * Selects the next image from the shuffled list for a folder.
-     * Returns images sequentially from the shuffled list, ensuring uniform distribution.
-     * When all images have been shown, reshuffles and starts over.
-     */
-    private fun selectNextImage(folderUri: String, images: List<Uri>): Uri {
-        if (images.isEmpty()) {
-            throw IllegalArgumentException("Cannot select from empty image list")
-        }
-
-        if (images.size == 1) {
-            return images[0]
-        }
-
-        // Get current position for this folder
-        val currentPosition = synchronized(folderImagePositions) {
-            folderImagePositions.getOrDefault(folderUri, 0)
-        }
-
-        // If we've reached the end, rescan folder, reshuffle, and reset
-        if (currentPosition >= images.size) {
-            val rescanned = scanFolder(folderUri)
-            val reshuffled = shuffleImages(rescanned.toMutableList())
-            synchronized(folderContents) {
-                folderContents[folderUri] = reshuffled
-            }
-            synchronized(folderImagePositions) {
-                folderImagePositions[folderUri] = 0
-            }
-            val updatedCounts = _imageCounts.value.toMutableMap()
-            updatedCounts[folderUri] = reshuffled.size
-            _imageCounts.value = updatedCounts
-            return reshuffled[0]
-        }
-
-        // Get the image at current position and advance
-        val selectedImage = images[currentPosition]
-        synchronized(folderImagePositions) {
-            folderImagePositions[folderUri] = currentPosition + 1
-        }
-
-        return selectedImage
+    private fun isImageFile(name: String): Boolean {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        if (ext.isBlank()) return false
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)?.startsWith("image/") == true
     }
 
-    /**
-     * Shuffles a list of URIs using Fisher-Yates algorithm for uniform random distribution.
-     */
-    private fun shuffleImages(images: MutableList<Uri>): List<Uri> {
-        if (images.size <= 1) {
-            return images
+    private fun shuffle(images: List<Uri>): List<Uri> {
+        if (images.size <= 1) return images
+        return images.toMutableList().apply {
+            for (i in size - 1 downTo 1) {
+                val j = Random.nextInt(i + 1)
+                this[i] = this[j].also { this[j] = this[i] }
+            }
         }
+    }
 
-        // Fisher-Yates shuffle
-        for (i in images.size - 1 downTo 1) {
-            val j = Random.nextInt(i + 1)
-            val temp = images[i]
-            images[i] = images[j]
-            images[j] = temp
-        }
-
-        return images
+    private fun updateCount(uri: String, count: Int) {
+        _imageCounts.value = _imageCounts.value.toMutableMap().apply { this[uri] = count }
     }
 }
