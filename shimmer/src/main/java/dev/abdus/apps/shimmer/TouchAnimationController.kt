@@ -1,6 +1,6 @@
 package dev.abdus.apps.shimmer
 
-import android.view.animation.DecelerateInterpolator
+import android.view.animation.AccelerateDecelerateInterpolator
 
 class TouchAnimationController {
     private val activeTouches = mutableListOf<TouchPoint>()
@@ -134,8 +134,8 @@ class TouchAnimationController {
             y = touch.y,
             radius = 0f,
             intensity = 1f,
-            radiusAnimator = TickingFloatAnimator(4000, DecelerateInterpolator()),
-            fadeAnimator = TickingFloatAnimator(fadeMs, DecelerateInterpolator())
+            radiusAnimator = TickingFloatAnimator(4000, AccelerateDecelerateInterpolator()),
+            fadeAnimator = TickingFloatAnimator(fadeMs, AccelerateDecelerateInterpolator())
         )
         newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
         newTouch.fadeAnimator.reset()

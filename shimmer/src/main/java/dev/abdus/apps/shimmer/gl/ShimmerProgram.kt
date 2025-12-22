@@ -81,6 +81,7 @@ class ShimmerProgram {
             #define LUMINOSITY(c) (0.2126 * (c).r + 0.7152 * (c).g + 0.0722 * (c).b)
             #define MAX_FINGERS 5
             #define DUOTONE_BLEND_MODE_SCREEN 1
+            #define EPSILON 1e-7
 
             highp float organic_noise(vec2 p) {
                 return fract(tan(distance(p * 1.61803398875, p) * 0.70710678118) * p.x);
@@ -120,33 +121,6 @@ class ShimmerProgram {
             }
 
             void main() {
-                vec2 screenPos = vPosition * 0.5 + 0.5;
-                vec2 totalOffset = vec2(0.0);
-
-                if (uTouchPointCount > 0) {
-                    // we need both the dynamic count and the max count for loops for unrolling
-                    for (int i = 0; i < MAX_FINGERS; i++) {
-                        if (i >= uTouchPointCount) break;
-                        vec2 delta = screenPos - uTouchPoints[i].xy;
-                        float dist = length(vec2(delta.x * uAspectRatio, delta.y));
-
-                        if (dist > uTouchPoints[i].z) continue;
-
-                        float effect = uTouchIntensities[i] * (1.0 - smoothstep(0.0, uTouchPoints[i].z, dist));
-                        if (effect > 0.0) totalOffset += (length(delta) > 0.0 ? normalize(delta) : vec2(0.0)) * effect * 0.02;
-                    }
-                }
-
-                bool hasDistortion = length(totalOffset) > 0.0001;
-
-                if (hasDistortion) {
-                    float t = uTime * 0.6;
-                    float n1 = valueNoise(screenPos * 3.0 + vec2(t, t * 1.7));
-                    float n2 = valueNoise(screenPos * 3.0 + vec2(13.7, 9.2) + vec2(t * 1.3, t * 0.8));
-                    float noiseStrength = clamp(length(totalOffset) / 0.02, 0.0, 1.0);
-                    totalOffset += (vec2(n1, n2) - 0.5) * 0.02 * noiseStrength;
-                }
-
                 vec3 color = sampleBlurred(vTexCoords);
                 float lum = LUMINOSITY(color);
 
@@ -154,19 +128,45 @@ class ShimmerProgram {
                     color = applyDuotone(color, lum);
                 }
 
+                vec2 screenPos = vPosition * 0.5 + 0.5;
+                vec2 totalOffset = vec2(0.0);
+                if (uTouchPointCount > 0) {
+                    // we need both the dynamic count and the max count for loops for unrolling
+                    for (int i = 0; i < MAX_FINGERS; i++) {
+                        if (i >= uTouchPointCount) break;
+                        vec2 touchPos = uTouchPoints[i].xy;
+                        float touchRadius = uTouchPoints[i].z;
+
+                        vec2 delta = screenPos - touchPos;
+                        float dist = length(delta);
+
+                        if (dist > touchRadius) continue;
+
+                        // max effect at center, falloff to edge
+                        float strength = 0.02 * uTouchIntensities[i] * (1.0 - smoothstep(0.0, touchRadius, dist));
+
+                        // delta / dist = normalized direction vector from touch point to pixel
+                        totalOffset += (delta / (dist + EPSILON)) * strength; // add EPSILON to avoid division by zero
+                    }
+                }
+
+                bool hasDistortion = length(totalOffset) > 0.0001;
                 if (hasDistortion) {
+                    float t = uTime * 0.6;
+                    float n1 = valueNoise(screenPos * 3.0 + vec2(t, t * 1.7));
+                    float n2 = valueNoise(screenPos * 3.0 + vec2(13.7, 9.2) + vec2(t * 1.3, t * 0.8));
+                    float noiseStrength = clamp(length(totalOffset) / 0.02, 0.0, 1.0);
+                    totalOffset += (vec2(n1, n2) - 0.5) * 0.03 * noiseStrength;
+
                     vec3 cR = sampleBlurred(vTexCoords + totalOffset);
                     vec3 cG = color;
                     vec3 cB = sampleBlurred(vTexCoords - totalOffset);
-                    
-                    float lumR = LUMINOSITY(cR);
-                    float lumB = LUMINOSITY(cB);
-                    
+
                     if (uDuotoneOpacity > 0.0) {
-                        cR = applyDuotone(cR, lumR);
-                        cB = applyDuotone(cB, lumB);
+                        cR = applyDuotone(cR, lum);
+                        cB = applyDuotone(cB, lum);
                     }
-                    
+
                     color = vec3(cR.r, cG.g, cB.b);
                 }
 
