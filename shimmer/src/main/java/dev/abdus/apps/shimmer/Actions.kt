@@ -13,6 +13,11 @@ class Actions {
         const val ACTION_SET_BLUR_PERCENT = "dev.abdus.apps.shimmer.action.SET_BLUR_PERCENT"
         const val ACTION_ENABLE_BLUR = "dev.abdus.apps.shimmer.action.ENABLE_BLUR"
         const val ACTION_REFRESH_FOLDERS = "dev.abdus.apps.shimmer.action.REFRESH_FOLDERS"
+        const val ACTION_ADD_TO_FAVORITES = "dev.abdus.apps.shimmer.action.ADD_TO_FAVORITES"
+        const val ACTION_FAVORITE_ADDED = "dev.abdus.apps.shimmer.action.FAVORITE_ADDED"
+
+        const val EXTRA_FAVORITE_URI = "favorite_uri"
+        const val EXTRA_FAVORITE_DISPLAY_NAME = "favorite_display_name"
 
         /**
          * Send a broadcast to request next image.
@@ -50,6 +55,27 @@ class Actions {
             context.sendBroadcast(Intent(ACTION_REFRESH_FOLDERS))
         }
 
+        fun requestAddToFavorites(context: Context) {
+            context.sendBroadcast(Intent(ACTION_ADD_TO_FAVORITES))
+        }
+
+        fun broadcastFavoriteAdded(
+            context: Context,
+            result: FavoriteSaveResult,
+        ) {
+            val intent = Intent(ACTION_FAVORITE_ADDED).apply {
+                putExtra(EXTRA_FAVORITE_URI, result.uri)
+                putExtra(EXTRA_FAVORITE_DISPLAY_NAME, result.displayName)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newUri(
+                    context.contentResolver,
+                    result.displayName,
+                    result.uri
+                )
+            }
+            context.sendBroadcast(intent)
+        }
+
         fun registerReceivers(context: Context, shortcutReceiver: BroadcastReceiver) {
             val filter = IntentFilter().apply {
                 addAction(ACTION_NEXT_IMAGE)
@@ -57,6 +83,7 @@ class Actions {
                 addAction(ACTION_SET_BLUR_PERCENT)
                 addAction(ACTION_ENABLE_BLUR)
                 addAction(ACTION_REFRESH_FOLDERS)
+                addAction(ACTION_ADD_TO_FAVORITES)
             }
             androidx.core.content.ContextCompat.registerReceiver(
                 context,
@@ -81,4 +108,3 @@ class Actions {
         }
     }
 }
-

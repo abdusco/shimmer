@@ -39,6 +39,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
+        private val favoritesRepository = FavoritesRepository(this@ShimmerWallpaperService, preferences)
         private val imageLoader = ImageLoader(contentResolver, resources)
         private val transitionScheduler =
                 ImageTransitionScheduler(scope, preferences) {
@@ -88,7 +89,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
             registerReceiver(screenUnlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
 
-            folderRepository.updateFolders(preferences.getImageFolders().map { it.uri })
+            folderRepository.updateFolders(resolveSourceFolders())
         }
 
         private fun syncRendererSettings(key: String? = null) {
@@ -127,7 +128,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
                 if (key == WallpaperPreferences.KEY_IMAGE_FOLDERS) {
                     Log.d(TAG, "syncRendererSettings: image folders changed, updating repository")
-                    folderRepository.updateFolders(preferences.getImageFolders().map { it.uri })
+                    folderRepository.updateFolders(resolveSourceFolders())
                 }
 
                 if (key == null ||
@@ -354,7 +355,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         when (intent.action) {
                             Actions.ACTION_NEXT_IMAGE -> requestImageChange()
                             Actions.ACTION_NEXT_DUOTONE -> applyNextDuotone()
-                            Actions.ACTION_REFRESH_FOLDERS -> folderRepository.updateFolders(preferences.getImageFolders().map { it.uri })
+                            Actions.ACTION_REFRESH_FOLDERS -> folderRepository.updateFolders(resolveSourceFolders())
+                            Actions.ACTION_ADD_TO_FAVORITES -> addCurrentImageToFavorites()
                             Actions.ACTION_SET_BLUR_PERCENT -> {
                                 intent?.let { it ->
                                     Actions.BlurPercentAction.fromIntent(it!!)?.let { action ->
@@ -399,6 +401,31 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val nextIndex = (preferences.getDuotonePresetIndex() + 1) % DUOTONE_PRESETS.size
             val p = DUOTONE_PRESETS[nextIndex]
             preferences.applyDuotonePreset(p.lightColor, p.darkColor, true, nextIndex)
+        }
+
+        private fun resolveSourceFolders(): List<ImageFolder> {
+            val folders = preferences.getImageFolders().toMutableList()
+            val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences)
+            if (folders.none { it.uri == favoritesUri.toString() }) {
+                folders.add(ImageFolder(uri = favoritesUri.toString()))
+            }
+            return folders
+        }
+
+        private fun addCurrentImageToFavorites() {
+            if (currentImageUri == null) {
+                return
+            }
+            
+            scope.launch {
+                val result = favoritesRepository.saveFavorite(currentImageUri!!)
+                if (result.isSuccess) {
+                    val saved = result.getOrNull()!!
+                    Actions.broadcastFavoriteAdded(this@ShimmerWallpaperService, result = saved)
+                } else {
+                    Log.w(TAG, "addCurrentImageToFavorites: failed for $currentImageUri", result.exceptionOrNull())
+                }
+            }
         }
 
         override fun onSurfaceCreated(h: SurfaceHolder) {

@@ -42,6 +42,13 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@style/Theme.Shimmer.NoDisplay" />
+        <activity
+            android:name=".AddToFavoritesShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Shimmer.NoDisplay" />
 
         <service
             android:name=".ShimmerWallpaperService"
@@ -55,7 +62,6 @@
                 android:name="android.service.wallpaper"
                 android:resource="@xml/wallpaper" />
         </service>
-
 
     </application>
 

@@ -45,6 +45,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -323,6 +325,14 @@ private fun FolderThumbnailLarge(
     val previewUri = remember(folder.thumbnailUri) {
         folder.thumbnailUri?.toUri()
     }
+    val thumbnailFilter = remember(folder.enabled) {
+        if (folder.enabled) {
+            null
+        } else {
+            val matrix = ColorMatrix().apply { setToSaturation(0f) }
+            ColorFilter.colorMatrix(matrix)
+        }
+    }
 
     Surface(
         modifier = modifier.size(160.dp),
@@ -337,7 +347,8 @@ private fun FolderThumbnailLarge(
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                colorFilter = thumbnailFilter
             )
         } else {
             Box(

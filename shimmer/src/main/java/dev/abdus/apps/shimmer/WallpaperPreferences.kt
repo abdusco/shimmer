@@ -56,6 +56,7 @@ data class ImageFolder(
     val uri: String,
     val thumbnailUri: String? = null,
     val imageCount: Int? = null,
+    val enabled: Boolean = true,
 )
 
 class WallpaperPreferences(private val prefs: SharedPreferences) {
@@ -80,6 +81,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_GRAIN_SETTINGS = "wallpaper_grain_settings"
         const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
         const val KEY_IMAGE_LAST_CHANGED_AT = "image_last_changed_at"
+        const val KEY_FAVORITES_FOLDER_URI = "favorites_folder_uri"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -110,6 +112,21 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
 
     fun setImageLastChangedAt(time: Long) {
         prefs.edit { putLong(KEY_IMAGE_LAST_CHANGED_AT, time) }
+    }
+
+    fun getFavoritesFolderUri(): Uri? {
+        val value = prefs.getString(KEY_FAVORITES_FOLDER_URI, null) ?: return null
+        return value.toUri()
+    }
+
+    fun setFavoritesFolderUri(uri: Uri?) {
+        prefs.edit {
+            if (uri == null) {
+                remove(KEY_FAVORITES_FOLDER_URI)
+            } else {
+                putString(KEY_FAVORITES_FOLDER_URI, uri.toString())
+            }
+        }
     }
 
     fun getBlurAmount(): Float =
@@ -446,4 +463,3 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 }
-

@@ -24,4 +24,16 @@
             android:targetPackage="dev.abdus.apps.shimmer" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_favorite"
+        android:shortcutId="shortcut_add_to_favorites"
+        android:shortcutShortLabel="@string/shortcut_add_to_favorites_short_label"
+        android:shortcutLongLabel="@string/shortcut_add_to_favorites_long_label">
+        <intent
+            android:action="dev.abdus.apps.shimmer.action.ADD_TO_FAVORITES"
+            android:targetClass="dev.abdus.apps.shimmer.AddToFavoritesShortcutActivity"
+            android:targetPackage="dev.abdus.apps.shimmer" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
 </shortcuts>
