@@ -117,6 +117,7 @@ class TouchAnimationController {
 
         for (i in 0 until touchCount) {
             val touch = activeTouches[i]
+            // as vec3 touch point format: (x, y, radius)
             touchPointsArray[i * 3] = touch.x
             touchPointsArray[i * 3 + 1] = touch.y
             touchPointsArray[i * 3 + 2] = touch.radius
@@ -134,7 +135,7 @@ class TouchAnimationController {
             y = touch.y,
             radius = 0f,
             intensity = 1f,
-            radiusAnimator = TickingFloatAnimator(4000, AccelerateDecelerateInterpolator()),
+            radiusAnimator = TickingFloatAnimator((fadeMs * 1.5f).toInt(), AccelerateDecelerateInterpolator()),
             fadeAnimator = TickingFloatAnimator(fadeMs, AccelerateDecelerateInterpolator())
         )
         newTouch.radiusAnimator.start(startValue = 0f, endValue = 1f)
