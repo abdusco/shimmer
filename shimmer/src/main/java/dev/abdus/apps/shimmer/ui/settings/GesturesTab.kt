@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer.settings
+package dev.abdus.apps.shimmer.ui.settings
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement

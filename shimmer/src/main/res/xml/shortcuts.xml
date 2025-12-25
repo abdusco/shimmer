@@ -8,7 +8,7 @@
         android:shortcutLongLabel="@string/shortcut_next_image_long_label">
         <intent
             android:action="dev.abdus.apps.shimmer.action.NEXT_IMAGE"
-            android:targetClass="dev.abdus.apps.shimmer.NextImageShortcutActivity"
+            android:targetClass="dev.abdus.apps.shimmer.ui.NextImageShortcutActivity"
             android:targetPackage="dev.abdus.apps.shimmer" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
@@ -20,7 +20,7 @@
         android:shortcutLongLabel="@string/shortcut_random_duotone_long_label">
         <intent
             android:action="dev.abdus.apps.shimmer.action.RANDOM_DUOTONE"
-            android:targetClass="dev.abdus.apps.shimmer.RandomDuotoneShortcutActivity"
+            android:targetClass="dev.abdus.apps.shimmer.ui.RandomDuotoneShortcutActivity"
             android:targetPackage="dev.abdus.apps.shimmer" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
@@ -32,7 +32,7 @@
         android:shortcutLongLabel="@string/shortcut_add_to_favorites_long_label">
         <intent
             android:action="dev.abdus.apps.shimmer.action.ADD_TO_FAVORITES"
-            android:targetClass="dev.abdus.apps.shimmer.AddToFavoritesShortcutActivity"
+            android:targetClass="dev.abdus.apps.shimmer.ui.AddToFavoritesShortcutActivity"
             android:targetPackage="dev.abdus.apps.shimmer" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>

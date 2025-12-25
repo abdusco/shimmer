@@ -12,7 +12,7 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.Shimmer.Transparent">
         <activity
-            android:name=".SplashActivity"
+            android:name=".ui.SplashActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -23,27 +23,27 @@
                 android:resource="@xml/shortcuts" />
         </activity>
         <activity
-            android:name=".settings.SettingsActivity"
+            android:name="dev.abdus.apps.shimmer.ui.settings.SettingsActivity"
             android:exported="true" />
         <activity
-            android:name=".FolderSelectionActivity"
+            android:name=".ui.settings.FolderSelectionActivity"
             android:exported="true" />
         <activity
-            android:name=".NextImageShortcutActivity"
+            android:name=".ui.NextImageShortcutActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@style/Theme.Shimmer.NoDisplay" />
         <activity
-            android:name=".RandomDuotoneShortcutActivity"
+            android:name=".ui.RandomDuotoneShortcutActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@style/Theme.Shimmer.NoDisplay" />
         <activity
-            android:name=".AddToFavoritesShortcutActivity"
+            android:name=".ui.AddToFavoritesShortcutActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"

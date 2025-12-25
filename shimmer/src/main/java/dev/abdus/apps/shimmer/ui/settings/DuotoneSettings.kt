@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer.settings
+package dev.abdus.apps.shimmer.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -31,9 +31,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.DuotoneBlendMode
 import dev.abdus.apps.shimmer.DuotonePreset
-import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 
 @Composable
 fun DuotoneSettings(

@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer.settings
+package dev.abdus.apps.shimmer.ui.settings
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect

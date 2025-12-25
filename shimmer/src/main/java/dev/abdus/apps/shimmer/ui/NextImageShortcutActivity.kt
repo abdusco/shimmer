@@ -1,9 +1,11 @@
-package dev.abdus.apps.shimmer
+package dev.abdus.apps.shimmer.ui
 
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import dev.abdus.apps.shimmer.Actions
+import dev.abdus.apps.shimmer.WallpaperUtil
 
 class NextImageShortcutActivity : ComponentActivity() {
 
@@ -12,7 +14,7 @@ class NextImageShortcutActivity : ComponentActivity() {
         Log.d(TAG, "Shortcut requested next image")
 
         if (WallpaperUtil.isActiveWallpaper(this)) {
-            Actions.requestNextImage(this)
+            Actions.Companion.requestNextImage(this)
         } else {
             // Not active wallpaper, show splash screen
             val intent = Intent(this, SplashActivity::class.java)

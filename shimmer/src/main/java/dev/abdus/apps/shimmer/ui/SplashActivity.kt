@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer
+package dev.abdus.apps.shimmer.ui
 
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -23,14 +23,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import dev.abdus.apps.shimmer.components.PreviewSurfaceView
-import dev.abdus.apps.shimmer.components.WallpaperPreview
-import dev.abdus.apps.shimmer.ShimmerTheme
+import dev.abdus.apps.shimmer.DUOTONE_PRESETS
+import dev.abdus.apps.shimmer.Duotone
+import dev.abdus.apps.shimmer.ImageSet
+import dev.abdus.apps.shimmer.R
+import dev.abdus.apps.shimmer.ShimmerRenderer
+import dev.abdus.apps.shimmer.WallpaperUtil
+import dev.abdus.apps.shimmer.ui.settings.SettingsActivity
 import kotlin.random.Random
 
 class SplashActivity : ComponentActivity() {
@@ -123,7 +127,7 @@ class SplashActivity : ComponentActivity() {
     }
 
     private fun navigateToSettings() {
-        val intent = Intent(this, dev.abdus.apps.shimmer.settings.SettingsActivity::class.java)
+        val intent = Intent(this, SettingsActivity::class.java)
         startActivity(intent)
         finish()
     }
@@ -167,7 +171,7 @@ private fun SplashScreen(
         // UI overlay
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = androidx.compose.ui.graphics.Color.Transparent
+            color = Color.Transparent
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -181,7 +185,7 @@ private fun SplashScreen(
                     Image(
                         painter = painterResource(id = R.drawable.shimmer),
                         contentDescription = "Shimmer Logo",
-                        colorFilter = ColorFilter.tint(androidx.compose.ui.graphics.Color.White),
+                        colorFilter = ColorFilter.tint(Color.White),
                         modifier = Modifier.size(160.dp)
                     )
 
@@ -189,7 +193,7 @@ private fun SplashScreen(
                         text = "Shimmer",
                         style = MaterialTheme.typography.displayLarge,
                         textAlign = TextAlign.Center,
-                        color = androidx.compose.ui.graphics.Color.White
+                        color = Color.White
                     )
 
                     Button(

@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer.components
+package dev.abdus.apps.shimmer.ui
 
 import android.content.Context
 import android.opengl.GLSurfaceView

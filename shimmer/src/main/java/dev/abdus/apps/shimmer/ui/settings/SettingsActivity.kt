@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer.settings
+package dev.abdus.apps.shimmer.ui.settings
 
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -34,17 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import dev.abdus.apps.shimmer.ChromaticAberrationSettings
-import dev.abdus.apps.shimmer.DuotoneBlendMode
-import dev.abdus.apps.shimmer.DuotonePreset
-import dev.abdus.apps.shimmer.DuotoneSettings
-import dev.abdus.apps.shimmer.GrainSettings
-import dev.abdus.apps.shimmer.ImageFolder
+import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.TapEvent
 import dev.abdus.apps.shimmer.WallpaperPreferences
-import dev.abdus.apps.shimmer.DUOTONE_PRESETS
-import dev.abdus.apps.shimmer.ShimmerTheme
-import dev.abdus.apps.shimmer.settings.parseColorHex
+import dev.abdus.apps.shimmer.ui.ShimmerTheme
 
 enum class SettingsTab {
     SOURCES,

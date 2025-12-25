@@ -1,12 +1,15 @@
-package dev.abdus.apps.shimmer
+package dev.abdus.apps.shimmer.ui.settings
 
+import android.R
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.webkit.MimeTypeMap
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -69,12 +72,17 @@ import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import dev.abdus.apps.shimmer.FavoritesFolderResolver
+import dev.abdus.apps.shimmer.ImageFolder
+import dev.abdus.apps.shimmer.ImageFolderRepository
+import dev.abdus.apps.shimmer.WallpaperPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 val FOLDER_PADDING_X = 24.dp
 val FOLDER_PADDING_Y = 24.dp
@@ -83,8 +91,8 @@ class FolderSelectionActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setBackgroundDrawableResource(android.R.color.transparent)
-        setContent { ShimmerTheme { FolderSelectionScreen() } }
+        window.setBackgroundDrawableResource(R.color.transparent)
+        setContent { _root_ide_package_.dev.abdus.apps.shimmer.ui.ShimmerTheme { FolderSelectionScreen() } }
     }
 }
 
@@ -92,7 +100,7 @@ class FolderSelectionActivity : ComponentActivity() {
 @Composable
 private fun FolderSelectionScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val preferences = remember { WallpaperPreferences.create(context) }
+    val preferences = remember { WallpaperPreferences.Companion.create(context) }
     var favoritesFolderUri by remember { mutableStateOf(preferences.getFavoritesFolderUri()) }
     var imageFolders by remember {
         mutableStateOf(
@@ -170,10 +178,10 @@ private fun FolderSelectionScreen(modifier: Modifier = Modifier) {
 
     DisposableEffect(preferences) {
         val listener =
-            android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
                 if (
-                    key == WallpaperPreferences.KEY_IMAGE_FOLDERS ||
-                        key == WallpaperPreferences.KEY_FAVORITES_FOLDER_URI
+                    key == WallpaperPreferences.Companion.KEY_IMAGE_FOLDERS ||
+                        key == WallpaperPreferences.Companion.KEY_FAVORITES_FOLDER_URI
                 ) {
                     favoritesFolderUri = preferences.getFavoritesFolderUri()
                     imageFolders =
@@ -664,7 +672,7 @@ private suspend fun getFolderThumbnailUri(
             if (existingThumbnailUri != null) {
                 val existingUri = existingThumbnailUri.toUri()
                 if (existingUri.scheme == "file") {
-                    val file = java.io.File(existingUri.path ?: "")
+                    val file = File(existingUri.path ?: "")
                     if (file.exists() && file.canRead()) {
                         return@withContext existingUri
                     }
@@ -681,7 +689,7 @@ private suspend fun getFolderThumbnailUri(
                 return@withContext queryMediaStoreFavoriteThumbnail(context)
             }
             if (uri.scheme == "file") {
-                val dir = java.io.File(uri.path ?: return@withContext null)
+                val dir = File(uri.path ?: return@withContext null)
                 dir.listFiles()
                     ?.asSequence()
                     ?.filter { it.isFile && isImageFileName(it.name) }
@@ -711,7 +719,7 @@ private suspend fun isValidThumbnailUri(context: Context, thumbnailUri: String):
         try {
             val uri = thumbnailUri.toUri()
             if (uri.scheme == "file") {
-                val file = java.io.File(uri.path ?: "")
+                val file = File(uri.path ?: "")
                 file.exists() && file.canRead()
             } else {
                 val file = DocumentFile.fromSingleUri(context, uri)
@@ -791,7 +799,7 @@ private fun isImageFileName(name: String): Boolean {
     val extension = name.substringAfterLast('.', "").lowercase()
     if (extension.isBlank()) return false
     val mimeType =
-        android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             ?: return false
     return mimeType.startsWith("image/")
 }

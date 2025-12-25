@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer
+package dev.abdus.apps.shimmer.ui
 
 import android.content.Intent
 import android.os.Bundle
@@ -6,6 +6,11 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import dev.abdus.apps.shimmer.Actions
+import dev.abdus.apps.shimmer.FavoritesRepository
+import dev.abdus.apps.shimmer.R
+import dev.abdus.apps.shimmer.WallpaperPreferences
+import dev.abdus.apps.shimmer.WallpaperUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,7 +31,7 @@ class AddToFavoritesShortcutActivity : ComponentActivity() {
     }
 
     private fun saveFavoriteFromShortcut() {
-        val preferences = WallpaperPreferences.create(this)
+        val preferences = WallpaperPreferences.Companion.create(this)
         val sourceUri = preferences.getLastImageUri()
         if (sourceUri == null) {
             finish()
@@ -38,7 +43,7 @@ class AddToFavoritesShortcutActivity : ComponentActivity() {
             val result = withContext(Dispatchers.IO) { repository.saveFavorite(sourceUri) }
             if (result.isSuccess) {
                 val saved = result.getOrNull()!!
-                Actions.broadcastFavoriteAdded(this@AddToFavoritesShortcutActivity, result = saved)
+                Actions.Companion.broadcastFavoriteAdded(this@AddToFavoritesShortcutActivity, result = saved)
                 Toast.makeText(
                     this@AddToFavoritesShortcutActivity,
                     getString(R.string.toast_favorite_saved, saved.displayName),

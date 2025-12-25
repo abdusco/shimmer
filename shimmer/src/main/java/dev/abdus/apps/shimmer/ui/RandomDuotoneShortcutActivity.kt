@@ -1,9 +1,11 @@
-package dev.abdus.apps.shimmer
+package dev.abdus.apps.shimmer.ui
 
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import dev.abdus.apps.shimmer.Actions
+import dev.abdus.apps.shimmer.WallpaperUtil
 
 class RandomDuotoneShortcutActivity : ComponentActivity() {
 
@@ -12,7 +14,7 @@ class RandomDuotoneShortcutActivity : ComponentActivity() {
         Log.d(TAG, "Shortcut requested next duotone preset")
 
         if (WallpaperUtil.isActiveWallpaper(this)) {
-            Actions.requestNextDuotonePreset(this)
+            Actions.Companion.requestNextDuotonePreset(this)
         } else {
             // Not active wallpaper, show splash screen
             val intent = Intent(this, SplashActivity::class.java)

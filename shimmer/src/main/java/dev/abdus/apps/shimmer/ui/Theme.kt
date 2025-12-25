@@ -1,4 +1,4 @@
-package dev.abdus.apps.shimmer
+package dev.abdus.apps.shimmer.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
