@@ -225,7 +225,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     fun onVisibilityChanged() {
         // Reset parallax to target without animation
-        viewportManager.resetParallax(animationController.targetRenderState.parallaxOffset)
+        // viewportManager.resetParallax(animationController.targetRenderState.parallaxOffset)
     }
 
     fun setParallaxOffset(offset: Float) {
