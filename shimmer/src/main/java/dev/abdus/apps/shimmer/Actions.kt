@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.provider.DocumentsContract
 
 
 class Actions {
@@ -58,7 +59,7 @@ class Actions {
                 clipData = android.content.ClipData.newUri(
                     context.contentResolver,
                     result.displayName,
-                    result.uri
+                    result.uri,
                 )
             }
             context.sendBroadcast(intent)
@@ -70,6 +71,35 @@ class Actions {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.sendBroadcast(intent)
+        }
+
+        fun openFolderInFileManager(context: Context, uri: Uri) {
+            val attempts = listOf(
+                { DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri)) to "vnd.android.document/directory" },
+                { uri to "vnd.android.document/directory" },
+                { uri to null }
+            )
+
+            attempts.forEach { attempt ->
+                runCatching {
+                    val (targetUri, type) = attempt()
+                    Intent(Intent.ACTION_VIEW).apply {
+                        if (type != null) setDataAndType(targetUri, type) else data = targetUri
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }.let(context::startActivity)
+                }.onSuccess { return }
+            }
+        }
+
+        fun viewImage(context: Context, uri: Uri) {
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "image/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                context.startActivity(viewIntent)
+            } catch (_: Exception) {
+            }
         }
 
         fun registerReceivers(context: Context, shortcutReceiver: BroadcastReceiver) {
@@ -86,7 +116,7 @@ class Actions {
                 context,
                 shortcutReceiver,
                 filter,
-                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED,
             )
         }
     }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -61,9 +62,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import dev.abdus.apps.shimmer.Actions
 import dev.abdus.apps.shimmer.FavoritesFolderResolver
 import dev.abdus.apps.shimmer.ImageFolderRepository
 import dev.abdus.apps.shimmer.SharedFolderResolver
@@ -97,6 +100,7 @@ data class ImageFolderUiModel(
     val thumbnailUri: Uri?,
     val imageCount: Int,
     val enabled: Boolean,
+    val isLocal: Boolean,
 )
 
 class FolderSelectionActivity : ComponentActivity() {
@@ -132,6 +136,9 @@ class FolderSelectionActivity : ComponentActivity() {
                     onRemoveFolder = viewModel::removeFolder,
                     onRefreshFolder = viewModel::refreshFolder,
                     onRefreshAll = viewModel::refreshAll,
+                    onOpenFolderExternally = { uri ->
+                        Actions.openFolderInFileManager(this, uri)
+                    }
                 )
             }
         }
@@ -184,6 +191,7 @@ class FolderSelectionViewModel(
                 thumbnailUri = meta.thumbnailUri,
                 imageCount = meta.imageCount,
                 enabled = meta.isEnabled,
+                isLocal = meta.isLocal,
             )
         }
 
@@ -252,6 +260,7 @@ fun FolderSelectionScreen(
     onToggleFolder: (String, Boolean) -> Unit,
     onRemoveFolder: (String) -> Unit,
     onRefreshFolder: (String) -> Unit,
+    onOpenFolderExternally: (Uri) -> Unit,
     onRefreshAll: () -> Unit,
 ) {
     Scaffold(
@@ -281,6 +290,13 @@ fun FolderSelectionScreen(
                         onCardClick = { onFolderClick(fav.id, fav.displayName) },
                         onToggleEnabled = { onToggleFolder(fav.uri, it) },
                         menuContent = { closeMenu ->
+                            if (fav.isLocal) {
+                                DropdownMenuItem(
+                                    text = { Text("Open in File Manager") },
+                                    onClick = { onOpenFolderExternally(Uri.parse(fav.uri)); closeMenu() },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Change location") },
                                 onClick = { onPickFavoritesClick(); closeMenu() },
@@ -303,6 +319,13 @@ fun FolderSelectionScreen(
                         onCardClick = { onFolderClick(shared.id, shared.displayName) },
                         onToggleEnabled = { onToggleFolder(shared.uri, it) },
                         menuContent = { closeMenu ->
+                            if (shared.isLocal) {
+                                DropdownMenuItem(
+                                    text = { Text("Open in File Manager") },
+                                    onClick = { onOpenFolderExternally(Uri.parse(shared.uri)); closeMenu() },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Change location") },
                                 onClick = { onPickSharedClick(); closeMenu() },
@@ -344,6 +367,13 @@ fun FolderSelectionScreen(
                         onCardClick = { onFolderClick(folder.id, folder.displayName) },
                         onToggleEnabled = { onToggleFolder(folder.uri, it) },
                         menuContent = { closeMenu ->
+                            if (folder.isLocal) {
+                                DropdownMenuItem(
+                                    text = { Text("Open in File Manager") },
+                                    onClick = { onOpenFolderExternally(folder.uri.toUri()); closeMenu() },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Force rescan") },
                                 onClick = { onRefreshFolder(folder.uri); closeMenu() },

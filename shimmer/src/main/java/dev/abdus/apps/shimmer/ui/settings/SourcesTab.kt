@@ -1,6 +1,5 @@
 package dev.abdus.apps.shimmer.ui.settings
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
@@ -46,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -54,17 +54,18 @@ import kotlin.math.roundToInt
 @Composable
 fun SourcesTab(
     modifier: Modifier = Modifier,
-    context: Context,
     currentWallpaperUri: Uri?,
     currentWallpaperName: String?,
     imageFolders: List<ImageFolderUiModel>,
     transitionEnabled: Boolean,
     transitionIntervalMillis: Long,
     changeImageOnUnlock: Boolean,
+    onViewCurrentWallpaper: () -> Unit,
     onTransitionEnabledChange: (Boolean) -> Unit,
     onTransitionDurationChange: (Long) -> Unit,
     onChangeImageOnUnlockChange: (Boolean) -> Unit,
 ) {
+    val context = LocalContext.current
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -79,16 +80,7 @@ fun SourcesTab(
             CurrentWallpaperCard(
                 wallpaperUri = currentWallpaperUri,
                 wallpaperName = currentWallpaperName,
-                onViewImage = { uri ->
-                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "image/*")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    try {
-                        context.startActivity(viewIntent)
-                    } catch (_: Exception) {
-                    }
-                },
+                onViewImage = { onViewCurrentWallpaper() },
             )
         }
 
@@ -121,7 +113,7 @@ fun SourcesTab(
 private fun CurrentWallpaperCard(
     wallpaperUri: Uri?,
     wallpaperName: String?,
-    onViewImage: (Uri) -> Unit,
+    onViewImage: () -> Unit,
 ) {
     val displayName = wallpaperName ?: "No wallpaper"
 
@@ -131,7 +123,7 @@ private fun CurrentWallpaperCard(
                 .fillMaxWidth()
                 .height(360.dp)
                 .clickable(enabled = wallpaperUri != null) {
-                    wallpaperUri?.let { onViewImage(it) }
+                    onViewImage()
                 },
         ) {
             AnimatedContent(

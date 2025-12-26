@@ -40,6 +40,7 @@ class ImageFolderRepository(context: Context) {
             val imageCount: Int,
             val thumbnailUri: Uri?,
             val isEnabled: Boolean,
+            val isLocal: Boolean,
         )
 
         private fun isoNow(): String {
@@ -47,20 +48,26 @@ class ImageFolderRepository(context: Context) {
             sdf.timeZone = TimeZone.getTimeZone("UTC")
             return sdf.format(Date())
         }
+
+        private fun isLocalFolder(uri: Uri): Boolean {
+            return uri.scheme == "file" ||
+                    (uri.authority == "com.android.externalstorage.documents")
+        }
     }
 
     /**
      * Flow of folder metadata (URI, count, thumbnail) for the UI.
      */
-    val foldersMetadataFlow: Flow<Map<String, Companion.FolderMetadata>> = dao.getFoldersMetadataFlow()
+    val foldersMetadataFlow: Flow<Map<String, FolderMetadata>> = dao.getFoldersMetadataFlow()
         .map { list ->
             Log.d(TAG, "Metadata flow updated: ${list.size} folders")
             list.associate {
-                it.folderUri to Companion.FolderMetadata(
+                it.folderUri to FolderMetadata(
                     it.folderId,
                     it.imageCount,
                     it.firstImageUri?.toUri(),
-                    it.isEnabled
+                    it.isEnabled,
+                    isLocalFolder(it.folderUri.toUri())
                 )
             }
         }

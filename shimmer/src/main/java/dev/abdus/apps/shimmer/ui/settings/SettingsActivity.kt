@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import dev.abdus.apps.shimmer.Actions
 import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.ImageFolderRepository
 import dev.abdus.apps.shimmer.R
@@ -187,17 +188,20 @@ private fun ShimmerSettingsScreen(
                             thumbnailUri = meta.thumbnailUri,
                             imageCount = meta.imageCount,
                             enabled = meta.isEnabled,
+                            isLocal = meta.isLocal,
                         )
                     }
                     SourcesTab(
                         modifier = Modifier.padding(paddingValues),
-                        context = context,
                         currentWallpaperUri = currentWallpaperUri,
                         currentWallpaperName = currentWallpaperName,
                         imageFolders = imageFolders,
                         transitionEnabled = transitionEnabled,
                         transitionIntervalMillis = transitionIntervalMillis,
                         changeImageOnUnlock = changeImageOnUnlock,
+                        onViewCurrentWallpaper = {
+                            currentWallpaperUri?.let { uri -> Actions.viewImage(context, uri) }
+                        },
                         onTransitionEnabledChange = { preferences.setTransitionEnabled(it) },
                         onTransitionDurationChange = { preferences.setTransitionIntervalMillis(it) },
                         onChangeImageOnUnlockChange = { preferences.setChangeImageOnUnlock(it) },
