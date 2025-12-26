@@ -7,11 +7,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,23 +25,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -50,7 +53,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -124,7 +126,8 @@ class FolderSelectionActivity : ComponentActivity() {
                     },
                     onToggleFolder = viewModel::toggleFolderEnabled,
                     onRemoveFolder = viewModel::removeFolder,
-                    onRefresh = viewModel::refreshAll,
+                    onRefreshFolder = viewModel::refreshFolder,
+                    onRefreshAll = viewModel::refreshAll,
                 )
             }
         }
@@ -138,7 +141,7 @@ fun rememberFolderPicker(): FolderPicker {
     picker.launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let {
             context.contentResolver.takePersistableUriPermission(
-                it, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                it, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
         }
         picker.onResult(uri)
@@ -227,6 +230,12 @@ class FolderSelectionViewModel(
         }
     }
 
+    fun refreshFolder(uri: String) {
+        viewModelScope.launch {
+            repository.refreshFolder(uri)
+        }
+    }
+
     fun refreshAll() {
         viewModelScope.launch {
             _isRefreshing.value = true
@@ -255,7 +264,8 @@ fun FolderSelectionScreen(
     onPickFavoritesClick: () -> Unit,
     onToggleFolder: (String, Boolean) -> Unit,
     onRemoveFolder: (String) -> Unit,
-    onRefresh: () -> Unit,
+    onRefreshFolder: (String) -> Unit,
+    onRefreshAll: () -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -272,11 +282,18 @@ fun FolderSelectionScreen(
                     FolderCard(
                         folder = fav,
                         onToggleEnabled = { onToggleFolder(fav.uri, it) },
-                        trailingContent = {
-                            TextButton(onClick = onPickFavoritesClick) {
-                                Text(if (state.isUsingDefaultFavorites) "Choose" else "Change")
-                            }
-                        },
+                        menuContent = { closeMenu ->
+                            DropdownMenuItem(
+                                text = { Text("Change location") },
+                                onClick = { onPickFavoritesClick(); closeMenu() },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Force rescan") },
+                                onClick = { onRefreshFolder(fav.uri); closeMenu() },
+                                leadingIcon = { Icon(Icons.Default.Refresh, null) }
+                            )
+                        }
                     )
                 }
             }
@@ -286,7 +303,7 @@ fun FolderSelectionScreen(
             item {
                 ActionButtons(
                     isRefreshing = state.isRefreshing,
-                    onRefresh = onRefresh,
+                    onRefresh = onRefreshAll,
                     onAdd = onAddFolderClick,
                     hasFolders = state.folders.isNotEmpty(),
                 )
@@ -302,26 +319,26 @@ fun FolderSelectionScreen(
                 item { EmptyStateCard() }
             } else {
                 items(state.folders, key = { it.uri }) { folder ->
-                    var expanded by rememberSaveable(folder.uri) { mutableStateOf(false) }
                     FolderCard(
                         folder = folder,
                         onToggleEnabled = { onToggleFolder(folder.uri, it) },
-                        trailingContent = {
-                            IconButton(onClick = { expanded = !expanded }) {
-                                Icon(Icons.Default.MoreVert, "Options")
-                            }
-                        },
-                        bottomContent = {
-                            AnimatedVisibility(visible = expanded) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    OutlinedButton(
-                                        onClick = { onRemoveFolder(folder.uri); expanded = false },
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                    ) { Text("Remove") }
-                                }
-                            }
-                        },
+                        menuContent = { closeMenu ->
+                            DropdownMenuItem(
+                                text = { Text("Force rescan") },
+                                onClick = { onRefreshFolder(folder.uri); closeMenu() },
+                                leadingIcon = { Icon(Icons.Default.Refresh, null) }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Remove") },
+                                onClick = { onRemoveFolder(folder.uri); closeMenu() },
+                                leadingIcon = { Icon(Icons.Default.Delete, null) },
+                                colors = MenuDefaults.itemColors(
+                                    textColor = MaterialTheme.colorScheme.error,
+                                    leadingIconColor = MaterialTheme.colorScheme.error
+                                )
+                            )
+                        }
                     )
                 }
             }
@@ -358,13 +375,20 @@ private fun ActionButtons(isRefreshing: Boolean, onRefresh: () -> Unit, onAdd: (
 private fun EmptyStateCard() {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
         Column(
-            Modifier.fillMaxWidth().padding(24.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(Icons.Default.Folder, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("No folders selected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Add a folder to display your own images", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            Text(
+                "Add a folder to display your own images",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -374,46 +398,69 @@ private fun FolderCard(
     folder: ImageFolderUiModel,
     onToggleEnabled: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    trailingContent: @Composable () -> Unit = {},
-    bottomContent: @Composable () -> Unit = {},
+    menuContent: @Composable ColumnScope.(() -> Unit) -> Unit,
 ) {
     val alpha = if (folder.enabled) 1f else 0.6f
     val filter = remember(folder.enabled) {
         if (folder.enabled) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Card(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(Modifier.size(96.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                    if (folder.thumbnailUri != null) {
-                        AsyncImage(
-                            modifier = Modifier.fillMaxSize(),
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(folder.thumbnailUri)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            colorFilter = filter,
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize(), Alignment.Center) {
-                            Icon(Icons.Default.Folder, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(Modifier.size(96.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                if (folder.thumbnailUri != null) {
+                    AsyncImage(
+                        modifier = Modifier.fillMaxSize(),
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(folder.thumbnailUri)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        colorFilter = filter,
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Icon(Icons.Default.Folder, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(folder.displayName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(folder.displayPath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(if (folder.imageCount == 1) "1 image" else "${folder.imageCount} images", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary.copy(alpha = alpha))
-                }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Switch(checked = folder.enabled, onCheckedChange = onToggleEnabled)
-                    trailingContent()
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    folder.displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    folder.displayPath,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    if (folder.imageCount == 1) "1 image" else "${folder.imageCount} images",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = alpha),
+                )
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Switch(checked = folder.enabled, onCheckedChange = onToggleEnabled)
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, "Options")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        menuContent { menuExpanded = false }
+                    }
                 }
             }
-            bottomContent()
         }
     }
 }
