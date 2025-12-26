@@ -7,11 +7,8 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
@@ -19,10 +16,10 @@ import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -39,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.DUOTONE_PRESETS
-import dev.abdus.apps.shimmer.FavoritesFolderResolver
 import dev.abdus.apps.shimmer.ImageFolderRepository
 import dev.abdus.apps.shimmer.TapEvent
 import dev.abdus.apps.shimmer.WallpaperPreferences
@@ -155,19 +151,32 @@ private fun ShimmerSettingsScreen(
             )
         },
         bottomBar = {
-            TabRow(selectedTabIndex = selectedTab.ordinal, modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)) {
-                Tab(selected = selectedTab == SettingsTab.SOURCES, onClick = { selectedTab = SettingsTab.SOURCES }, text = { Text("Sources") }, icon = { Icon(Icons.Default.Folder, null) })
-                Tab(selected = selectedTab == SettingsTab.EFFECTS, onClick = { selectedTab = SettingsTab.EFFECTS }, text = { Text("Effects") }, icon = { Icon(Icons.Default.Palette, null) })
-                Tab(selected = selectedTab == SettingsTab.GESTURES, onClick = { selectedTab = SettingsTab.GESTURES }, text = { Text("Gestures") }, icon = { Icon(Icons.Default.TouchApp, null) })
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedTab == SettingsTab.SOURCES,
+                    onClick = { selectedTab = SettingsTab.SOURCES },
+                    label = { Text("Sources") },
+                    icon = { Icon(Icons.Default.Folder, contentDescription = null) }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == SettingsTab.EFFECTS,
+                    onClick = { selectedTab = SettingsTab.EFFECTS },
+                    label = { Text("Effects") },
+                    icon = { Icon(Icons.Default.Palette, contentDescription = null) }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == SettingsTab.GESTURES,
+                    onClick = { selectedTab = SettingsTab.GESTURES },
+                    label = { Text("Gestures") },
+                    icon = { Icon(Icons.Default.TouchApp, contentDescription = null) }
+                )
             }
         }
     ) { paddingValues ->
         Surface(modifier = Modifier.fillMaxSize()) {
             when (selectedTab) {
                 SettingsTab.SOURCES -> {
-                    val effectiveFavUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences).toString()
                     val imageFolders = foldersMetadata.map { (uri, meta) ->
-                        val isFav = uri == effectiveFavUri
                         ImageFolderUiModel(
                             uri = uri,
                             displayName = repository.getFolderDisplayName(uri),
