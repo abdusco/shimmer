@@ -91,8 +91,11 @@ private fun ShimmerSettingsScreen(
     var changeImageOnUnlock by remember { mutableStateOf(preferences.isChangeImageOnUnlockEnabled()) }
     
     var currentWallpaperUri by remember { mutableStateOf<Uri?>(null) }
+    var currentWallpaperName by remember { mutableStateOf<String?>(null) }
+    
     LaunchedEffect(Unit) {
         currentWallpaperUri = repository.getCurrentImageUri()
+        currentWallpaperName = repository.getCurrentImageName()
     }
 
     var tripleTapAction by remember { mutableStateOf(preferences.getGestureAction(TapEvent.TRIPLE_TAP)) }
@@ -177,8 +180,8 @@ private fun ShimmerSettingsScreen(
                     SourcesTab(
                         modifier = Modifier.padding(paddingValues),
                         context = context,
-                        preferences = preferences,
                         currentWallpaperUri = currentWallpaperUri,
+                        currentWallpaperName = currentWallpaperName,
                         imageFolders = imageFolders,
                         transitionEnabled = transitionEnabled,
                         transitionIntervalMillis = transitionIntervalMillis,

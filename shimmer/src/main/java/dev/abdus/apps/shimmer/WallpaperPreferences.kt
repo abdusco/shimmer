@@ -81,6 +81,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_GRAIN_SETTINGS = "wallpaper_grain_settings"
         const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
         const val KEY_FAVORITES_FOLDER_URI = "favorites_folder_uri"
+        const val KEY_SHARED_FOLDER_URI = "shared_folder_uri"
         const val KEY_GESTURE_TRIPLE_TAP_ACTION = "gesture_triple_tap_action"
         const val KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION = "gesture_two_finger_double_tap_action"
         const val KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION = "gesture_three_finger_double_tap_action"
@@ -127,12 +128,36 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 
+    fun getSharedFolderUri(): Uri? {
+        val value = prefs.getString(KEY_SHARED_FOLDER_URI, null) ?: return null
+        return value.toUri()
+    }
+
+    fun setSharedFolderUri(uri: Uri?) {
+        prefs.edit {
+            if (uri == null) {
+                remove(KEY_SHARED_FOLDER_URI)
+            } else {
+                putString(KEY_SHARED_FOLDER_URI, uri.toString())
+            }
+        }
+    }
+
     fun favoritesFolderUriFlow(): Flow<Uri?> = callbackFlow {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == KEY_FAVORITES_FOLDER_URI) trySend(getFavoritesFolderUri())
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         trySend(getFavoritesFolderUri())
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    fun sharedFolderUriFlow(): Flow<Uri?> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_SHARED_FOLDER_URI) trySend(getSharedFolderUri())
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(getSharedFolderUri())
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 

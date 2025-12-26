@@ -1,12 +1,9 @@
 package dev.abdus.apps.shimmer.ui.settings
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,9 +66,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import dev.abdus.apps.shimmer.FavoritesFolderResolver
 import dev.abdus.apps.shimmer.ImageFolderRepository
+import dev.abdus.apps.shimmer.SharedFolderResolver
 import dev.abdus.apps.shimmer.WallpaperPreferences
 import dev.abdus.apps.shimmer.ui.ShimmerTheme
-import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,14 +77,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
 
 data class FolderSelectionUiState(
     val folders: List<ImageFolderUiModel> = emptyList(),
     val favoritesFolder: ImageFolderUiModel? = null,
+    val sharedFolder: ImageFolderUiModel? = null,
     val isUsingDefaultFavorites: Boolean = true,
+    val isUsingDefaultShared: Boolean = true,
     val isRefreshing: Boolean = false,
     val isLoading: Boolean = true,
 )
@@ -119,10 +116,13 @@ class FolderSelectionActivity : ComponentActivity() {
                 FolderSelectionScreen(
                     state = uiState,
                     onAddFolderClick = {
-                        scope.launch { folderPicker.pick()?.let { viewModel.addFolder(it) } }
+                        scope.launch { folderPicker.pick()?.let { uri -> viewModel.addFolder(uri) } }
                     },
                     onPickFavoritesClick = {
-                        scope.launch { folderPicker.pick()?.let { viewModel.updateFavoritesUri(it) } }
+                        scope.launch { folderPicker.pick()?.let { uri -> viewModel.updateFavoritesUri(uri) } }
+                    },
+                    onPickSharedClick = {
+                        scope.launch { folderPicker.pick()?.let { uri -> viewModel.updateSharedUri(uri) } }
                     },
                     onToggleFolder = viewModel::toggleFolderEnabled,
                     onRemoveFolder = viewModel::removeFolder,
@@ -131,41 +131,6 @@ class FolderSelectionActivity : ComponentActivity() {
                 )
             }
         }
-    }
-}
-
-@Composable
-fun rememberFolderPicker(): FolderPicker {
-    val context = LocalContext.current
-    val picker = remember { FolderPickerImpl() }
-    picker.launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let {
-            context.contentResolver.takePersistableUriPermission(
-                it, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-        }
-        picker.onResult(uri)
-    }
-    return picker
-}
-
-interface FolderPicker {
-    suspend fun pick(): Uri?
-}
-
-private class FolderPickerImpl : FolderPicker {
-    lateinit var launcher: androidx.activity.result.ActivityResultLauncher<Uri?>
-    private var continuation: CancellableContinuation<Uri?>? = null
-
-    fun onResult(uri: Uri?) {
-        continuation?.resume(uri)
-        continuation = null
-    }
-
-    override suspend fun pick(): Uri? = suspendCancellableCoroutine { cont ->
-        continuation = cont
-        launcher.launch(null)
-        cont.invokeOnCancellation { continuation = null }
     }
 }
 
@@ -178,10 +143,11 @@ class FolderSelectionViewModel(
 
     val uiState: StateFlow<FolderSelectionUiState> = combine(
         preferences.favoritesFolderUriFlow(),
+        preferences.sharedFolderUriFlow(),
         repository.foldersMetadataFlow,
         _isRefreshing,
-    ) { favoritesUri, metadata, refreshing ->
-        mapToUiState(favoritesUri, metadata, refreshing)
+    ) { favoritesUri, sharedUri, metadata, refreshing ->
+        mapToUiState(favoritesUri, sharedUri, metadata, refreshing)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -190,11 +156,15 @@ class FolderSelectionViewModel(
 
     private suspend fun mapToUiState(
         favoritesUri: Uri?,
+        sharedUri: Uri?,
         metadata: Map<String, ImageFolderRepository.Companion.FolderMetadata>,
         refreshing: Boolean,
     ): FolderSelectionUiState = withContext(Dispatchers.Default) {
         val effectiveFavUri = favoritesUri ?: FavoritesFolderResolver.getDefaultFavoritesUri()
         val favUriStr = effectiveFavUri.toString()
+        
+        val effectiveSharedUri = sharedUri ?: SharedFolderResolver.getDefaultSharedUri()
+        val sharedUriStr = effectiveSharedUri.toString()
 
         val allUiModels = metadata.map { (uri, meta) ->
             val isFav = uri == favUriStr
@@ -210,9 +180,11 @@ class FolderSelectionViewModel(
         }
 
         FolderSelectionUiState(
-            folders = allUiModels.filter { !it.isFavorites },
-            favoritesFolder = allUiModels.find { it.isFavorites },
+            folders = allUiModels.filter { it.uri != favUriStr && it.uri != sharedUriStr },
+            favoritesFolder = allUiModels.find { it.uri == favUriStr },
+            sharedFolder = allUiModels.find { it.uri == sharedUriStr },
             isUsingDefaultFavorites = favoritesUri == null,
+            isUsingDefaultShared = sharedUri == null,
             isRefreshing = refreshing,
             isLoading = false,
         )
@@ -254,6 +226,10 @@ class FolderSelectionViewModel(
     fun updateFavoritesUri(uri: Uri) {
         preferences.setFavoritesFolderUri(uri)
     }
+
+    fun updateSharedUri(uri: Uri) {
+        preferences.setSharedFolderUri(uri)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -262,6 +238,7 @@ fun FolderSelectionScreen(
     state: FolderSelectionUiState,
     onAddFolderClick: () -> Unit,
     onPickFavoritesClick: () -> Unit,
+    onPickSharedClick: () -> Unit,
     onToggleFolder: (String, Boolean) -> Unit,
     onRemoveFolder: (String) -> Unit,
     onRefreshFolder: (String) -> Unit,
@@ -276,7 +253,8 @@ fun FolderSelectionScreen(
             contentPadding = PaddingValues(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { SectionHeader("Favorites", "Saved wallpapers and quick picks") }
+            item { SectionHeader("Special folders", "System managed image collections") }
+            
             state.favoritesFolder?.let { fav ->
                 item {
                     FolderCard(
@@ -291,6 +269,27 @@ fun FolderSelectionScreen(
                             DropdownMenuItem(
                                 text = { Text("Force rescan") },
                                 onClick = { onRefreshFolder(fav.uri); closeMenu() },
+                                leadingIcon = { Icon(Icons.Default.Refresh, null) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            state.sharedFolder?.let { shared ->
+                item {
+                    FolderCard(
+                        folder = shared,
+                        onToggleEnabled = { onToggleFolder(shared.uri, it) },
+                        menuContent = { closeMenu ->
+                            DropdownMenuItem(
+                                text = { Text("Change location") },
+                                onClick = { onPickSharedClick(); closeMenu() },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Force rescan") },
+                                onClick = { onRefreshFolder(shared.uri); closeMenu() },
                                 leadingIcon = { Icon(Icons.Default.Refresh, null) }
                             )
                         }
@@ -455,7 +454,9 @@ private fun FolderCard(
                     }
                     DropdownMenu(
                         expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
+                        onDismissRequest = { menuExpanded = false },
+                        modifier = Modifier.padding(8.dp),
+                        shape = RoundedCornerShape(12.dp),
                     ) {
                         menuContent { menuExpanded = false }
                     }

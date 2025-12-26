@@ -86,41 +86,51 @@ class ImageFolderRepository(context: Context) {
         Log.d(TAG, "Initializing Repository")
         val prefs = WallpaperPreferences.create(appContext)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == WallpaperPreferences.KEY_FAVORITES_FOLDER_URI) {
-                Log.d(TAG, "Favorites folder URI changed, syncing")
-                scope.launch { syncFavoritesFolder(prefs) }
+            if (key == WallpaperPreferences.KEY_FAVORITES_FOLDER_URI || key == WallpaperPreferences.KEY_SHARED_FOLDER_URI) {
+                Log.d(TAG, "Special folder configuration changed ($key), syncing")
+                scope.launch { syncSpecialFolders(prefs) }
             }
         }
         prefs.registerListener(listener)
-        scope.launch { syncFavoritesFolder(prefs) }
+        scope.launch { syncSpecialFolders(prefs) }
     }
 
-    private suspend fun syncFavoritesFolder(preferences: WallpaperPreferences) {
+    private suspend fun syncSpecialFolders(preferences: WallpaperPreferences) {
         runCatching {
             val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences).toString()
-            val defaultUri = FavoritesFolderResolver.getDefaultFavoritesUri().toString()
+            val defaultFavUri = FavoritesFolderResolver.getDefaultFavoritesUri().toString()
+            
+            val sharedUri = SharedFolderResolver.getEffectiveSharedUri(preferences).toString()
+            val defaultSharedUri = SharedFolderResolver.getDefaultSharedUri().toString()
 
-            val folderId = db.withTransaction {
-                // 1. If we are using a custom favorites folder, remove the default internal one from the DB
-                if (favoritesUri != defaultUri) {
-                    Log.d(TAG, "Custom favorites active ($favoritesUri), removing default internal favorites from DB")
-                    dao.deleteFolderByUri(defaultUri)
+            val timestamp = isoNow()
+            
+            db.withTransaction {
+                // 1. Cleanup stale default favorites if custom one is active
+                if (favoritesUri != defaultFavUri) {
+                    Log.d(TAG, "Custom favorites active, removing default internal favorites from DB")
+                    dao.deleteFolderByUri(defaultFavUri)
                 }
 
-                Log.d(TAG, "Syncing favorites folder: $favoritesUri")
-                val timestamp = isoNow()
-                val insertedId = dao.insertFolder(FolderEntity(uri = favoritesUri, isEnabled = true, lastScannedAt = timestamp, createdAt = timestamp))
-                if (insertedId != -1L) insertedId else dao.getFolderId(favoritesUri)
+                // 2. Cleanup stale default shared if custom one is active
+                if (sharedUri != defaultSharedUri) {
+                    Log.d(TAG, "Custom shared active, removing default internal shared from DB")
+                    dao.deleteFolderByUri(defaultSharedUri)
+                }
+
+                // 3. Ensure Favorites folder entry
+                dao.insertFolder(FolderEntity(uri = favoritesUri, isEnabled = true, lastScannedAt = timestamp, createdAt = timestamp))
+                
+                // 4. Ensure Shared folder entry
+                dao.insertFolder(FolderEntity(uri = sharedUri, isEnabled = true, lastScannedAt = timestamp, createdAt = timestamp))
             }
 
-            if (folderId != null) {
-                Log.d(TAG, "Found folderId $folderId for favorites, starting scan")
-                scanAndIndex(folderId, favoritesUri)
-            } else {
-                Log.e(TAG, "Could not find folderId after insertion for $favoritesUri")
-            }
+            // 5. Scan both
+            dao.getFolderId(favoritesUri)?.let { scanAndIndex(it, favoritesUri) }
+            dao.getFolderId(sharedUri)?.let { scanAndIndex(it, sharedUri) }
+
         }.onFailure {
-            Log.e(TAG, "Failed to sync favorites folder", it)
+            Log.e(TAG, "Failed to sync special folders", it)
         }
     }
 
@@ -278,6 +288,21 @@ class ImageFolderRepository(context: Context) {
         dao.getLatestShownImage()?.uri?.toUri()
     }
 
+    suspend fun getCurrentImageName(): String? = withContext(Dispatchers.IO) {
+        val uri = getCurrentImageUri() ?: return@withContext null
+        runCatching {
+            appContext.contentResolver.query(
+                uri,
+                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment
+    }
+
     fun refreshAllFolders() {
         Log.d(TAG, "Refreshing all folders")
         scope.launch {
@@ -290,9 +315,11 @@ class ImageFolderRepository(context: Context) {
 
     fun getFolderDisplayName(uriString: String, isFavorites: Boolean): String {
         val uri = uriString.toUri()
-        // If it's our internal scheme, it's always "Favorites"
         if (FavoritesFolderResolver.isDefaultFavoritesUri(uri)) {
             return "Favorites"
+        }
+        if (SharedFolderResolver.isDefaultSharedUri(uri)) {
+            return "Shared images"
         }
 
         return runCatching {
@@ -305,6 +332,9 @@ class ImageFolderRepository(context: Context) {
             val uri = uriString.toUri()
             if (FavoritesFolderResolver.isDefaultFavoritesUri(uri)) {
                 return FavoritesFolderResolver.getDefaultDisplayPath()
+            }
+            if (SharedFolderResolver.isDefaultSharedUri(uri)) {
+                return SharedFolderResolver.getDefaultDisplayPath()
             }
             if (uri.scheme == "file") {
                 return uri.path ?: uriString

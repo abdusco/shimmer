@@ -3,7 +3,6 @@ package dev.abdus.apps.shimmer.ui.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -52,15 +51,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import dev.abdus.apps.shimmer.WallpaperPreferences
 import kotlin.math.roundToInt
 
 @Composable
 fun SourcesTab(
     modifier: Modifier = Modifier,
     context: Context,
-    preferences: WallpaperPreferences,
     currentWallpaperUri: Uri?,
+    currentWallpaperName: String?,
     imageFolders: List<ImageFolderUiModel>,
     transitionEnabled: Boolean,
     transitionIntervalMillis: Long,
@@ -82,6 +80,7 @@ fun SourcesTab(
         item {
             CurrentWallpaperCard(
                 wallpaperUri = currentWallpaperUri,
+                wallpaperName = currentWallpaperName,
                 onViewImage = { uri ->
                     val viewIntent = Intent(Intent.ACTION_VIEW).apply {
                         setDataAndType(uri, "image/*")
@@ -117,24 +116,11 @@ fun SourcesTab(
 @Composable
 private fun CurrentWallpaperCard(
     wallpaperUri: Uri?,
+    wallpaperName: String?,
     onViewImage: (Uri) -> Unit,
 ) {
     val context = LocalContext.current
-    val fileName = remember(wallpaperUri) {
-        wallpaperUri?.let { uri ->
-            runCatching {
-                context.contentResolver.query(
-                    uri,
-                    arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-                    null,
-                    null,
-                    null
-                )?.use { c ->
-                    if (c.moveToFirst()) c.getString(0) else null
-                }
-            }.getOrNull() ?: uri.lastPathSegment ?: "Unknown"
-        } ?: "No wallpaper"
-    }
+    val displayName = wallpaperName ?: "No wallpaper"
 
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
         Box(
@@ -179,7 +165,7 @@ private fun CurrentWallpaperCard(
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                     .padding(16.dp)
             ) {
-                Text(fileName, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(displayName, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -286,7 +272,7 @@ private fun TransitionDurationSetting(
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f) ) {
                     Icon(Icons.Outlined.Lock, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Change when screen unlocks", style = MaterialTheme.typography.bodyMedium)
                 }
