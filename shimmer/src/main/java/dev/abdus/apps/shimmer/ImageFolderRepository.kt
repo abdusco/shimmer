@@ -295,6 +295,9 @@ class ImageFolderRepository(context: Context) {
         dao.getLatestShownImage()?.uri?.toUri()
     }
 
+    val currentImageUriFlow: Flow<Uri?> = dao.getLatestShownImageFlow()
+        .map { it?.uri?.toUri() }
+
     suspend fun getFolderId(uri: String): Long? = withContext(Dispatchers.IO) {
         dao.getFolderId(uri)
     }
@@ -308,8 +311,8 @@ class ImageFolderRepository(context: Context) {
         dao.updateLastShownByUri(uri.toString(), isoNow())
     }
 
-    suspend fun getCurrentImageName(): String? = withContext(Dispatchers.IO) {
-        val uri = getCurrentImageUri() ?: return@withContext null
+    suspend fun getCurrentImageName(uri: Uri?): String? = withContext(Dispatchers.IO) {
+        if (uri == null) return@withContext null
         runCatching {
             appContext.contentResolver.query(
                 uri,

@@ -1,7 +1,6 @@
 package dev.abdus.apps.shimmer.ui.settings
 
 import android.content.SharedPreferences
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -92,12 +91,11 @@ private fun ShimmerSettingsScreen(
     var blurTimeoutMillis by remember { mutableLongStateOf(preferences.getBlurTimeoutMillis()) }
     var changeImageOnUnlock by remember { mutableStateOf(preferences.isChangeImageOnUnlockEnabled()) }
 
-    var currentWallpaperUri by remember { mutableStateOf<Uri?>(null) }
     var currentWallpaperName by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        currentWallpaperUri = repository.getCurrentImageUri()
-        currentWallpaperName = repository.getCurrentImageName()
+    val currentWallpaperUri by repository.currentImageUriFlow.collectAsState(initial = null)
+    
+    LaunchedEffect(currentWallpaperUri) {
+        currentWallpaperName = repository.getCurrentImageName(currentWallpaperUri)
     }
 
     var tripleTapAction by remember { mutableStateOf(preferences.getGestureAction(TapEvent.TRIPLE_TAP)) }

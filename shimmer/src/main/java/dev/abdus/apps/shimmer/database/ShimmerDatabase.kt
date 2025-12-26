@@ -112,6 +112,9 @@ interface ImageDao {
     @Query("SELECT * FROM images ORDER BY lastShownAt DESC LIMIT 1")
     suspend fun getLatestShownImage(): ImageEntity?
 
+    @Query("SELECT * FROM images ORDER BY lastShownAt DESC LIMIT 1")
+    fun getLatestShownImageFlow(): Flow<ImageEntity?>
+
     @Query("SELECT uri FROM images WHERE folderId = :folderId ORDER BY createdAt DESC")
     fun getImagesForFolderFlow(folderId: Long): Flow<List<String>>
 
