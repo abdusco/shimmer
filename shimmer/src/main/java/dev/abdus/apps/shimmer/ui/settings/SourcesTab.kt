@@ -1,6 +1,5 @@
 package dev.abdus.apps.shimmer.ui.settings
 
-import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -26,15 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.SwapHoriz
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -45,27 +39,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import kotlin.math.roundToInt
 
 @Composable
 fun SourcesTab(
     modifier: Modifier = Modifier,
-    currentWallpaperUri: Uri?,
-    currentWallpaperName: String?,
-    imageFolders: List<ImageFolderUiModel>,
-    transitionEnabled: Boolean,
-    transitionIntervalMillis: Long,
-    changeImageOnUnlock: Boolean,
-    onViewCurrentWallpaper: () -> Unit,
-    onTransitionEnabledChange: (Boolean) -> Unit,
-    onTransitionDurationChange: (Long) -> Unit,
-    onChangeImageOnUnlockChange: (Boolean) -> Unit,
+    state: SourcesUiState,
+    actions: SourcesActions,
 ) {
-    val context = LocalContext.current
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -78,32 +61,28 @@ fun SourcesTab(
     ) {
         item {
             CurrentWallpaperCard(
-                wallpaperUri = currentWallpaperUri,
-                wallpaperName = currentWallpaperName,
-                onViewImage = { onViewCurrentWallpaper() },
+                wallpaperUri = state.currentWallpaperUri,
+                wallpaperName = state.currentWallpaperName,
+                onViewImage = actions.onViewCurrentWallpaper,
             )
         }
 
         item {
             FolderThumbnailSlider(
-                imageFolders = imageFolders,
-                onFolderClick = { id, name ->
-                    context.startActivity(FolderDetailActivity.createIntent(context, id, name))
-                },
-                onOpenFolderSelection = {
-                    context.startActivity(Intent(context, FolderSelectionActivity::class.java))
-                },
+                imageFolders = state.imageFolders,
+                onFolderClick = actions.onNavigateToFolderDetail,
+                onOpenFolderSelection = actions.onNavigateToFolderSelection,
             )
         }
 
         item {
-            TransitionDurationSetting(
-                enabled = transitionEnabled,
-                durationMillis = transitionIntervalMillis,
-                changeImageOnUnlock = changeImageOnUnlock,
-                onEnabledChange = onTransitionEnabledChange,
-                onDurationChange = onTransitionDurationChange,
-                onChangeImageOnUnlockChange = onChangeImageOnUnlockChange,
+            ImageCycleSettingsSection(
+                enabled = state.imageCycleEnabled,
+                intervalMillis = state.imageCycleIntervalMillis,
+                cycleImageOnUnlock = state.cycleImageOnUnlock,
+                onImageCycleEnabledChange = actions.onImageCycleEnabledChange,
+                onImageCycleIntervalChange = actions.onImageCycleIntervalChange,
+                onCycleImageOnUnlockChange = actions.onCycleImageOnUnlockChange,
             )
         }
     }
@@ -238,66 +217,6 @@ private fun FolderThumbnailLarge(
         } else {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
                 Icon(Icons.Default.Folder, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TransitionDurationSetting(
-    enabled: Boolean,
-    durationMillis: Long,
-    changeImageOnUnlock: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    onDurationChange: (Long) -> Unit,
-    onChangeImageOnUnlockChange: (Boolean) -> Unit,
-) {
-    val options = TRANSITION_DURATION_OPTIONS
-    val sliderIndex = options.indexOfFirst { it.millis == durationMillis }.takeIf { it >= 0 } ?: 0
-    val selectedOption = options.getOrElse(sliderIndex) { options.first() }
-    Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
-        Column(modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.SwapHoriz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Text("Change images automatically", style = MaterialTheme.typography.titleMedium)
-                }
-                Switch(checked = enabled, onCheckedChange = onEnabledChange)
-            }
-            Text(
-                "Automatically cycle through images from your selected folders at regular intervals",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            androidx.compose.animation.AnimatedVisibility(visible = enabled) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Timer, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Change every", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Slider(
-                        value = sliderIndex.toFloat(),
-                        onValueChange = { raw ->
-                            val nextIndex = raw.roundToInt().coerceIn(0, options.lastIndex)
-                            onDurationChange(options[nextIndex].millis)
-                        },
-                        valueRange = 0f..options.lastIndex.toFloat(),
-                        steps = (options.size - 2).coerceAtLeast(0),
-                    )
-                    Text(
-                        "Next change in ${selectedOption.label}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
-                }
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Outlined.Lock, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Change when screen unlocks", style = MaterialTheme.typography.bodyMedium)
-                }
-                Switch(checked = changeImageOnUnlock, onCheckedChange = onChangeImageOnUnlockChange)
             }
         }
     }

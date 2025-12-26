@@ -26,7 +26,7 @@ import dev.abdus.apps.shimmer.WallpaperPreferences
 import kotlin.math.roundToInt
 
 @Composable
-fun EventsSettings(
+fun EventsSettingsSection(
     blurOnScreenLock: Boolean,
     blurTimeoutEnabled: Boolean,
     blurTimeoutMillis: Long,
@@ -79,7 +79,7 @@ fun EventsSettings(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Blur when screen is locked",
+                        text = "Blur on screen lock",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

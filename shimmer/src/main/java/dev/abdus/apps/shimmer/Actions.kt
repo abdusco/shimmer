@@ -86,6 +86,7 @@ class Actions {
                     Intent(Intent.ACTION_VIEW).apply {
                         if (type != null) setDataAndType(targetUri, type) else data = targetUri
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }.let(context::startActivity)
                 }.onSuccess { return }
             }
@@ -95,6 +96,7 @@ class Actions {
             val viewIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "image/*")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             try {
                 context.startActivity(viewIntent)

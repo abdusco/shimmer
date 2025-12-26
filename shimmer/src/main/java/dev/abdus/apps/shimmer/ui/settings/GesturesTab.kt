@@ -39,16 +39,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.GestureAction
 import dev.abdus.apps.shimmer.R
+import dev.abdus.apps.shimmer.TapEvent
 
 @Composable
 fun GesturesTab(
     modifier: Modifier = Modifier,
-    tripleTapAction: GestureAction,
-    twoFingerDoubleTapAction: GestureAction,
-    threeFingerDoubleTapAction: GestureAction,
-    onTripleTapActionChange: (GestureAction) -> Unit,
-    onTwoFingerDoubleTapActionChange: (GestureAction) -> Unit,
-    onThreeFingerDoubleTapActionChange: (GestureAction) -> Unit,
+    state: GesturesUiState,
+    actions: GesturesActions,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -96,8 +93,8 @@ fun GesturesTab(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), thickness = 0.5.dp)
 
                     GestureActionRow(
-                        action = tripleTapAction,
-                        onActionChange = onTripleTapActionChange,
+                        action = state.tripleTapAction,
+                        onActionChange = { actions.onGestureChange(TapEvent.TRIPLE_TAP, it) },
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(
@@ -112,8 +109,8 @@ fun GesturesTab(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
 
                     GestureActionRow(
-                        action = twoFingerDoubleTapAction,
-                        onActionChange = onTwoFingerDoubleTapActionChange,
+                        action = state.twoFingerDoubleTapAction,
+                        onActionChange = { actions.onGestureChange(TapEvent.TWO_FINGER_DOUBLE_TAP, it) },
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(
@@ -128,8 +125,8 @@ fun GesturesTab(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp)
 
                     GestureActionRow(
-                        action = threeFingerDoubleTapAction,
-                        onActionChange = onThreeFingerDoubleTapActionChange,
+                        action = state.threeFingerDoubleTapAction,
+                        onActionChange = { actions.onGestureChange(TapEvent.THREE_FINGER_DOUBLE_TAP, it) },
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(

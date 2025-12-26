@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.R
 
 @Composable
-fun ImageEffectsSettings(
+fun ImageEffectsSettingsSection(
     blurAmount: Float,
     dimAmount: Float,
     effectTransitionDurationMillis: Long,

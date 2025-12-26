@@ -82,6 +82,7 @@ dependencies {
     implementation platform(libs.composeBom)
     androidTestImplementation platform(libs.composeBom)
     implementation libs.androidxActivityCompose
+    implementation libs.androidxLifecycleViewmodelCompose
     implementation libs.composeMaterial3
     implementation libs.composeUiToolingPreview
     implementation "androidx.compose.material:material-icons-extended"

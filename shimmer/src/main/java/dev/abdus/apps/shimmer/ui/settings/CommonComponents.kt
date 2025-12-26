@@ -15,6 +15,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +27,30 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+
+val PADDING_X = 24.dp
+val PADDING_Y = 24.dp
+
+
+/**
+ * Debounces value changes - only executes the callback after [delayMillis] of inactivity.
+ * Automatically cancels pending execution when value changes, implementing true debounce behavior.
+ * Useful for expensive operations like image reprocessing.
+ */
+@Composable
+fun <T> DebouncedEffect(
+    value: T,
+    delayMillis: Long = 500,
+    onDebounced: suspend (T) -> Unit,
+) {
+    LaunchedEffect(value) {
+        delay(delayMillis)
+        onDebounced(value)
+    }
+}
+
 
 @Composable
 fun PercentSlider(
@@ -42,12 +66,12 @@ fun PercentSlider(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             icon?.invoke()
             Text(
                 text = "$title: ${labelFormatter(value)}",
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
         Slider(
@@ -55,7 +79,7 @@ fun PercentSlider(
             onValueChange = onValueChange,
             enabled = enabled,
             steps = steps,
-            valueRange = 0f..1f
+            valueRange = 0f..1f,
         )
     }
 }
@@ -75,10 +99,10 @@ fun DurationSlider(
     val minDuration = durationRange.first.toFloat()
     val maxDuration = durationRange.last.toFloat()
     val durationSpan = maxDuration - minDuration
-    
+
     // Convert duration to 0..1 slider value
     val sliderValue = ((durationMillis - minDuration) / durationSpan).coerceIn(0f, 1f)
-    
+
     PercentSlider(
         title = title,
         icon = {
@@ -87,7 +111,7 @@ fun DurationSlider(
                     imageVector = icon,
                     modifier = Modifier.size(20.dp),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
@@ -104,7 +128,7 @@ fun DurationSlider(
             val duration = (sliderVal * durationSpan + minDuration).roundToInt().toLong()
                 .coerceIn(durationRange.first, durationRange.last)
             formatDurationMs(duration)
-        }
+        },
     )
 }
 
@@ -134,12 +158,12 @@ fun ColorHexField(
     var localValue by remember { mutableStateOf(value.uppercase()) }
     // Track the last valid value we sent to distinguish our updates from external ones
     var lastValidSentValue by remember { mutableStateOf<String?>(null) }
-    
+
     // Sync from parent only when parent value represents an external change
     androidx.compose.runtime.LaunchedEffect(value) {
         val normalizedParent = value.uppercase()
         val normalizedLocal = localValue.uppercase()
-        
+
         // Only sync if parent has a valid color that's different from what we last sent
         // This prevents parent from overwriting user's partial input while typing
         if (isValidHexColor(normalizedParent)) {
@@ -155,10 +179,10 @@ fun ColorHexField(
             lastValidSentValue = ""
         }
     }
-    
+
     val normalized = localValue.uppercase()
     val isError = normalized.isNotEmpty() && !isValidHexColor(normalized)
-    
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             modifier = Modifier.weight(1f),
@@ -175,7 +199,7 @@ fun ColorHexField(
             },
             label = { Text(label) },
             singleLine = true,
-            isError = isError
+            isError = isError,
         )
         Spacer(modifier = Modifier.width(12.dp))
         ColorSwatch(previewColor, RoundedCornerShape(8.dp))
@@ -188,7 +212,7 @@ fun ColorSwatch(color: Color, shape: Shape) {
         modifier = Modifier.size(40.dp),
         color = color,
         shape = shape,
-        shadowElevation = 2.dp
+        shadowElevation = 2.dp,
     ) {}
 }
 

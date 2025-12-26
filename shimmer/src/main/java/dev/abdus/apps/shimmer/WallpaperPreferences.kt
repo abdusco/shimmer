@@ -364,7 +364,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun getTransitionIntervalMillis(): Long =
         prefs.getLong(KEY_TRANSITION_INTERVAL, DEFAULT_TRANSITION_INTERVAL_MILLIS)
 
-    fun setTransitionIntervalMillis(durationMillis: Long) {
+    fun setImageCycleIntervalMillis(durationMillis: Long) {
         prefs.edit {
             putLong(KEY_TRANSITION_INTERVAL, durationMillis.coerceAtLeast(0L))
         }
@@ -373,7 +373,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun isTransitionEnabled(): Boolean =
         prefs.getBoolean(KEY_TRANSITION_ENABLED, true)
 
-    fun setTransitionEnabled(enabled: Boolean) {
+    fun setImageCycleEnabled(enabled: Boolean) {
         prefs.edit {
             putBoolean(KEY_TRANSITION_ENABLED, enabled)
         }
@@ -408,7 +408,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun isChangeImageOnUnlockEnabled(): Boolean =
         prefs.getBoolean(KEY_CHANGE_IMAGE_ON_UNLOCK, false)
 
-    fun setChangeImageOnUnlock(enabled: Boolean) {
+    fun setCycleImageOnUnlock(enabled: Boolean) {
         prefs.edit {
             putBoolean(KEY_CHANGE_IMAGE_ON_UNLOCK, enabled)
         }
