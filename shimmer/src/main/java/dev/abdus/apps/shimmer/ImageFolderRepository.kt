@@ -313,13 +313,13 @@ class ImageFolderRepository(context: Context) {
         }
     }
 
-    fun getFolderDisplayName(uriString: String, isFavorites: Boolean): String {
+    fun getFolderDisplayName(uriString: String): String {
         val uri = uriString.toUri()
         if (FavoritesFolderResolver.isDefaultFavoritesUri(uri)) {
             return "Favorites"
         }
         if (SharedFolderResolver.isDefaultSharedUri(uri)) {
-            return "Shared images"
+            return "Shared"
         }
 
         return runCatching {

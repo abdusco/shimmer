@@ -94,7 +94,6 @@ data class ImageFolderUiModel(
     val thumbnailUri: Uri?,
     val imageCount: Int,
     val enabled: Boolean,
-    val isFavorites: Boolean = false,
 )
 
 class FolderSelectionActivity : ComponentActivity() {
@@ -165,15 +164,18 @@ class FolderSelectionViewModel(
         val sharedUriStr = effectiveSharedUri.toString()
 
         val allUiModels = metadata.map { (uri, meta) ->
-            val isFav = uri == favUriStr
+            val displayName = when (uri) {
+                favUriStr -> "Favorites"
+                sharedUriStr -> "Shared"
+                else -> repository.getFolderDisplayName(uri)
+            }
             ImageFolderUiModel(
                 uri = uri,
-                displayName = repository.getFolderDisplayName(uri, isFav),
+                displayName = displayName,
                 displayPath = repository.formatTreeUriPath(uri),
                 thumbnailUri = meta.thumbnailUri,
                 imageCount = meta.imageCount,
                 enabled = meta.isEnabled,
-                isFavorites = isFav
             )
         }
 

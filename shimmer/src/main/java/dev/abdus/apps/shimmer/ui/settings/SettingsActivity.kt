@@ -170,7 +170,7 @@ private fun ShimmerSettingsScreen(
                         val isFav = uri == effectiveFavUri
                         ImageFolderUiModel(
                             uri = uri,
-                            displayName = repository.getFolderDisplayName(uri, isFav),
+                            displayName = repository.getFolderDisplayName(uri),
                             displayPath = repository.formatTreeUriPath(uri),
                             thumbnailUri = meta.thumbnailUri,
                             imageCount = meta.imageCount,
