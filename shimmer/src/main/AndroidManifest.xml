@@ -29,6 +29,9 @@
             android:name=".ui.settings.FolderSelectionActivity"
             android:exported="true" />
         <activity
+            android:name=".ui.settings.FolderDetailActivity"
+            android:exported="true" />
+        <activity
             android:name=".ui.NextImageShortcutActivity"
             android:exported="true"
             android:excludeFromRecents="true"

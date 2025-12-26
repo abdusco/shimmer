@@ -92,6 +92,9 @@ fun SourcesTab(
         item {
             FolderThumbnailSlider(
                 imageFolders = imageFolders,
+                onFolderClick = { id, name ->
+                    context.startActivity(FolderDetailActivity.createIntent(context, id, name))
+                },
                 onOpenFolderSelection = {
                     context.startActivity(Intent(context, FolderSelectionActivity::class.java))
                 }
@@ -171,6 +174,7 @@ private fun CurrentWallpaperCard(
 @Composable
 private fun FolderThumbnailSlider(
     imageFolders: List<ImageFolderUiModel>,
+    onFolderClick: (Long, String) -> Unit,
     onOpenFolderSelection: () -> Unit,
 ) {
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
@@ -196,7 +200,10 @@ private fun FolderThumbnailSlider(
             } else {
                 LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
                     items(imageFolders, key = { it.uri }) { folder ->
-                        FolderThumbnailLarge(folder = folder)
+                        FolderThumbnailLarge(
+                            folder = folder,
+                            onClick = { onFolderClick(folder.id, folder.displayName) }
+                        )
                     }
                 }
             }
@@ -205,12 +212,20 @@ private fun FolderThumbnailSlider(
 }
 
 @Composable
-private fun FolderThumbnailLarge(folder: ImageFolderUiModel, modifier: Modifier = Modifier) {
+private fun FolderThumbnailLarge(
+    folder: ImageFolderUiModel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val filter = remember(folder.enabled) {
         if (folder.enabled) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     }
 
-    Surface(modifier = modifier.size(160.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+    Surface(
+        modifier = modifier.size(160.dp).clickable { onClick() }, 
+        shape = RoundedCornerShape(12.dp), 
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
         if (folder.thumbnailUri != null) {
             AsyncImage(
                 modifier = Modifier.fillMaxSize(),

@@ -182,7 +182,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             scope.launch {
                 val lastUri = folderRepository.getCurrentImageUri()
-                val uriToLoad = if (lastUri != null && folderRepository.isImageLoadable(lastUri)) {
+                val uriToLoad = if (lastUri != null && folderRepository.isImageUriValid(lastUri)) {
                     lastUri
                 } else {
                     folderRepository.nextImageUri()
@@ -364,6 +364,15 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             Actions.ACTION_ENABLE_BLUR -> {
                                 sessionBlurEnabled = true
                                 applyBlurState(false)
+                            }
+                            Actions.ACTION_SET_SPECIFIC_IMAGE -> {
+                                val uri = intent.getParcelableExtra<Uri>(Actions.EXTRA_IMAGE_URI)
+                                if (uri != null) {
+                                    scope.launch {
+                                        folderRepository.updateImageLastShown(uri)
+                                        loadImage(uri)
+                                    }
+                                }
                             }
                         }
                     }

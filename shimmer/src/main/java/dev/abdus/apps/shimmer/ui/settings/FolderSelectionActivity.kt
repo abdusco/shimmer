@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,6 +90,7 @@ data class FolderSelectionUiState(
 )
 
 data class ImageFolderUiModel(
+    val id: Long,
     val uri: String,
     val displayName: String,
     val displayPath: String,
@@ -114,6 +116,9 @@ class FolderSelectionActivity : ComponentActivity() {
                 FolderSelectionScreen(
                     state = uiState,
                     onBackClick = { finish() },
+                    onFolderClick = { id, name ->
+                        startActivity(FolderDetailActivity.createIntent(this, id, name))
+                    },
                     onAddFolderClick = {
                         scope.launch { folderPicker.pick()?.let { uri -> viewModel.addFolder(uri) } }
                     },
@@ -172,6 +177,7 @@ class FolderSelectionViewModel(
                 else -> repository.getFolderDisplayName(uri)
             }
             ImageFolderUiModel(
+                id = meta.folderId,
                 uri = uri,
                 displayName = displayName,
                 displayPath = repository.formatTreeUriPath(uri),
@@ -239,6 +245,7 @@ class FolderSelectionViewModel(
 fun FolderSelectionScreen(
     state: FolderSelectionUiState,
     onBackClick: () -> Unit,
+    onFolderClick: (Long, String) -> Unit,
     onAddFolderClick: () -> Unit,
     onPickFavoritesClick: () -> Unit,
     onPickSharedClick: () -> Unit,
@@ -271,6 +278,7 @@ fun FolderSelectionScreen(
                 item {
                     FolderCard(
                         folder = fav,
+                        onCardClick = { onFolderClick(fav.id, fav.displayName) },
                         onToggleEnabled = { onToggleFolder(fav.uri, it) },
                         menuContent = { closeMenu ->
                             DropdownMenuItem(
@@ -292,6 +300,7 @@ fun FolderSelectionScreen(
                 item {
                     FolderCard(
                         folder = shared,
+                        onCardClick = { onFolderClick(shared.id, shared.displayName) },
                         onToggleEnabled = { onToggleFolder(shared.uri, it) },
                         menuContent = { closeMenu ->
                             DropdownMenuItem(
@@ -332,6 +341,7 @@ fun FolderSelectionScreen(
                 items(state.folders, key = { it.uri }) { folder ->
                     FolderCard(
                         folder = folder,
+                        onCardClick = { onFolderClick(folder.id, folder.displayName) },
                         onToggleEnabled = { onToggleFolder(folder.uri, it) },
                         menuContent = { closeMenu ->
                             DropdownMenuItem(
@@ -407,6 +417,7 @@ private fun EmptyStateCard() {
 @Composable
 private fun FolderCard(
     folder: ImageFolderUiModel,
+    onCardClick: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     menuContent: @Composable ColumnScope.(() -> Unit) -> Unit,
@@ -417,7 +428,10 @@ private fun FolderCard(
     }
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Card(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+    Card(
+        modifier = modifier.fillMaxWidth().clickable { onCardClick() }, 
+        shape = RoundedCornerShape(12.dp)
+    ) {
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(96.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 if (folder.thumbnailUri != null) {

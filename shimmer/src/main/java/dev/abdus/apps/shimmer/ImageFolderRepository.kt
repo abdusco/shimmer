@@ -288,6 +288,19 @@ class ImageFolderRepository(context: Context) {
         dao.getLatestShownImage()?.uri?.toUri()
     }
 
+    suspend fun getFolderId(uri: String): Long? = withContext(Dispatchers.IO) {
+        dao.getFolderId(uri)
+    }
+
+    fun getImagesForFolderFlow(folderId: Long): Flow<List<Uri>> =
+        dao.getImagesForFolderFlow(folderId).map { list ->
+            list.map { it.toUri() }
+        }
+
+    suspend fun updateImageLastShown(uri: Uri) = withContext(Dispatchers.IO) {
+        dao.updateLastShownByUri(uri.toString(), isoNow())
+    }
+
     suspend fun getCurrentImageName(): String? = withContext(Dispatchers.IO) {
         val uri = getCurrentImageUri() ?: return@withContext null
         runCatching {
@@ -361,7 +374,7 @@ class ImageFolderRepository(context: Context) {
         }
     }
 
-    fun isImageLoadable(uri: Uri): Boolean {
+    fun isImageUriValid(uri: Uri): Boolean {
         return runCatching {
             val file = DocumentFile.fromSingleUri(appContext, uri)
             file?.exists() == true && file.canRead()

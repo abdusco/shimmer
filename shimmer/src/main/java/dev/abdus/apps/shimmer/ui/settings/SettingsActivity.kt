@@ -178,6 +178,7 @@ private fun ShimmerSettingsScreen(
                 SettingsTab.SOURCES -> {
                     val imageFolders = foldersMetadata.map { (uri, meta) ->
                         ImageFolderUiModel(
+                            id = meta.folderId,
                             uri = uri,
                             displayName = repository.getFolderDisplayName(uri),
                             displayPath = repository.formatTreeUriPath(uri),

@@ -112,8 +112,14 @@ interface ImageDao {
     @Query("SELECT * FROM images ORDER BY lastShownAt DESC LIMIT 1")
     suspend fun getLatestShownImage(): ImageEntity?
 
+    @Query("SELECT uri FROM images WHERE folderId = :folderId ORDER BY createdAt DESC")
+    fun getImagesForFolderFlow(folderId: Long): Flow<List<String>>
+
     @Query("UPDATE images SET lastShownAt = :isoDate WHERE id = :id")
     suspend fun updateLastShown(id: Long, isoDate: String)
+
+    @Query("UPDATE images SET lastShownAt = :isoDate WHERE uri = :uri")
+    suspend fun updateLastShownByUri(uri: String, isoDate: String)
 
     @Query("UPDATE images SET favoriteRank = favoriteRank + 1 WHERE uri = :uri")
     suspend fun incrementFavoriteRank(uri: String)

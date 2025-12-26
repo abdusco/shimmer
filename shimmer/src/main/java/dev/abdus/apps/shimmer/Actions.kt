@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 
 
 class Actions {
@@ -15,17 +16,14 @@ class Actions {
         const val ACTION_REFRESH_FOLDERS = "dev.abdus.apps.shimmer.action.REFRESH_FOLDERS"
         const val ACTION_ADD_TO_FAVORITES = "dev.abdus.apps.shimmer.action.ADD_TO_FAVORITES"
         const val ACTION_FAVORITE_ADDED = "dev.abdus.apps.shimmer.action.FAVORITE_ADDED"
+        const val ACTION_SET_SPECIFIC_IMAGE = "dev.abdus.apps.shimmer.action.SET_SPECIFIC_IMAGE"
 
         const val EXTRA_FAVORITE_URI = "favorite_uri"
         const val EXTRA_FAVORITE_DISPLAY_NAME = "favorite_display_name"
+        const val EXTRA_IMAGE_URI = "image_uri"
 
         /**
          * Send a broadcast to request next image.
-         * Can be called from other apps using:
-         * context.sendBroadcast(Intent("dev.abdus.apps.shimmer.action.NEXT_IMAGE"))
-         *
-         * Or via adb:
-         * adb shell am broadcast -a dev.abdus.apps.shimmer.action.NEXT_IMAGE
          */
         fun requestNextImage(context: Context) {
             context.sendBroadcast(Intent(ACTION_NEXT_IMAGE))
@@ -33,11 +31,6 @@ class Actions {
 
         /**
          * Send a broadcast to request next duotone preset.
-         * Can be called from other apps using:
-         * context.sendBroadcast(Intent("dev.abdus.apps.shimmer.action.RANDOM_DUOTONE"))
-         *
-         * Or via adb:
-         * adb shell am broadcast -a dev.abdus.apps.shimmer.action.RANDOM_DUOTONE
          */
         fun requestNextDuotonePreset(context: Context) {
             context.sendBroadcast(Intent(ACTION_NEXT_DUOTONE))
@@ -45,11 +38,6 @@ class Actions {
 
         /**
          * Send a broadcast to trigger folder refresh/scan.
-         * Can be called from other apps using:
-         * context.sendBroadcast(Intent("dev.abdus.apps.shimmer.action.REFRESH_FOLDERS"))
-         *
-         * Or via adb:
-         * adb shell am broadcast -a dev.abdus.apps.shimmer.action.REFRESH_FOLDERS
          */
         fun requestRefreshFolders(context: Context) {
             context.sendBroadcast(Intent(ACTION_REFRESH_FOLDERS))
@@ -76,6 +64,14 @@ class Actions {
             context.sendBroadcast(intent)
         }
 
+        fun broadcastSetWallpaper(context: Context, uri: Uri) {
+            val intent = Intent(ACTION_SET_SPECIFIC_IMAGE).apply {
+                putExtra(EXTRA_IMAGE_URI, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.sendBroadcast(intent)
+        }
+
         fun registerReceivers(context: Context, shortcutReceiver: BroadcastReceiver) {
             val filter = IntentFilter().apply {
                 addAction(ACTION_NEXT_IMAGE)
@@ -84,6 +80,7 @@ class Actions {
                 addAction(ACTION_ENABLE_BLUR)
                 addAction(ACTION_REFRESH_FOLDERS)
                 addAction(ACTION_ADD_TO_FAVORITES)
+                addAction(ACTION_SET_SPECIFIC_IMAGE)
             }
             androidx.core.content.ContextCompat.registerReceiver(
                 context,
