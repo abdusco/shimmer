@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-
     <uses-feature android:name="android.software.live_wallpaper" />
 
     <application
@@ -23,7 +21,7 @@
                 android:resource="@xml/shortcuts" />
         </activity>
         <activity
-            android:name="dev.abdus.apps.shimmer.ui.settings.SettingsActivity"
+            android:name=".ui.settings.SettingsActivity"
             android:exported="true" />
         <activity
             android:name=".ui.settings.FolderSelectionActivity"
