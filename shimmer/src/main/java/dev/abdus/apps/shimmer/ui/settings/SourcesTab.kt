@@ -46,11 +46,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import kotlin.math.roundToInt
 
 @Composable
@@ -119,7 +117,6 @@ private fun CurrentWallpaperCard(
     wallpaperName: String?,
     onViewImage: (Uri) -> Unit,
 ) {
-    val context = LocalContext.current
     val displayName = wallpaperName ?: "No wallpaper"
 
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
@@ -142,7 +139,7 @@ private fun CurrentWallpaperCard(
                 if (currentUri != null) {
                     AsyncImage(
                         modifier = Modifier.fillMaxSize(),
-                        model = ImageRequest.Builder(context).data(currentUri).build(),
+                        model = currentUri,
                         contentDescription = "Current wallpaper",
                         contentScale = ContentScale.Crop
                     )
@@ -209,7 +206,6 @@ private fun FolderThumbnailSlider(
 
 @Composable
 private fun FolderThumbnailLarge(folder: ImageFolderUiModel, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
     val filter = remember(folder.enabled) {
         if (folder.enabled) null else ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     }
@@ -218,7 +214,7 @@ private fun FolderThumbnailLarge(folder: ImageFolderUiModel, modifier: Modifier 
         if (folder.thumbnailUri != null) {
             AsyncImage(
                 modifier = Modifier.fillMaxSize(),
-                model = ImageRequest.Builder(context).data(folder.thumbnailUri).crossfade(true).build(),
+                model = folder.thumbnailUri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 colorFilter = filter

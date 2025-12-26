@@ -56,14 +56,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import dev.abdus.apps.shimmer.FavoritesFolderResolver
 import dev.abdus.apps.shimmer.ImageFolderRepository
 import dev.abdus.apps.shimmer.SharedFolderResolver
@@ -411,10 +409,7 @@ private fun FolderCard(
                 if (folder.thumbnailUri != null) {
                     AsyncImage(
                         modifier = Modifier.fillMaxSize(),
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(folder.thumbnailUri)
-                            .crossfade(true)
-                            .build(),
+                        model = folder.thumbnailUri,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         colorFilter = filter,
