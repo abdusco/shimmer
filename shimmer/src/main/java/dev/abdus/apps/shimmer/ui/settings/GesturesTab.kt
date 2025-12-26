@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
@@ -34,7 +35,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.GestureAction
 
@@ -149,8 +149,8 @@ private fun GestureActionRow(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                // Optional: Adjust offset to align with the text
-                offset = DpOffset(x = (0).dp, y = 4.dp)
+                modifier = Modifier.padding(horizontal = 8.dp),
+                shape = RoundedCornerShape(12.dp),
             ) {
                 GESTURE_ACTION_OPTIONS.forEach { option ->
                     DropdownMenuItem(

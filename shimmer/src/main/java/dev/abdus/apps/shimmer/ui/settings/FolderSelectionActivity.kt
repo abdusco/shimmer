@@ -452,7 +452,7 @@ private fun FolderCard(
                     DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp),
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         menuContent { menuExpanded = false }
