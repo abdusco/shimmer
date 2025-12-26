@@ -5,9 +5,11 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -67,11 +69,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_BLUR_AMOUNT = "wallpaper_blur_amount"
         const val KEY_DIM_AMOUNT = "wallpaper_dim_amount"
         const val KEY_DUOTONE_SETTINGS = "wallpaper_duotone_settings"
-        const val KEY_IMAGE_FOLDERS = "wallpaper_image_folders"
         const val KEY_TRANSITION_INTERVAL = "wallpaper_transition_interval"
         const val KEY_TRANSITION_ENABLED = "wallpaper_transition_enabled"
         const val KEY_EFFECT_TRANSITION_DURATION = "wallpaper_effect_transition_duration"
-        const val KEY_LAST_IMAGE_URI = "wallpaper_last_image_uri"
         const val KEY_BLUR_ON_SCREEN_LOCK = "wallpaper_blur_on_screen_lock"
         const val KEY_CHANGE_IMAGE_ON_UNLOCK = "wallpaper_change_image_on_unlock"
         const val KEY_BLUR_TIMEOUT_ENABLED = "wallpaper_blur_timeout_enabled"
@@ -80,7 +80,6 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_LAST_SELECTED_TAB = "settings_last_selected_tab"
         const val KEY_GRAIN_SETTINGS = "wallpaper_grain_settings"
         const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
-        const val KEY_IMAGE_LAST_CHANGED_AT = "image_last_changed_at"
         const val KEY_FAVORITES_FOLDER_URI = "favorites_folder_uri"
         const val KEY_GESTURE_TRIPLE_TAP_ACTION = "gesture_triple_tap_action"
         const val KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION = "gesture_two_finger_double_tap_action"
@@ -113,13 +112,6 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 
-
-    fun getImageLastChangedAt(): Long = prefs.getLong(KEY_IMAGE_LAST_CHANGED_AT, 0L)
-
-    fun setImageLastChangedAt(time: Long) {
-        prefs.edit { putLong(KEY_IMAGE_LAST_CHANGED_AT, time) }
-    }
-
     fun getFavoritesFolderUri(): Uri? {
         val value = prefs.getString(KEY_FAVORITES_FOLDER_URI, null) ?: return null
         return value.toUri()
@@ -133,6 +125,15 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
                 putString(KEY_FAVORITES_FOLDER_URI, uri.toString())
             }
         }
+    }
+
+    fun favoritesFolderUriFlow(): Flow<Uri?> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_FAVORITES_FOLDER_URI) trySend(getFavoritesFolderUri())
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(getFavoritesFolderUri())
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
     fun getBlurAmount(): Float =
@@ -335,36 +336,6 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         )
     }
 
-    fun getImageFolders(): List<ImageFolder> {
-        val serialized = prefs.getString(KEY_IMAGE_FOLDERS, null)
-        if (serialized.isNullOrBlank()) {
-            return emptyList()
-        }
-        return try {
-            Json.decodeFromString<List<ImageFolder>>(serialized)
-                .filter { it.uri.isNotBlank() }
-        } catch (e: SerializationException) {
-            emptyList()
-        }
-    }
-
-    fun setImageFolders(folders: List<ImageFolder>) {
-        val cleaned = folders
-            .filter { it.uri.isNotBlank() }
-            .distinctBy { it.uri }
-        prefs.edit {
-            if (cleaned.isNotEmpty()) {
-                putString(KEY_IMAGE_FOLDERS, Json.encodeToString(cleaned))
-            } else {
-                remove(KEY_IMAGE_FOLDERS)
-                // Only clear last image URI when all folders are removed
-                setLastImageUri(null)
-            }
-            // Don't clear lastImageUri when folders are updated - let the wallpaper service
-            // validate if the current image is still valid in the new folder set
-        }
-    }
-
     fun getTransitionIntervalMillis(): Long =
         prefs.getLong(KEY_TRANSITION_INTERVAL, DEFAULT_TRANSITION_INTERVAL_MILLIS)
 
@@ -389,19 +360,6 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setEffectTransitionDurationMillis(durationMillis: Long) {
         prefs.edit {
             putLong(KEY_EFFECT_TRANSITION_DURATION, durationMillis.coerceIn(0L, 3000L))
-        }
-    }
-
-    fun getLastImageUri(): Uri? =
-        prefs.getString(KEY_LAST_IMAGE_URI, null)?.toUri()
-
-    fun setLastImageUri(uri: String?) {
-        prefs.edit {
-            if (uri != null) {
-                putString(KEY_LAST_IMAGE_URI, uri)
-            } else {
-                remove(KEY_LAST_IMAGE_URI)
-            }
         }
     }
 

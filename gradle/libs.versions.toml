@@ -5,6 +5,8 @@ appCompat = "1.7.1"
 composeBom = "2024.10.01"
 composeCompiler = "1.5.12"
 activityCompose = "1.9.3"
+room = "2.6.1"
+ksp = "1.9.23-1.0.19"
 
 [libraries]
 appCompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appCompat" }
@@ -14,3 +16,6 @@ composeMaterial3 = { group = "androidx.compose.material3", name = "material3" }
 composeUiToolingPreview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 composeUiTooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 composeUiTestManifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }

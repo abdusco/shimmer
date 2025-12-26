@@ -1,6 +1,7 @@
 package dev.abdus.apps.shimmer
 
 import android.net.Uri
+import androidx.core.net.toUri
 
 object FavoritesFolderResolver {
     private const val DEFAULT_RELATIVE_PATH = "Pictures/Shimmer/"
@@ -8,7 +9,7 @@ object FavoritesFolderResolver {
     private const val DEFAULT_FAVORITES_URI = "shimmer-favorites://pictures/shimmer"
 
     fun getDefaultFavoritesUri(): Uri {
-        return Uri.parse(DEFAULT_FAVORITES_URI)
+        return DEFAULT_FAVORITES_URI.toUri()
     }
 
     fun getEffectiveFavoritesUri(preferences: WallpaperPreferences): Uri {

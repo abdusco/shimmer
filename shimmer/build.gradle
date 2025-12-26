@@ -2,6 +2,7 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.serialization' version '1.9.23'
+    id 'com.google.devtools.ksp'
 }
 
 android {
@@ -87,6 +88,12 @@ dependencies {
     implementation 'io.coil-kt:coil-compose:2.6.0'
     implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'
+    
+    // Room
+    implementation libs.room.runtime
+    implementation libs.room.ktx
+    ksp libs.room.compiler
+
     debugImplementation libs.composeUiTooling
     debugImplementation libs.composeUiTestManifest
 }

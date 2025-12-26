@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import dev.abdus.apps.shimmer.Actions
 import dev.abdus.apps.shimmer.FavoritesRepository
+import dev.abdus.apps.shimmer.ImageFolderRepository
 import dev.abdus.apps.shimmer.R
 import dev.abdus.apps.shimmer.WallpaperPreferences
 import dev.abdus.apps.shimmer.WallpaperUtil
@@ -31,19 +32,21 @@ class AddToFavoritesShortcutActivity : ComponentActivity() {
     }
 
     private fun saveFavoriteFromShortcut() {
-        val preferences = WallpaperPreferences.Companion.create(this)
-        val sourceUri = preferences.getLastImageUri()
-        if (sourceUri == null) {
-            finish()
-            return
-        }
-
-        val repository = FavoritesRepository(this, preferences)
+        val repository = ImageFolderRepository(this)
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) { repository.saveFavorite(sourceUri) }
+            val sourceUri = repository.getCurrentImageUri()
+            if (sourceUri == null) {
+                finish()
+                return@launch
+            }
+
+            val preferences = WallpaperPreferences.create(this@AddToFavoritesShortcutActivity)
+            val favoritesRepo = FavoritesRepository(this@AddToFavoritesShortcutActivity, preferences, repository)
+            
+            val result = withContext(Dispatchers.IO) { favoritesRepo.saveFavorite(sourceUri) }
             if (result.isSuccess) {
                 val saved = result.getOrNull()!!
-                Actions.Companion.broadcastFavoriteAdded(this@AddToFavoritesShortcutActivity, result = saved)
+                Actions.broadcastFavoriteAdded(this@AddToFavoritesShortcutActivity, result = saved)
                 Toast.makeText(
                     this@AddToFavoritesShortcutActivity,
                     getString(R.string.toast_favorite_saved, saved.displayName),

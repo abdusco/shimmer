@@ -1,6 +1,5 @@
 package dev.abdus.apps.shimmer
 
-import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
@@ -19,14 +18,24 @@ data class FavoriteSaveResult(val uri: Uri, val displayName: String)
 class FavoritesRepository(
     private val context: Context,
     private val preferences: WallpaperPreferences,
+    private val folderRepository: ImageFolderRepository,
 ) {
     private val resolver get() = context.contentResolver
 
-    fun saveFavorite(sourceUri: Uri): Result<FavoriteSaveResult> = runCatching {
+    suspend fun saveFavorite(sourceUri: Uri): Result<FavoriteSaveResult> = runCatching {
         val metadata = extractMetadata(sourceUri)
-        preferences.getFavoritesFolderUri()
+        val result = preferences.getFavoritesFolderUri()
             ?.let { saveToFolder(it, sourceUri, metadata) }
             ?: saveToMediaStore(sourceUri, metadata)
+        
+        // Boost the original image's rank in our library
+        folderRepository.incrementFavoriteRank(sourceUri)
+        
+        // Refresh the favorites folder in the DB to pick up the new file
+        val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences).toString()
+        folderRepository.refreshFolder(favoritesUri)
+        
+        result
     }
 
     private data class FileMetadata(
@@ -71,7 +80,6 @@ class FavoritesRepository(
     }
 
     private fun saveToMediaStore(sourceUri: Uri, metadata: FileMetadata): FavoriteSaveResult {
-        // Reuse existing file with same name, path, and size
         metadata.size?.let { size ->
             findExistingFile(metadata.name, size)?.let { return it }
         }
