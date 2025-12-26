@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -47,9 +47,10 @@ fun EventsSettings(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Event,
+                    imageVector = Icons.Rounded.Bolt,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
                 )
                 Text(
                     text = "Events",

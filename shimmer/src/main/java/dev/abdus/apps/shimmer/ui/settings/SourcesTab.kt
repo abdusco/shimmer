@@ -84,8 +84,11 @@ fun SourcesTab(
                         setDataAndType(uri, "image/*")
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    try { context.startActivity(viewIntent) } catch (_: Exception) {}
-                }
+                    try {
+                        context.startActivity(viewIntent)
+                    } catch (_: Exception) {
+                    }
+                },
             )
         }
 
@@ -97,7 +100,7 @@ fun SourcesTab(
                 },
                 onOpenFolderSelection = {
                     context.startActivity(Intent(context, FolderSelectionActivity::class.java))
-                }
+                },
             )
         }
 
@@ -108,7 +111,7 @@ fun SourcesTab(
                 changeImageOnUnlock = changeImageOnUnlock,
                 onEnabledChange = onTransitionEnabledChange,
                 onDurationChange = onTransitionDurationChange,
-                onChangeImageOnUnlockChange = onChangeImageOnUnlockChange
+                onChangeImageOnUnlockChange = onChangeImageOnUnlockChange,
             )
         }
     }
@@ -129,7 +132,7 @@ private fun CurrentWallpaperCard(
                 .height(360.dp)
                 .clickable(enabled = wallpaperUri != null) {
                     wallpaperUri?.let { onViewImage(it) }
-                }
+                },
         ) {
             AnimatedContent(
                 targetState = wallpaperUri,
@@ -137,14 +140,14 @@ private fun CurrentWallpaperCard(
                     fadeIn(animationSpec = tween(750)) togetherWith
                             fadeOut(animationSpec = tween(750))
                 },
-                label = "wallpaper_crossfade"
+                label = "wallpaper_crossfade",
             ) { currentUri ->
                 if (currentUri != null) {
                     AsyncImage(
                         modifier = Modifier.fillMaxSize(),
                         model = currentUri,
                         contentDescription = "Current wallpaper",
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
                     )
                 } else {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -163,7 +166,7 @@ private fun CurrentWallpaperCard(
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-                    .padding(16.dp)
+                    .padding(16.dp),
             ) {
                 Text(displayName, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -180,18 +183,22 @@ private fun FolderThumbnailSlider(
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth().padding(vertical = PADDING_Y, horizontal = PADDING_X)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = PADDING_Y, horizontal = PADDING_X),
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                     Text("Image sources", style = MaterialTheme.typography.titleMedium)
                 }
                 Button(onClick = onOpenFolderSelection) { Text("Manage") }
             }
 
             if (imageFolders.isEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Folder, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("No folders selected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -202,7 +209,7 @@ private fun FolderThumbnailSlider(
                     items(imageFolders, key = { it.uri }) { folder ->
                         FolderThumbnailLarge(
                             folder = folder,
-                            onClick = { onFolderClick(folder.id, folder.displayName) }
+                            onClick = { onFolderClick(folder.id, folder.displayName) },
                         )
                     }
                 }
@@ -222,9 +229,11 @@ private fun FolderThumbnailLarge(
     }
 
     Surface(
-        modifier = modifier.size(160.dp).clickable { onClick() }, 
-        shape = RoundedCornerShape(12.dp), 
-        color = MaterialTheme.colorScheme.surfaceVariant
+        modifier = modifier
+            .size(160.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         if (folder.thumbnailUri != null) {
             AsyncImage(
@@ -232,7 +241,7 @@ private fun FolderThumbnailLarge(
                 model = folder.thumbnailUri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                colorFilter = filter
+                colorFilter = filter,
             )
         } else {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -258,12 +267,16 @@ private fun TransitionDurationSetting(
         Column(modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.SwapHoriz, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Outlined.SwapHoriz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                     Text("Change images automatically", style = MaterialTheme.typography.titleMedium)
                 }
                 Switch(checked = enabled, onCheckedChange = onEnabledChange)
             }
-            Text("Automatically cycle through images from your selected folders at regular intervals", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Automatically cycle through images from your selected folders at regular intervals",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             androidx.compose.animation.AnimatedVisibility(visible = enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -277,13 +290,18 @@ private fun TransitionDurationSetting(
                             onDurationChange(options[nextIndex].millis)
                         },
                         valueRange = 0f..options.lastIndex.toFloat(),
-                        steps = (options.size - 2).coerceAtLeast(0)
+                        steps = (options.size - 2).coerceAtLeast(0),
                     )
-                    Text("Next change in ${selectedOption.label}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
+                    Text(
+                        "Next change in ${selectedOption.label}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f) ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Outlined.Lock, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Change when screen unlocks", style = MaterialTheme.typography.bodyMedium)
                 }

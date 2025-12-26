@@ -14,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import dev.abdus.apps.shimmer.ChromaticAberrationSettings
-import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.DuotoneBlendMode
 import dev.abdus.apps.shimmer.DuotonePreset
 import dev.abdus.apps.shimmer.DuotoneSettings
@@ -190,10 +189,6 @@ fun EffectsTab(
                 onBlendModeChange = onDuotoneBlendModeChange,
                 onPresetSelected = { preset ->
                     onDuotonePresetSelected(preset)
-                    val presetIndex = DUOTONE_PRESETS.indexOf(preset)
-                    if (presetIndex >= 0) {
-                        // Preset selection is handled by the parent
-                    }
                 }
             )
         }

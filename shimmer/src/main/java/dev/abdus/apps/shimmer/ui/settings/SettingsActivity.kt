@@ -6,9 +6,11 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
@@ -32,11 +34,14 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.ImageFolderRepository
+import dev.abdus.apps.shimmer.R
 import dev.abdus.apps.shimmer.TapEvent
 import dev.abdus.apps.shimmer.WallpaperPreferences
 import dev.abdus.apps.shimmer.ui.ShimmerTheme
@@ -75,9 +80,9 @@ private fun ShimmerSettingsScreen(
     var grainSettings by remember { mutableStateOf(preferences.getGrainSettings()) }
     var duotone by remember { mutableStateOf(preferences.getDuotoneSettings()) }
     var chromaticAberration by remember { mutableStateOf(preferences.getChromaticAberrationSettings()) }
-    
+
     val foldersMetadata by repository.foldersMetadataFlow.collectAsState(initial = emptyMap())
-    
+
     var transitionIntervalMillis by remember { mutableLongStateOf(preferences.getTransitionIntervalMillis()) }
     var transitionEnabled by remember { mutableStateOf(preferences.isTransitionEnabled()) }
     var effectTransitionDurationMillis by remember { mutableLongStateOf(preferences.getEffectTransitionDurationMillis()) }
@@ -85,10 +90,10 @@ private fun ShimmerSettingsScreen(
     var blurTimeoutEnabled by remember { mutableStateOf(preferences.isBlurTimeoutEnabled()) }
     var blurTimeoutMillis by remember { mutableLongStateOf(preferences.getBlurTimeoutMillis()) }
     var changeImageOnUnlock by remember { mutableStateOf(preferences.isChangeImageOnUnlockEnabled()) }
-    
+
     var currentWallpaperUri by remember { mutableStateOf<Uri?>(null) }
     var currentWallpaperName by remember { mutableStateOf<String?>(null) }
-    
+
     LaunchedEffect(Unit) {
         currentWallpaperUri = repository.getCurrentImageUri()
         currentWallpaperName = repository.getCurrentImageName()
@@ -140,14 +145,11 @@ private fun ShimmerSettingsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("Shimmer", style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                        Text("Customize your wallpaper", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(painter = painterResource(R.drawable.shimmer), null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Shimmer", style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                     }
                 },
-                navigationIcon = {
-                    Icon(Icons.Default.Palette, null, modifier = Modifier.padding(horizontal = 16.dp))
-                }
             )
         },
         bottomBar = {
@@ -156,22 +158,22 @@ private fun ShimmerSettingsScreen(
                     selected = selectedTab == SettingsTab.SOURCES,
                     onClick = { selectedTab = SettingsTab.SOURCES },
                     label = { Text("Sources") },
-                    icon = { Icon(Icons.Default.Folder, contentDescription = null) }
+                    icon = { Icon(Icons.Default.Folder, contentDescription = null) },
                 )
                 NavigationBarItem(
                     selected = selectedTab == SettingsTab.EFFECTS,
                     onClick = { selectedTab = SettingsTab.EFFECTS },
                     label = { Text("Effects") },
-                    icon = { Icon(Icons.Default.Palette, contentDescription = null) }
+                    icon = { Icon(Icons.Default.Palette, contentDescription = null) },
                 )
                 NavigationBarItem(
                     selected = selectedTab == SettingsTab.GESTURES,
                     onClick = { selectedTab = SettingsTab.GESTURES },
                     label = { Text("Gestures") },
-                    icon = { Icon(Icons.Default.TouchApp, contentDescription = null) }
+                    icon = { Icon(Icons.Default.TouchApp, contentDescription = null) },
                 )
             }
-        }
+        },
     ) { paddingValues ->
         Surface(modifier = Modifier.fillMaxSize()) {
             when (selectedTab) {
@@ -184,7 +186,7 @@ private fun ShimmerSettingsScreen(
                             displayPath = repository.formatTreeUriPath(uri),
                             thumbnailUri = meta.thumbnailUri,
                             imageCount = meta.imageCount,
-                            enabled = meta.isEnabled
+                            enabled = meta.isEnabled,
                         )
                     }
                     SourcesTab(
@@ -198,7 +200,7 @@ private fun ShimmerSettingsScreen(
                         changeImageOnUnlock = changeImageOnUnlock,
                         onTransitionEnabledChange = { preferences.setTransitionEnabled(it) },
                         onTransitionDurationChange = { preferences.setTransitionIntervalMillis(it) },
-                        onChangeImageOnUnlockChange = { preferences.setChangeImageOnUnlock(it) }
+                        onChangeImageOnUnlockChange = { preferences.setChangeImageOnUnlock(it) },
                     )
                 }
 
@@ -235,7 +237,7 @@ private fun ShimmerSettingsScreen(
                     onBlurTimeoutMillisChange = { preferences.setBlurTimeoutMillis(it) },
                     onChromaticAberrationEnabledChange = { preferences.setChromaticAberrationEnabled(it) },
                     onChromaticAberrationIntensityChange = { preferences.setChromaticAberrationIntensity(it) },
-                    onChromaticAberrationFadeDurationChange = { preferences.setChromaticAberrationFadeDuration(it) }
+                    onChromaticAberrationFadeDurationChange = { preferences.setChromaticAberrationFadeDuration(it) },
                 )
 
                 SettingsTab.GESTURES -> GesturesTab(
@@ -245,7 +247,7 @@ private fun ShimmerSettingsScreen(
                     threeFingerDoubleTapAction = threeFingerDoubleTapAction,
                     onTripleTapActionChange = { preferences.setGestureAction(TapEvent.TRIPLE_TAP, it) },
                     onTwoFingerDoubleTapActionChange = { preferences.setGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP, it) },
-                    onThreeFingerDoubleTapActionChange = { preferences.setGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP, it) }
+                    onThreeFingerDoubleTapActionChange = { preferences.setGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP, it) },
                 )
             }
         }

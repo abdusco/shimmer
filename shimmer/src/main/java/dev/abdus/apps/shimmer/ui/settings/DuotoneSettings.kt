@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Contrast
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,10 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.DuotoneBlendMode
 import dev.abdus.apps.shimmer.DuotonePreset
+import dev.abdus.apps.shimmer.R
 
 @Composable
 fun DuotoneSettings(
@@ -69,9 +69,10 @@ fun DuotoneSettings(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Contrast,
+                        painter = painterResource(R.drawable.icon_filter),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
                     )
                     Text(
                         text = "Duotone effect",

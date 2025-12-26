@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.RemoveRedEye
@@ -18,7 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import dev.abdus.apps.shimmer.R
 
 @Composable
 fun ChromaticAberrationSettings(
@@ -49,7 +52,8 @@ fun ChromaticAberrationSettings(
                     Icon(
                         imageVector = Icons.Outlined.RemoveRedEye,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
                     )
                     Text(
                         text = "Chromatic aberration",
@@ -71,7 +75,13 @@ fun ChromaticAberrationSettings(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PercentSlider(
                         title = "Intensity",
-                        icon = Icons.Outlined.RemoveRedEye,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.icon_opacity),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
                         value = intensity,
                         onValueChange = onIntensityChange,
                         steps = (1f / 0.1f).toInt() - 1,

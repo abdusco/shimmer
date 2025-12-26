@@ -33,7 +33,7 @@ fun PercentSlider(
     title: String,
     value: Float,
     onValueChange: (Float) -> Unit,
-    icon: ImageVector? = null,
+    icon: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
     steps: Int = 19,
     labelFormatter: (Float) -> String = { formatPercent(it) },
@@ -44,14 +44,7 @@ fun PercentSlider(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            icon?.invoke()
             Text(
                 text = "$title: ${labelFormatter(value)}",
                 style = MaterialTheme.typography.bodyMedium
@@ -88,7 +81,16 @@ fun DurationSlider(
     
     PercentSlider(
         title = title,
-        icon = icon,
+        icon = {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    modifier = Modifier.size(20.dp),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
         value = sliderValue,
         onValueChange = { sliderVal ->
             // Convert slider value (0..1) back to duration range
