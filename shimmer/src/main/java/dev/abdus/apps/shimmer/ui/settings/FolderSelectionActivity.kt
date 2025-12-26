@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -112,6 +113,7 @@ class FolderSelectionActivity : ComponentActivity() {
 
                 FolderSelectionScreen(
                     state = uiState,
+                    onBackClick = { finish() },
                     onAddFolderClick = {
                         scope.launch { folderPicker.pick()?.let { uri -> viewModel.addFolder(uri) } }
                     },
@@ -236,6 +238,7 @@ class FolderSelectionViewModel(
 @Composable
 fun FolderSelectionScreen(
     state: FolderSelectionUiState,
+    onBackClick: () -> Unit,
     onAddFolderClick: () -> Unit,
     onPickFavoritesClick: () -> Unit,
     onPickSharedClick: () -> Unit,
@@ -246,7 +249,16 @@ fun FolderSelectionScreen(
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        topBar = { TopAppBar(title = { Text("Image Folders") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Image Folders") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
