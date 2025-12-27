@@ -32,7 +32,7 @@ class FavoritesRepository(
         folderRepository.incrementFavoriteRank(sourceUri)
         
         // Refresh the favorites folder in the DB to pick up the new file
-        val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences).toString()
+        val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences)
         folderRepository.refreshFolder(favoritesUri)
         
         result

@@ -1,6 +1,7 @@
 package dev.abdus.apps.shimmer.database
 
 import android.content.Context
+import android.net.Uri
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -12,7 +13,21 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import kotlinx.coroutines.flow.Flow
+
+class UriConverters {
+    @TypeConverter
+    fun fromString(value: String?): Uri? {
+        return value?.let { Uri.parse(it) }
+    }
+
+    @TypeConverter
+    fun toString(uri: Uri?): String? {
+        return uri?.toString()
+    }
+}
 
 @Entity(
     tableName = "folders",
@@ -20,7 +35,7 @@ import kotlinx.coroutines.flow.Flow
 )
 data class FolderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val uri: String,
+    val uri: Uri,
     val isEnabled: Boolean = true,
     val lastScannedAt: String? = null,
     val createdAt: String? = null,
@@ -42,7 +57,7 @@ data class FolderEntity(
 data class ImageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val folderId: Long,
-    val uri: String,
+    val uri: Uri,
     val lastShownAt: String? = null,
     val createdAt: String? = null,
     val favoriteRank: Int = 0,
@@ -52,14 +67,14 @@ data class ImageEntity(
 
 data class FolderMetadata(
     val folderId: Long,
-    val folderUri: String,
+    val folderUri: Uri,
     val isEnabled: Boolean,
     val imageCount: Int,
-    val thumbnailUri: String?
+    val thumbnailUri: Uri?
 )
 
 data class ImageEntry(
-    val uri: String,
+    val uri: Uri,
     val width: Int?,
     val height: Int?
 )
@@ -70,7 +85,7 @@ interface ImageDao {
     suspend fun insertFolder(folder: FolderEntity): Long
 
     @Query("SELECT id FROM folders WHERE uri = :uri LIMIT 1")
-    suspend fun getFolderId(uri: String): Long?
+    suspend fun getFolderId(uri: Uri): Long?
 
     @Query("SELECT lastScannedAt FROM folders WHERE id = :id")
     suspend fun getFolderLastScanned(id: Long): String?
@@ -85,7 +100,7 @@ interface ImageDao {
     suspend fun updateFolderLastPicked(id: Long, isoDate: String)
 
     @Query("DELETE FROM folders WHERE uri = :uri")
-    suspend fun deleteFolderByUri(uri: String)
+    suspend fun deleteFolderByUri(uri: Uri)
 
     @Query("SELECT * FROM folders")
     fun getAllFoldersFlow(): Flow<List<FolderEntity>>
@@ -94,7 +109,7 @@ interface ImageDao {
     suspend fun insertImages(images: List<ImageEntity>)
 
     @Query("DELETE FROM images WHERE folderId = :folderId AND uri NOT IN (:validUris)")
-    suspend fun deleteInvalidImages(folderId: Long, validUris: List<String>)
+    suspend fun deleteInvalidImages(folderId: Long, validUris: List<Uri>)
 
     /**
      * Finds the next folder in the round-robin cycle.
@@ -131,17 +146,17 @@ interface ImageDao {
     suspend fun updateLastShown(id: Long, isoDate: String)
 
     @Query("UPDATE images SET lastShownAt = :isoDate WHERE uri = :uri")
-    suspend fun updateLastShownByUri(uri: String, isoDate: String)
+    suspend fun updateLastShownByUri(uri: Uri, isoDate: String)
 
     @Query("UPDATE images SET favoriteRank = favoriteRank + 1 WHERE uri = :uri")
-    suspend fun incrementFavoriteRank(uri: String)
+    suspend fun incrementFavoriteRank(uri: Uri)
 
     @Query("""
         SELECT COUNT(*) > 0 FROM images i 
         INNER JOIN folders f ON i.folderId = f.id 
         WHERE i.uri = :uri AND f.isEnabled = 1
     """)
-    suspend fun isImageManagedAndEnabled(uri: String): Boolean
+    suspend fun isImageManagedAndEnabled(uri: Uri): Boolean
 
     @Query("SELECT COUNT(*) FROM folders WHERE isEnabled = 1")
     fun getEnabledFoldersCountFlow(): Flow<Int>
@@ -159,6 +174,7 @@ interface ImageDao {
 }
 
 @Database(entities = [FolderEntity::class, ImageEntity::class], version = 2, exportSchema = false)
+@TypeConverters(UriConverters::class)
 abstract class ShimmerDatabase : RoomDatabase() {
     abstract fun imageDao(): ImageDao
 

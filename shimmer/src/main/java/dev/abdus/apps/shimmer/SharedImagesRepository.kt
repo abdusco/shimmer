@@ -34,7 +34,7 @@ class SharedImagesRepository(
         }
         
         // Refresh the shared folder in the DB
-        folderRepository.refreshFolder(targetFolderUri.toString())
+        folderRepository.refreshFolder(targetFolderUri)
         
         count
     }

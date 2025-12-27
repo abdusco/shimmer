@@ -63,7 +63,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
@@ -95,7 +94,7 @@ data class FolderSelectionUiState(
 
 data class ImageFolderUiModel(
     val id: Long,
-    val uri: String,
+    val uri: Uri,
     val displayName: String,
     val displayPath: String,
     val thumbnailUri: Uri?,
@@ -170,19 +169,16 @@ class FolderSelectionViewModel(
     private suspend fun mapToUiState(
         favoritesUri: Uri?,
         sharedUri: Uri?,
-        metadata: Map<String, ImageFolderRepository.Companion.FolderMetadata>,
+        metadata: Map<Uri, ImageFolderRepository.Companion.FolderMetadata>,
         refreshing: Boolean,
     ): FolderSelectionUiState = withContext(Dispatchers.Default) {
         val effectiveFavUri = favoritesUri ?: FavoritesFolderResolver.getDefaultFavoritesUri()
-        val favUriStr = effectiveFavUri.toString()
-
         val effectiveSharedUri = sharedUri ?: SharedFolderResolver.getDefaultSharedUri()
-        val sharedUriStr = effectiveSharedUri.toString()
 
         val allUiModels = metadata.map { (uri, meta) ->
             val displayName = when (uri) {
-                favUriStr -> "Favorites"
-                sharedUriStr -> "Shared"
+                effectiveFavUri -> "Favorites"
+                effectiveSharedUri -> "Shared"
                 else -> repository.getFolderDisplayName(uri)
             }
             ImageFolderUiModel(
@@ -199,9 +195,9 @@ class FolderSelectionViewModel(
         }
 
         FolderSelectionUiState(
-            folders = allUiModels.filter { it.uri != favUriStr && it.uri != sharedUriStr },
-            favoritesFolder = allUiModels.find { it.uri == favUriStr },
-            sharedFolder = allUiModels.find { it.uri == sharedUriStr },
+            folders = allUiModels.filter { it.uri != effectiveFavUri && it.uri != effectiveSharedUri },
+            favoritesFolder = allUiModels.find { it.uri == effectiveFavUri },
+            sharedFolder = allUiModels.find { it.uri == effectiveSharedUri },
             isUsingDefaultFavorites = favoritesUri == null,
             isUsingDefaultShared = sharedUri == null,
             isRefreshing = refreshing,
@@ -209,19 +205,19 @@ class FolderSelectionViewModel(
         )
     }
 
-    fun toggleFolderEnabled(uri: String, enabled: Boolean) {
+    fun toggleFolderEnabled(uri: Uri, enabled: Boolean) {
         viewModelScope.launch {
             repository.toggleFolderEnabled(uri, enabled)
         }
     }
 
-    fun removeFolder(uri: String) {
+    fun removeFolder(uri: Uri) {
         viewModelScope.launch {
             repository.removeFolder(uri)
         }
     }
 
-    fun refreshFolder(uri: String) {
+    fun refreshFolder(uri: Uri) {
         viewModelScope.launch {
             repository.refreshFolder(uri)
         }
@@ -260,9 +256,9 @@ fun FolderSelectionScreen(
     onAddFolderClick: () -> Unit,
     onPickFavoritesClick: () -> Unit,
     onPickSharedClick: () -> Unit,
-    onToggleFolder: (String, Boolean) -> Unit,
-    onRemoveFolder: (String) -> Unit,
-    onRefreshFolder: (String) -> Unit,
+    onToggleFolder: (Uri, Boolean) -> Unit,
+    onRemoveFolder: (Uri) -> Unit,
+    onRefreshFolder: (Uri) -> Unit,
     onOpenFolderExternally: (Uri) -> Unit,
     onRefreshAll: () -> Unit,
 ) {
@@ -334,7 +330,7 @@ fun FolderSelectionScreen(
                             if (fav.isLocal) {
                                 DropdownMenuItem(
                                     text = { Text("Open in File Manager") },
-                                    onClick = { onOpenFolderExternally(Uri.parse(fav.uri)); closeMenu() },
+                                    onClick = { onOpenFolderExternally(fav.uri); closeMenu() },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 )
                             }
@@ -363,7 +359,7 @@ fun FolderSelectionScreen(
                             if (shared.isLocal) {
                                 DropdownMenuItem(
                                     text = { Text("Open in File Manager") },
-                                    onClick = { onOpenFolderExternally(Uri.parse(shared.uri)); closeMenu() },
+                                    onClick = { onOpenFolderExternally(shared.uri); closeMenu() },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 )
                             }
@@ -424,7 +420,7 @@ fun FolderSelectionScreen(
                             if (folder.isLocal) {
                                 DropdownMenuItem(
                                     text = { Text("Open in File Manager") },
-                                    onClick = { onOpenFolderExternally(folder.uri.toUri()); closeMenu() },
+                                    onClick = { onOpenFolderExternally(folder.uri); closeMenu() },
                                     leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 )
                             }

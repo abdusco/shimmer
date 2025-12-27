@@ -42,7 +42,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -149,7 +148,7 @@ fun FolderDetailScreen(
                 verticalItemSpacing = 16.dp,
             ) {
                 items(images, key = { it.uri }, contentType = { "image" }) { entry ->
-                    ImageItem(entry = entry, onClick = { onImageClick(entry.uri.toUri()) })
+                    ImageItem(entry = entry, onClick = { onImageClick(entry.uri) })
                 }
             }
 
@@ -173,7 +172,6 @@ private fun ImageItem(entry: ImageEntry, onClick: () -> Unit) {
     var retryHash by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
-    val uri = entry.uri.toUri()
     val aspectRatio = if (entry.width != null && entry.height != null && entry.width > 0 && entry.height > 0) {
         entry.width.toFloat() / entry.height.toFloat()
     } else {
@@ -201,7 +199,7 @@ private fun ImageItem(entry: ImageEntry, onClick: () -> Unit) {
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(uri)
+                    .data(entry.uri)
                     .setParameter("retry", retryHash) // Force cache key change
                     .crossfade(true)
                     .size(400)
