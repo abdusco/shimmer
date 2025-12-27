@@ -41,7 +41,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -101,6 +100,7 @@ data class ImageFolderUiModel(
     val imageCount: Int,
     val enabled: Boolean,
     val isLocal: Boolean,
+    val isScanning: Boolean,
 )
 
 class FolderSelectionActivity : ComponentActivity() {
@@ -192,6 +192,7 @@ class FolderSelectionViewModel(
                 imageCount = meta.imageCount,
                 enabled = meta.isEnabled,
                 isLocal = meta.isLocal,
+                isScanning = meta.isScanning
             )
         }
 
@@ -272,6 +273,35 @@ fun FolderSelectionScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Refresh all") },
+                                onClick = { 
+                                    onRefreshAll()
+                                    menuExpanded = false 
+                                },
+                                leadingIcon = { 
+                                    if (state.isRefreshing) {
+                                        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(Icons.Default.Refresh, null)
+                                    }
+                                },
+                                enabled = !state.isRefreshing
+                            )
+                        }
+                    }
                 }
             )
         },
@@ -342,14 +372,20 @@ fun FolderSelectionScreen(
             }
 
             item { Spacer(Modifier.height(12.dp)) }
-            item { SectionHeader("Local image folders", "Select folders containing images") }
             item {
-                ActionButtons(
-                    isRefreshing = state.isRefreshing,
-                    onRefresh = onRefreshAll,
-                    onAdd = onAddFolderClick,
-                    hasFolders = state.folders.isNotEmpty(),
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    SectionHeader("Local image folders", "Select folders containing images")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Button(onClick = onAddFolderClick) {
+                        Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add")
+                    }
+                }
             }
 
             if (state.isLoading) {
@@ -406,23 +442,6 @@ private fun SectionHeader(title: String, subtitle: String) {
 }
 
 @Composable
-private fun ActionButtons(isRefreshing: Boolean, onRefresh: () -> Unit, onAdd: () -> Unit, hasFolders: Boolean) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onRefresh, enabled = !isRefreshing && hasFolders, modifier = Modifier.weight(1f)) {
-            if (isRefreshing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(if (isRefreshing) "Refreshing..." else "Refresh")
-        }
-        Button(onClick = onAdd, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.Add, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Add")
-        }
-    }
-}
-
-@Composable
 private fun EmptyStateCard() {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
         Column(
@@ -464,17 +483,34 @@ private fun FolderCard(
     ) {
         Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(96.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                if (folder.thumbnailUri != null) {
-                    AsyncImage(
-                        modifier = Modifier.fillMaxSize(),
-                        model = folder.thumbnailUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        colorFilter = filter,
-                    )
-                } else {
-                    Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        Icon(Icons.Default.Folder, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.fillMaxSize()) {
+                    if (folder.thumbnailUri != null) {
+                        AsyncImage(
+                            modifier = Modifier.fillMaxSize(),
+                            model = folder.thumbnailUri,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            colorFilter = if (folder.isScanning) {
+                                ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.3f) })
+                            } else {
+                                filter
+                            },
+                            alpha = if (folder.isScanning) 0.5f else 1f
+                        )
+                    } else {
+                        Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            Icon(Icons.Default.Folder, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    if (folder.isScanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .align(Alignment.Center),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }

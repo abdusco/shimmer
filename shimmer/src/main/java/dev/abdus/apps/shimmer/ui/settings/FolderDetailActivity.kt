@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -40,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -47,6 +49,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import dev.abdus.apps.shimmer.Actions
 import dev.abdus.apps.shimmer.ImageFolderRepository
+import dev.abdus.apps.shimmer.database.ImageEntry
 import dev.abdus.apps.shimmer.ui.ShimmerTheme
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -99,7 +102,7 @@ class FolderDetailViewModel(
     repository: ImageFolderRepository,
     folderId: Long
 ) : ViewModel() {
-    val images: StateFlow<List<Uri>> = repository.getImagesForFolderFlow(folderId)
+    val images: StateFlow<List<ImageEntry>> = repository.getImagesForFolderFlow(folderId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }
 
@@ -143,8 +146,8 @@ fun FolderDetailScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalItemSpacing = 8.dp
         ) {
-            items(images, key = { it }, contentType = { "image" }) { uri ->
-                ImageItem(uri = uri, onClick = { onImageClick(uri) })
+            items(images, key = { it.uri }, contentType = { "image" }) { entry ->
+                ImageItem(entry = entry, onClick = { onImageClick(entry.uri.toUri()) })
             }
 
             item {
@@ -165,10 +168,17 @@ fun FolderDetailScreen(
 }
 
 @Composable
-private fun ImageItem(uri: Uri, onClick: () -> Unit) {
+private fun ImageItem(entry: ImageEntry, onClick: () -> Unit) {
     var retryHash by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
+    val uri = entry.uri.toUri()
+    val aspectRatio = if (entry.width != null && entry.height != null && entry.width > 0 && entry.height > 0) {
+        entry.width.toFloat() / entry.height.toFloat()
+    } else {
+        null
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -178,7 +188,14 @@ private fun ImageItem(uri: Uri, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 120.dp) // Provide a min-height so the grid doesn't collapse
+                .then(
+                    if (aspectRatio != null) {
+                        Modifier.aspectRatio(aspectRatio)
+                    } else {
+                        // Provide a min-height so the grid doesn't collapse
+                        Modifier.heightIn(min = 120.dp)
+                    }
+                )
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             AsyncImage(

@@ -45,7 +45,9 @@ data class ImageEntity(
     val uri: String,
     val lastShownAt: String? = null,
     val createdAt: String? = null,
-    val favoriteRank: Int = 0
+    val favoriteRank: Int = 0,
+    val width: Int? = null,
+    val height: Int? = null
 )
 
 data class FolderMetadata(
@@ -54,6 +56,12 @@ data class FolderMetadata(
     val isEnabled: Boolean,
     val imageCount: Int,
     val firstImageUri: String?
+)
+
+data class ImageEntry(
+    val uri: String,
+    val width: Int?,
+    val height: Int?
 )
 
 @Dao
@@ -115,8 +123,8 @@ interface ImageDao {
     @Query("SELECT * FROM images ORDER BY lastShownAt DESC LIMIT 1")
     fun getLatestShownImageFlow(): Flow<ImageEntity?>
 
-    @Query("SELECT uri FROM images WHERE folderId = :folderId ORDER BY createdAt DESC")
-    fun getImagesForFolderFlow(folderId: Long): Flow<List<String>>
+    @Query("SELECT uri, width, height FROM images WHERE folderId = :folderId ORDER BY createdAt DESC")
+    fun getImagesForFolderFlow(folderId: Long): Flow<List<ImageEntry>>
 
     @Query("UPDATE images SET lastShownAt = :isoDate WHERE id = :id")
     suspend fun updateLastShown(id: Long, isoDate: String)
@@ -151,7 +159,7 @@ interface ImageDao {
     fun getFoldersMetadataFlow(): Flow<List<FolderMetadata>>
 }
 
-@Database(entities = [FolderEntity::class, ImageEntity::class], version = 1, exportSchema = false)
+@Database(entities = [FolderEntity::class, ImageEntity::class], version = 2, exportSchema = false)
 abstract class ShimmerDatabase : RoomDatabase() {
     abstract fun imageDao(): ImageDao
 

@@ -7,17 +7,22 @@ import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
-import androidx.documentfile.provider.DocumentFile.fromSingleUri
 import androidx.room.withTransaction
 import dev.abdus.apps.shimmer.database.FolderEntity
 import dev.abdus.apps.shimmer.database.ImageEntity
+import dev.abdus.apps.shimmer.database.ImageEntry
 import dev.abdus.apps.shimmer.database.ShimmerDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -31,6 +36,9 @@ class ImageFolderRepository(context: Context) {
     private val dao = db.imageDao()
     private val scanner = FolderScanner(appContext)
 
+    private val _activeScans = MutableStateFlow<Set<Long>>(emptySet())
+    private val activeScans: StateFlow<Set<Long>> = _activeScans.asStateFlow()
+
     companion object {
         private const val TAG = "ImageFolderRepository"
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -41,6 +49,7 @@ class ImageFolderRepository(context: Context) {
             val thumbnailUri: Uri?,
             val isEnabled: Boolean,
             val isLocal: Boolean,
+            val isScanning: Boolean,
         )
 
         private fun isoNow(): String {
@@ -53,19 +62,22 @@ class ImageFolderRepository(context: Context) {
     /**
      * Flow of folder metadata (URI, count, thumbnail) for the UI.
      */
-    val foldersMetadataFlow: Flow<Map<String, FolderMetadata>> = dao.getFoldersMetadataFlow()
-        .map { list ->
-            Log.d(TAG, "Metadata flow updated: ${list.size} folders")
-            list.associate {
-                it.folderUri to FolderMetadata(
-                    it.folderId,
-                    it.imageCount,
-                    it.firstImageUri?.toUri(),
-                    it.isEnabled,
-                    it.folderUri.toUri().isLocalFolder(),
-                )
-            }
+    val foldersMetadataFlow: Flow<Map<String, FolderMetadata>> = combine(
+        dao.getFoldersMetadataFlow(),
+        activeScans
+    ) { list, scanning ->
+        Log.d(TAG, "Metadata flow updated: ${list.size} folders")
+        list.associate {
+            it.folderUri to FolderMetadata(
+                it.folderId,
+                it.imageCount,
+                it.firstImageUri?.toUri(),
+                it.isEnabled,
+                it.folderUri.toUri().isLocalFolder(),
+                scanning.contains(it.folderId)
+            )
         }
+    }
 
     fun setOnCurrentImageInvalidatedListener(
         uriProvider: () -> Uri?,
@@ -173,27 +185,72 @@ class ImageFolderRepository(context: Context) {
         }
     }
 
-    private suspend fun scanAndIndex(folderId: Long, folderUri: String) = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Scanning folder $folderUri (id=$folderId)")
-        val images = scanner.scan(folderUri.toUri())
-        Log.d(TAG, "Found ${images.size} images in $folderUri")
+            private suspend fun scanAndIndex(folderId: Long, folderUri: String) = withContext(Dispatchers.IO) {
 
-        val timestamp = isoNow()
-        val entities = images.map { ImageEntity(folderId = folderId, uri = it.toString(), createdAt = timestamp) }
+                Log.d(TAG, "Scanning folder $folderUri (id=$folderId)")
 
-        runCatching {
-            db.withTransaction {
-                dao.insertImages(entities)
-                dao.deleteInvalidImages(folderId, images.map { it.toString() })
-                dao.updateFolderLastScanned(folderId, timestamp)
+                _activeScans.update { it + folderId }
+
+                try {
+
+                    val images = scanner.scan(folderUri.toUri())
+
+                    Log.d(TAG, "Found ${images.size} images in $folderUri")
+
+                    
+
+                    val timestamp = isoNow()
+
+                    val entities = images.map { 
+
+                        ImageEntity(
+
+                            folderId = folderId, 
+
+                            uri = it.uri.toString(), 
+
+                            createdAt = timestamp,
+
+                            width = it.width,
+
+                            height = it.height
+
+                        ) 
+
+                    }
+
+                    
+
+                    runCatching {
+
+                        db.withTransaction {
+
+                            dao.insertImages(entities)
+
+                            dao.deleteInvalidImages(folderId, images.map { it.uri.toString() })
+
+                            dao.updateFolderLastScanned(folderId, timestamp)
+
+                        }
+
+                        Log.d(TAG, "Index complete for $folderUri")
+
+                    }.onFailure {
+
+                        Log.e(TAG, "Failed to index images for $folderUri", it)
+
+                    }
+
+                } finally {
+
+                    _activeScans.update { it - folderId }
+
+                }
+
             }
-            Log.d(TAG, "Index complete for $folderUri")
-        }.onFailure {
-            Log.e(TAG, "Failed to index images for $folderUri", it)
-        }
-    }
 
-    // --- Public API ---
+        
+        // --- Public API ---
 
     suspend fun nextImageUri(): Uri? = withContext(Dispatchers.IO) {
         db.withTransaction {
@@ -236,10 +293,8 @@ class ImageFolderRepository(context: Context) {
         dao.getFolderId(uri)
     }
 
-    fun getImagesForFolderFlow(folderId: Long): Flow<List<Uri>> =
-        dao.getImagesForFolderFlow(folderId).map { list ->
-            list.map { it.toUri() }
-        }
+    fun getImagesForFolderFlow(folderId: Long): Flow<List<ImageEntry>> =
+        dao.getImagesForFolderFlow(folderId)
 
     suspend fun updateImageLastShown(uri: Uri) = withContext(Dispatchers.IO) {
         dao.updateLastShownByUri(uri.toString(), isoNow())
@@ -318,10 +373,7 @@ class ImageFolderRepository(context: Context) {
         }
     }
 
-    fun isImageUriValid(uri: Uri): Boolean = uri.runCatching {
-        val file = fromSingleUri(appContext, uri)
-        file?.exists() == true && file.canRead()
-    }.getOrDefault(false)
+    fun isImageUriValid(uri: Uri): Boolean = uri.isValidImage(appContext)
 
     suspend fun isImageManagedAndEnabled(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         dao.isImageManagedAndEnabled(uri.toString())

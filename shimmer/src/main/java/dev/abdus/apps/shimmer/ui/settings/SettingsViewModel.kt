@@ -181,6 +181,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         imageCount = meta.imageCount,
                         enabled = meta.isEnabled,
                         isLocal = meta.isLocal,
+                        isScanning = meta.isScanning
                     )
                 }
                 _uiState.update { it.copy(imageFolders = folders) }
