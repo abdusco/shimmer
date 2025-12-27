@@ -46,6 +46,10 @@ class SettingsActivity : ComponentActivity() {
     }
 }
 
+sealed interface SettingsAction {
+    data class TabSelected(val tab: SettingsTab) : SettingsAction
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(
@@ -53,9 +57,6 @@ private fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
-    val sourcesActions = viewModel.sourcesActions
-    val effectsActions = viewModel.effectsActions
-    val gesturesActions = viewModel.gesturesActions
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -88,20 +89,20 @@ private fun SettingsScreen(
                     SourcesTab(
                         modifier = Modifier.padding(paddingValues),
                         state = state.sources,
-                        actions = sourcesActions,
+                        onAction = viewModel::handleSourcesAction,
                     )
                 }
 
                 SettingsTab.EFFECTS -> EffectsTab(
                     modifier = Modifier.padding(paddingValues),
                     state = state.effects,
-                    actions = effectsActions,
+                    onAction = viewModel::handleEffectsAction,
                 )
 
                 SettingsTab.GESTURES -> GesturesTab(
                     modifier = Modifier.padding(paddingValues),
                     state = state.gestures,
-                    actions = gesturesActions,
+                    onAction = viewModel::handleGesturesAction,
                 )
             }
         }

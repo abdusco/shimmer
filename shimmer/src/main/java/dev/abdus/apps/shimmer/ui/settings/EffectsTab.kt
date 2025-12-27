@@ -7,35 +7,50 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import dev.abdus.apps.shimmer.ChromaticAberrationSettings
+import dev.abdus.apps.shimmer.DuotoneSettings
+import dev.abdus.apps.shimmer.GrainSettings
+
+data class EffectsState(
+    val blurAmount: Float,
+    val dimAmount: Float,
+    val grainSettings: GrainSettings,
+    val duotone: DuotoneSettings,
+    val chromaticAberration: ChromaticAberrationSettings,
+    val effectTransitionDurationMillis: Long,
+    val blurOnScreenLock: Boolean,
+    val blurTimeoutEnabled: Boolean,
+    val blurTimeoutMillis: Long,
+)
+
+sealed interface EffectsAction {
+    data class SetBlurAmount(val amount: Float) : EffectsAction
+    data class SetDimAmount(val amount: Float) : EffectsAction
+    data class SetEffectTransitionDuration(val durationMillis: Long) : EffectsAction
+    data class UpdateDuotone(val settings: DuotoneSettings) : EffectsAction
+    data class UpdateGrain(val settings: GrainSettings) : EffectsAction
+    data class UpdateChromaticAberration(val settings: ChromaticAberrationSettings) : EffectsAction
+    data class SetBlurOnScreenLock(val enabled: Boolean) : EffectsAction
+    data class SetBlurTimeoutEnabled(val enabled: Boolean) : EffectsAction
+    data class SetBlurTimeoutMillis(val millis: Long) : EffectsAction
+}
 
 @Composable
 fun EffectsTab(
     modifier: Modifier = Modifier,
-    state: EffectsUiState,
-    actions: EffectsActions,
+    state: EffectsState,
+    onAction: (EffectsAction) -> Unit,
 ) {
-    // Local state for sliders to provide instant UI feedback
+    // Local state for blur slider to provide instant UI feedback and allow debouncing
     var localBlurAmount by remember(state.blurAmount) { mutableFloatStateOf(state.blurAmount) }
-    var localDimAmount by remember(state.dimAmount) { mutableFloatStateOf(state.dimAmount) }
-    var localGrainEnabled by remember(state.grainSettings.enabled) { mutableStateOf(state.grainSettings.enabled) }
-    var localGrainAmount by remember(state.grainSettings.amount) { mutableFloatStateOf(state.grainSettings.amount) }
-    var localGrainScale by remember(state.grainSettings.scale) { mutableFloatStateOf(state.grainSettings.scale) }
-    var localChromaticAberrationIntensity by remember(state.chromaticAberration.intensity) {
-        mutableFloatStateOf(state.chromaticAberration.intensity)
-    }
-    var localChromaticAberrationFadeDuration by remember(state.chromaticAberration.fadeDurationMillis) {
-        mutableLongStateOf(state.chromaticAberration.fadeDurationMillis)
-    }
 
     // Debounce blur changes (300ms delay after user stops dragging)
     DebouncedEffect(localBlurAmount, delayMillis = 300) { newValue ->
         if (newValue != state.blurAmount) {
-            actions.onBlurAmountChange(newValue)
+            onAction(EffectsAction.SetBlurAmount(newValue))
         }
     }
 
@@ -52,79 +67,32 @@ fun EffectsTab(
         item {
             ImageEffectsSettingsSection(
                 blurAmount = localBlurAmount,
-                dimAmount = localDimAmount,
+                dimAmount = state.dimAmount,
                 effectTransitionDurationMillis = state.effectTransitionDurationMillis,
                 onBlurAmountChange = { localBlurAmount = it },
-                onDimAmountChange = {
-                    localDimAmount = it
-                    actions.onDimAmountChange(it)
-                },
-                onEffectTransitionDurationChange = actions.onEffectTransitionDurationChange
+                onDimAmountChange = { onAction(EffectsAction.SetDimAmount(it)) },
+                onEffectTransitionDurationChange = { onAction(EffectsAction.SetEffectTransitionDuration(it)) }
             )
         }
 
         item {
             GrainSettings(
-                enabled = localGrainEnabled,
-                amount = localGrainAmount,
-                scale = localGrainScale,
-                onEnabledChange = {
-                    localGrainEnabled = it
-                    actions.onGrainEnabledChange(it)
-                },
-                onAmountChange = {
-                    localGrainAmount = it
-                    actions.onGrainAmountChange(it)
-                    if (!localGrainEnabled) {
-                        localGrainEnabled = true
-                        actions.onGrainEnabledChange(true)
-                    }
-                },
-                onScaleChange = {
-                    localGrainScale = it
-                    actions.onGrainScaleChange(it)
-                    if (!localGrainEnabled) {
-                        localGrainEnabled = true
-                        actions.onGrainEnabledChange(true)
-                    }
-                }
+                state = state.grainSettings,
+                onSettingsChange = { onAction(EffectsAction.UpdateGrain(it)) }
             )
         }
 
         item {
             DuotoneSettings(
-                enabled = state.duotone.enabled,
-                alwaysOn = state.duotone.alwaysOn,
-                lightColorText = colorIntToHex(state.duotone.lightColor),
-                darkColorText = colorIntToHex(state.duotone.darkColor),
-                lightColorPreview = colorIntToComposeColor(state.duotone.lightColor),
-                darkColorPreview = colorIntToComposeColor(state.duotone.darkColor),
-                blendMode = state.duotone.blendMode,
-                onEnabledChange = actions.onDuotoneEnabledChange,
-                onAlwaysOnChange = actions.onDuotoneAlwaysOnChange,
-                onLightColorChange = actions.onDuotoneLightColorChange,
-                onDarkColorChange = actions.onDuotoneDarkColorChange,
-                onBlendModeChange = actions.onDuotoneBlendModeChange,
-                onPresetSelected = { preset ->
-                    actions.onDuotonePresetSelected(preset)
-                }
+                state = state.duotone,
+                onSettingsChange = { onAction(EffectsAction.UpdateDuotone(it)) }
             )
         }
 
         item {
             ChromaticAberrationSettings(
-                enabled = state.chromaticAberration.enabled,
-                intensity = localChromaticAberrationIntensity,
-                fadeDurationMillis = localChromaticAberrationFadeDuration,
-                onEnabledChange = actions.onChromaticAberrationEnabledChange,
-                onIntensityChange = {
-                    localChromaticAberrationIntensity = it
-                    actions.onChromaticAberrationIntensityChange(it)
-                },
-                onFadeDurationChange = {
-                    localChromaticAberrationFadeDuration = it
-                    actions.onChromaticAberrationFadeDurationChange(it)
-                }
+                state = state.chromaticAberration,
+                onSettingsChange = { onAction(EffectsAction.UpdateChromaticAberration(it)) }
             )
         }
 
@@ -133,9 +101,9 @@ fun EffectsTab(
                 blurOnScreenLock = state.blurOnScreenLock,
                 blurTimeoutEnabled = state.blurTimeoutEnabled,
                 blurTimeoutMillis = state.blurTimeoutMillis,
-                onBlurOnScreenLockChange = actions.onBlurOnScreenLockChange,
-                onBlurTimeoutEnabledChange = actions.onBlurTimeoutEnabledChange,
-                onBlurTimeoutMillisChange = actions.onBlurTimeoutMillisChange
+                onBlurOnScreenLockChange = { onAction(EffectsAction.SetBlurOnScreenLock(it)) },
+                onBlurTimeoutEnabledChange = { onAction(EffectsAction.SetBlurTimeoutEnabled(it)) },
+                onBlurTimeoutMillisChange = { onAction(EffectsAction.SetBlurTimeoutMillis(it)) }
             )
         }
     }

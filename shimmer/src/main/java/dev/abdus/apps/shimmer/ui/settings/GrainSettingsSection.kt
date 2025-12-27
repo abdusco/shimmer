@@ -20,16 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import dev.abdus.apps.shimmer.GrainSettings
 import dev.abdus.apps.shimmer.R
 
 @Composable
 fun GrainSettings(
-    enabled: Boolean,
-    amount: Float,
-    scale: Float,
-    onEnabledChange: (Boolean) -> Unit,
-    onAmountChange: (Float) -> Unit,
-    onScaleChange: (Float) -> Unit,
+    state: GrainSettings,
+    onSettingsChange: (GrainSettings) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -60,8 +57,8 @@ fun GrainSettings(
                     )
                 }
                 Switch(
-                    checked = enabled,
-                    onCheckedChange = onEnabledChange,
+                    checked = state.enabled,
+                    onCheckedChange = { onSettingsChange(state.copy(enabled = it)) },
                 )
             }
             Text(
@@ -70,7 +67,7 @@ fun GrainSettings(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            AnimatedVisibility(visible = enabled) {
+            AnimatedVisibility(visible = state.enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PercentSlider(
                         title = "Grain amount",
@@ -81,8 +78,8 @@ fun GrainSettings(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         },
-                        value = amount,
-                        onValueChange = onAmountChange,
+                        value = state.amount,
+                        onValueChange = { onSettingsChange(state.copy(amount = it)) },
                         steps = (1f / 0.1f).toInt() - 1,
                     )
 
@@ -95,8 +92,8 @@ fun GrainSettings(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         },
-                        value = scale,
-                        onValueChange = onScaleChange,
+                        value = state.scale,
+                        onValueChange = { onSettingsChange(state.copy(scale = it)) },
                         steps = (1f / 0.1f).toInt() - 1,
                     )
                 }

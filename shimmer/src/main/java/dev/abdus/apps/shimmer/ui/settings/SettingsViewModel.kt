@@ -8,9 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.abdus.apps.shimmer.Actions
 import dev.abdus.apps.shimmer.ChromaticAberrationSettings
-import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.DuotoneBlendMode
-import dev.abdus.apps.shimmer.DuotonePreset
 import dev.abdus.apps.shimmer.DuotoneSettings
 import dev.abdus.apps.shimmer.GestureAction
 import dev.abdus.apps.shimmer.GrainSettings
@@ -59,8 +57,8 @@ data class SettingsUiState(
     val twoFingerDoubleTapAction: GestureAction = WallpaperPreferences.DEFAULT_TWO_FINGER_DOUBLE_TAP_ACTION,
     val threeFingerDoubleTapAction: GestureAction = WallpaperPreferences.DEFAULT_THREE_FINGER_DOUBLE_TAP_ACTION,
 ) {
-    val sources: SourcesUiState
-        get() = SourcesUiState(
+    val sources: SourcesState
+        get() = SourcesState(
             currentWallpaperUri = currentWallpaperUri,
             currentWallpaperName = currentWallpaperName,
             imageFolders = imageFolders,
@@ -69,8 +67,8 @@ data class SettingsUiState(
             cycleImageOnUnlock = cycleImageOnUnlock,
         )
 
-    val effects: EffectsUiState
-        get() = EffectsUiState(
+    val effects: EffectsState
+        get() = EffectsState(
             blurAmount = blurAmount,
             dimAmount = dimAmount,
             grainSettings = grainSettings,
@@ -82,8 +80,8 @@ data class SettingsUiState(
             blurTimeoutMillis = blurTimeoutMillis,
         )
 
-    val gestures: GesturesUiState
-        get() = GesturesUiState(
+    val gestures: GesturesState
+        get() = GesturesState(
             tripleTapAction = tripleTapAction,
             twoFingerDoubleTapAction = twoFingerDoubleTapAction,
             threeFingerDoubleTapAction = threeFingerDoubleTapAction,
@@ -94,38 +92,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val repository = ImageFolderRepository(application)
     private val preferences = WallpaperPreferences.create(application)
-
-    val sourcesActions = SourcesActions(
-        onViewCurrentWallpaper = ::viewCurrentWallpaper,
-        onImageCycleEnabledChange = ::setImageCycleEnabled,
-        onImageCycleIntervalChange = ::setImageCycleIntervalMillis,
-        onCycleImageOnUnlockChange = ::setCycleImageOnUnlock,
-        onNavigateToFolderDetail = ::navigateToFolderDetail,
-        onNavigateToFolderSelection = ::navigateToFolderSelection,
-    )
-
-    val effectsActions = EffectsActions(
-        onBlurAmountChange = ::setBlurAmount,
-        onDimAmountChange = ::setDimAmount,
-        onEffectTransitionDurationChange = ::setEffectTransitionDurationMillis,
-        onDuotoneEnabledChange = ::setDuotoneEnabled,
-        onDuotoneAlwaysOnChange = ::setDuotoneAlwaysOn,
-        onDuotoneLightColorChange = ::setDuotoneLightColor,
-        onDuotoneDarkColorChange = ::setDuotoneDarkColor,
-        onDuotoneBlendModeChange = ::setDuotoneBlendMode,
-        onGrainEnabledChange = ::setGrainEnabled,
-        onGrainAmountChange = ::setGrainAmount,
-        onGrainScaleChange = ::setGrainScale,
-        onDuotonePresetSelected = ::applyDuotonePreset,
-        onBlurOnScreenLockChange = ::setBlurOnScreenLock,
-        onBlurTimeoutEnabledChange = ::setBlurTimeoutEnabled,
-        onBlurTimeoutMillisChange = ::setBlurTimeoutMillis,
-        onChromaticAberrationEnabledChange = ::setChromaticAberrationEnabled,
-        onChromaticAberrationIntensityChange = ::setChromaticAberrationIntensity,
-        onChromaticAberrationFadeDurationChange = ::setChromaticAberrationFadeDuration,
-    )
-
-    val gesturesActions = GesturesActions(onGestureChange = ::setGestureAction)
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -138,6 +104,37 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         preferences.registerListener(prefsListener)
         loadInitialState()
         observeRepository()
+    }
+
+    fun handleSourcesAction(action: SourcesAction) {
+        when (action) {
+            SourcesAction.ViewCurrentWallpaper -> viewCurrentWallpaper()
+            is SourcesAction.NavigateToFolderDetail -> navigateToFolderDetail(action.folderId, action.folderName)
+            SourcesAction.NavigateToFolderSelection -> navigateToFolderSelection()
+            is SourcesAction.SetImageCycleEnabled -> setImageCycleEnabled(action.enabled)
+            is SourcesAction.SetImageCycleInterval -> setImageCycleIntervalMillis(action.intervalMillis)
+            is SourcesAction.SetCycleImageOnUnlock -> setCycleImageOnUnlock(action.enabled)
+        }
+    }
+
+    fun handleEffectsAction(action: EffectsAction) {
+        when (action) {
+            is EffectsAction.SetBlurAmount -> setBlurAmount(action.amount)
+            is EffectsAction.SetDimAmount -> setDimAmount(action.amount)
+            is EffectsAction.SetEffectTransitionDuration -> setEffectTransitionDurationMillis(action.durationMillis)
+            is EffectsAction.UpdateDuotone -> preferences.setDuotoneSettings(action.settings)
+            is EffectsAction.UpdateGrain -> preferences.setGrainSettings(action.settings)
+            is EffectsAction.UpdateChromaticAberration -> preferences.setChromaticAberrationSettings(action.settings)
+            is EffectsAction.SetBlurOnScreenLock -> setBlurOnScreenLock(action.enabled)
+            is EffectsAction.SetBlurTimeoutEnabled -> setBlurTimeoutEnabled(action.enabled)
+            is EffectsAction.SetBlurTimeoutMillis -> setBlurTimeoutMillis(action.millis)
+        }
+    }
+
+    fun handleGesturesAction(action: GesturesAction) {
+        when (action) {
+            is GesturesAction.SetGestureAction -> setGestureAction(action.event, action.action)
+        }
     }
 
     override fun onCleared() {
@@ -232,34 +229,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun setBlurAmount(amount: Float) = preferences.setBlurAmount(amount)
     fun setDimAmount(amount: Float) = preferences.setDimAmount(amount)
-
-    fun setGrainEnabled(enabled: Boolean) = preferences.setGrainEnabled(enabled)
-    fun setGrainAmount(amount: Float) = preferences.setGrainAmount(amount)
-    fun setGrainScale(scale: Float) = preferences.setGrainScale(scale)
-
-    fun setDuotoneEnabled(enabled: Boolean) = preferences.setDuotoneEnabled(enabled)
-    fun setDuotoneAlwaysOn(alwaysOn: Boolean) = preferences.setDuotoneAlwaysOn(alwaysOn)
-    fun setDuotoneBlendMode(mode: DuotoneBlendMode) = preferences.setDuotoneBlendMode(mode)
-
-    fun setDuotoneLightColor(colorHex: String) {
-        parseColorHex(colorHex)?.let { preferences.setDuotoneLightColor(it) }
-    }
-
-    fun setDuotoneDarkColor(colorHex: String) {
-        parseColorHex(colorHex)?.let { preferences.setDuotoneDarkColor(it) }
-    }
-
-    fun applyDuotonePreset(preset: DuotonePreset) {
-        preferences.setDuotoneLightColor(preset.lightColor)
-        preferences.setDuotoneDarkColor(preset.darkColor)
-        val index = DUOTONE_PRESETS.indexOf(preset)
-        if (index >= 0) preferences.setDuotonePresetIndex(index)
-    }
-
-
-    fun setChromaticAberrationEnabled(enabled: Boolean) = preferences.setChromaticAberrationEnabled(enabled)
-    fun setChromaticAberrationIntensity(intensity: Float) = preferences.setChromaticAberrationIntensity(intensity)
-    fun setChromaticAberrationFadeDuration(duration: Long) = preferences.setChromaticAberrationFadeDuration(duration)
 
     fun setImageCycleEnabled(enabled: Boolean) = preferences.setImageCycleEnabled(enabled)
     fun setImageCycleIntervalMillis(millis: Long) = preferences.setImageCycleIntervalMillis(millis)

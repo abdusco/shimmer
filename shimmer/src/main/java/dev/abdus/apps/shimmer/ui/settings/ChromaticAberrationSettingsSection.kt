@@ -21,16 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import dev.abdus.apps.shimmer.ChromaticAberrationSettings
 import dev.abdus.apps.shimmer.R
 
 @Composable
 fun ChromaticAberrationSettings(
-    enabled: Boolean,
-    intensity: Float,
-    fadeDurationMillis: Long,
-    onEnabledChange: (Boolean) -> Unit,
-    onIntensityChange: (Float) -> Unit,
-    onFadeDurationChange: (Long) -> Unit,
+    state: ChromaticAberrationSettings,
+    onSettingsChange: (ChromaticAberrationSettings) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -61,8 +58,8 @@ fun ChromaticAberrationSettings(
                     )
                 }
                 Switch(
-                    checked = enabled,
-                    onCheckedChange = onEnabledChange
+                    checked = state.enabled,
+                    onCheckedChange = { onSettingsChange(state.copy(enabled = it)) }
                 )
             }
             Text(
@@ -70,8 +67,8 @@ fun ChromaticAberrationSettings(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            
-            AnimatedVisibility(visible = enabled) {
+
+            AnimatedVisibility(visible = state.enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PercentSlider(
                         title = "Intensity",
@@ -82,15 +79,15 @@ fun ChromaticAberrationSettings(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         },
-                        value = intensity,
-                        onValueChange = onIntensityChange,
+                        value = state.intensity,
+                        onValueChange = { onSettingsChange(state.copy(intensity = it)) },
                         steps = (1f / 0.1f).toInt() - 1,
                     )
-                    
+
                     DurationSlider(
                         title = "Fade duration",
-                        durationMillis = fadeDurationMillis,
-                        onDurationChange = onFadeDurationChange,
+                        durationMillis = state.fadeDurationMillis,
+                        onDurationChange = { onSettingsChange(state.copy(fadeDurationMillis = it)) },
                         icon = Icons.Outlined.Timer,
                         durationRange = 0L..3000L,
                         steps = (3000L / 250L).toInt() - 1,

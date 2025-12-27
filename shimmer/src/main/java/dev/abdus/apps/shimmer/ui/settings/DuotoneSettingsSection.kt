@@ -33,23 +33,13 @@ import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.DUOTONE_PRESETS
 import dev.abdus.apps.shimmer.DuotoneBlendMode
 import dev.abdus.apps.shimmer.DuotonePreset
+import dev.abdus.apps.shimmer.DuotoneSettings
 import dev.abdus.apps.shimmer.R
 
 @Composable
 fun DuotoneSettings(
-    enabled: Boolean,
-    alwaysOn: Boolean,
-    lightColorText: String,
-    darkColorText: String,
-    lightColorPreview: Color,
-    darkColorPreview: Color,
-    blendMode: DuotoneBlendMode,
-    onEnabledChange: (Boolean) -> Unit,
-    onAlwaysOnChange: (Boolean) -> Unit,
-    onLightColorChange: (String) -> Unit,
-    onDarkColorChange: (String) -> Unit,
-    onBlendModeChange: (DuotoneBlendMode) -> Unit,
-    onPresetSelected: (DuotonePreset) -> Unit,
+    state: DuotoneSettings,
+    onSettingsChange: (DuotoneSettings) -> Unit,
 ) {
     Surface(
         tonalElevation = 2.dp,
@@ -80,8 +70,8 @@ fun DuotoneSettings(
                     )
                 }
                 Switch(
-                    checked = enabled,
-                    onCheckedChange = onEnabledChange
+                    checked = state.enabled,
+                    onCheckedChange = { onSettingsChange(state.copy(enabled = it)) }
                 )
             }
             Text(
@@ -89,7 +79,7 @@ fun DuotoneSettings(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            AnimatedVisibility(visible = enabled) {
+            AnimatedVisibility(visible = state.enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -101,27 +91,40 @@ fun DuotoneSettings(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Switch(
-                            checked = alwaysOn,
-                            onCheckedChange = onAlwaysOnChange
+                            checked = state.alwaysOn,
+                            onCheckedChange = { onSettingsChange(state.copy(alwaysOn = it)) }
                         )
                     }
                     ColorHexField(
                         label = "Light color (#RRGGBB)",
-                        value = lightColorText,
-                        onValueChange = onLightColorChange,
-                        previewColor = lightColorPreview
+                        value = colorIntToHex(state.lightColor),
+                        onValueChange = { hex ->
+                            parseColorHex(hex)?.let { onSettingsChange(state.copy(lightColor = it)) }
+                        },
+                        previewColor = colorIntToComposeColor(state.lightColor)
                     )
                     ColorHexField(
                         label = "Dark color (#RRGGBB)",
-                        value = darkColorText,
-                        onValueChange = onDarkColorChange,
-                        previewColor = darkColorPreview
+                        value = colorIntToHex(state.darkColor),
+                        onValueChange = { hex ->
+                            parseColorHex(hex)?.let { onSettingsChange(state.copy(darkColor = it)) }
+                        },
+                        previewColor = colorIntToComposeColor(state.darkColor)
                     )
                     DuotoneBlendModeDropdown(
-                        selectedBlendMode = blendMode,
-                        onBlendModeSelected = onBlendModeChange
+                        selectedBlendMode = state.blendMode,
+                        onBlendModeSelected = { onSettingsChange(state.copy(blendMode = it)) }
                     )
-                    DuotonePresetDropdown(onPresetSelected = onPresetSelected)
+                    DuotonePresetDropdown(onPresetSelected = { preset ->
+                        val index = DUOTONE_PRESETS.indexOf(preset)
+                        onSettingsChange(
+                            state.copy(
+                                lightColor = preset.lightColor,
+                                darkColor = preset.darkColor,
+                                presetIndex = index
+                            )
+                        )
+                    })
                 }
             }
         }

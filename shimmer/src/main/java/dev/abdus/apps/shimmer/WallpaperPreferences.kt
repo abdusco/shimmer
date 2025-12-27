@@ -197,23 +197,8 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     private fun getDefaultGrainSettings() = GrainSettings(
         enabled = DEFAULT_GRAIN_ENABLED,
         amount = DEFAULT_GRAIN_AMOUNT,
-        scale = DEFAULT_GRAIN_SCALE
+        scale = DEFAULT_GRAIN_SCALE,
     )
-
-    fun setGrainEnabled(enabled: Boolean) {
-        val current = getGrainSettings()
-        setGrainSettings(current.copy(enabled = enabled))
-    }
-
-    fun setGrainAmount(amount: Float) {
-        val current = getGrainSettings()
-        setGrainSettings(current.copy(amount = amount.coerceIn(0f, 1f)))
-    }
-
-    fun setGrainScale(scale: Float) {
-        val current = getGrainSettings()
-        setGrainSettings(current.copy(scale = scale.coerceIn(0f, 1f)))
-    }
 
     fun setBlurAmount(amount: Float) {
         prefs.edit {
@@ -257,23 +242,8 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     private fun getDefaultChromaticAberrationSettings() = ChromaticAberrationSettings(
         enabled = DEFAULT_CHROMATIC_ABERRATION_ENABLED,
         intensity = DEFAULT_CHROMATIC_ABERRATION_INTENSITY,
-        fadeDurationMillis = DEFAULT_CHROMATIC_ABERRATION_FADE_DURATION
+        fadeDurationMillis = DEFAULT_CHROMATIC_ABERRATION_FADE_DURATION,
     )
-
-    fun setChromaticAberrationEnabled(enabled: Boolean) {
-        val current = getChromaticAberrationSettings()
-        setChromaticAberrationSettings(current.copy(enabled = enabled))
-    }
-
-    fun setChromaticAberrationIntensity(intensity: Float) {
-        val current = getChromaticAberrationSettings()
-        setChromaticAberrationSettings(current.copy(intensity = intensity.coerceIn(0f, 1f)))
-    }
-
-    fun setChromaticAberrationFadeDuration(durationMillis: Long) {
-        val current = getChromaticAberrationSettings()
-        setChromaticAberrationSettings(current.copy(fadeDurationMillis = durationMillis.coerceAtLeast(0)))
-    }
 
     /**
      * Get duotone settings as a single object.
@@ -308,41 +278,11 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         lightColor = DEFAULT_DUOTONE_LIGHT,
         darkColor = DEFAULT_DUOTONE_DARK,
         presetIndex = -1,
-        blendMode = DuotoneBlendMode.NORMAL
+        blendMode = DuotoneBlendMode.NORMAL,
     )
-
-    fun setDuotoneEnabled(enabled: Boolean) {
-        val current = getDuotoneSettings()
-        setDuotoneSettings(current.copy(enabled = enabled))
-    }
-
-    fun setDuotoneAlwaysOn(alwaysOn: Boolean) {
-        val current = getDuotoneSettings()
-        setDuotoneSettings(current.copy(alwaysOn = alwaysOn))
-    }
-
-    fun setDuotoneLightColor(color: Int) {
-        val current = getDuotoneSettings()
-        setDuotoneSettings(current.copy(lightColor = color))
-    }
-
-    fun setDuotoneDarkColor(color: Int) {
-        val current = getDuotoneSettings()
-        setDuotoneSettings(current.copy(darkColor = color))
-    }
 
     fun getDuotonePresetIndex(): Int =
         getDuotoneSettings().presetIndex
-
-    fun setDuotonePresetIndex(index: Int) {
-        val current = getDuotoneSettings()
-        setDuotoneSettings(current.copy(presetIndex = index))
-    }
-
-    fun setDuotoneBlendMode(blendMode: DuotoneBlendMode) {
-        val current = getDuotoneSettings()
-        setDuotoneSettings(current.copy(blendMode = blendMode))
-    }
 
     fun applyDuotonePreset(
         lightColor: Int,
@@ -356,8 +296,8 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
                 enabled = enabled,
                 lightColor = lightColor,
                 darkColor = darkColor,
-                presetIndex = presetIndex
-            )
+                presetIndex = presetIndex,
+            ),
         )
     }
 

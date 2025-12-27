@@ -44,11 +44,29 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 
+data class SourcesState(
+    val currentWallpaperUri: Uri?,
+    val currentWallpaperName: String?,
+    val imageFolders: List<ImageFolderUiModel>,
+    val imageCycleEnabled: Boolean,
+    val imageCycleIntervalMillis: Long,
+    val cycleImageOnUnlock: Boolean,
+)
+
+sealed interface SourcesAction {
+    data object ViewCurrentWallpaper : SourcesAction
+    data class NavigateToFolderDetail(val folderId: Long, val folderName: String) : SourcesAction
+    data object NavigateToFolderSelection : SourcesAction
+    data class SetImageCycleEnabled(val enabled: Boolean) : SourcesAction
+    data class SetImageCycleInterval(val intervalMillis: Long) : SourcesAction
+    data class SetCycleImageOnUnlock(val enabled: Boolean) : SourcesAction
+}
+
 @Composable
 fun SourcesTab(
     modifier: Modifier = Modifier,
-    state: SourcesUiState,
-    actions: SourcesActions,
+    state: SourcesState,
+    onAction: (SourcesAction) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -64,15 +82,15 @@ fun SourcesTab(
             CurrentWallpaperCard(
                 wallpaperUri = state.currentWallpaperUri,
                 wallpaperName = state.currentWallpaperName,
-                onViewImage = actions.onViewCurrentWallpaper,
+                onViewImage = { onAction(SourcesAction.ViewCurrentWallpaper) },
             )
         }
 
         item {
             ImageSourcesSection(
                 imageFolders = state.imageFolders,
-                onFolderClick = actions.onNavigateToFolderDetail,
-                onOpenFolderSelection = actions.onNavigateToFolderSelection,
+                onFolderClick = { id, name -> onAction(SourcesAction.NavigateToFolderDetail(id, name)) },
+                onOpenFolderSelection = { onAction(SourcesAction.NavigateToFolderSelection) },
             )
         }
 
@@ -81,9 +99,9 @@ fun SourcesTab(
                 enabled = state.imageCycleEnabled,
                 intervalMillis = state.imageCycleIntervalMillis,
                 cycleImageOnUnlock = state.cycleImageOnUnlock,
-                onImageCycleEnabledChange = actions.onImageCycleEnabledChange,
-                onImageCycleIntervalChange = actions.onImageCycleIntervalChange,
-                onCycleImageOnUnlockChange = actions.onCycleImageOnUnlockChange,
+                onImageCycleEnabledChange = { onAction(SourcesAction.SetImageCycleEnabled(it)) },
+                onImageCycleIntervalChange = { onAction(SourcesAction.SetImageCycleInterval(it)) },
+                onCycleImageOnUnlockChange = { onAction(SourcesAction.SetCycleImageOnUnlock(it)) },
             )
         }
     }

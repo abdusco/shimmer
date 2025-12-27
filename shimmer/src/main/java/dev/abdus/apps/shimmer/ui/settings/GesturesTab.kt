@@ -41,11 +41,21 @@ import dev.abdus.apps.shimmer.GestureAction
 import dev.abdus.apps.shimmer.R
 import dev.abdus.apps.shimmer.TapEvent
 
+data class GesturesState(
+    val tripleTapAction: GestureAction,
+    val twoFingerDoubleTapAction: GestureAction,
+    val threeFingerDoubleTapAction: GestureAction,
+)
+
+sealed interface GesturesAction {
+    data class SetGestureAction(val event: TapEvent, val action: GestureAction) : GesturesAction
+}
+
 @Composable
 fun GesturesTab(
     modifier: Modifier = Modifier,
-    state: GesturesUiState,
-    actions: GesturesActions,
+    state: GesturesState,
+    onAction: (GesturesAction) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -94,7 +104,7 @@ fun GesturesTab(
 
                     GestureActionRow(
                         action = state.tripleTapAction,
-                        onActionChange = { actions.onGestureChange(TapEvent.TRIPLE_TAP, it) },
+                        onActionChange = { onAction(GesturesAction.SetGestureAction(TapEvent.TRIPLE_TAP, it)) },
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(
@@ -110,7 +120,7 @@ fun GesturesTab(
 
                     GestureActionRow(
                         action = state.twoFingerDoubleTapAction,
-                        onActionChange = { actions.onGestureChange(TapEvent.TWO_FINGER_DOUBLE_TAP, it) },
+                        onActionChange = { onAction(GesturesAction.SetGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP, it)) },
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(
@@ -126,7 +136,7 @@ fun GesturesTab(
 
                     GestureActionRow(
                         action = state.threeFingerDoubleTapAction,
-                        onActionChange = { actions.onGestureChange(TapEvent.THREE_FINGER_DOUBLE_TAP, it) },
+                        onActionChange = { onAction(GesturesAction.SetGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP, it)) },
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(
