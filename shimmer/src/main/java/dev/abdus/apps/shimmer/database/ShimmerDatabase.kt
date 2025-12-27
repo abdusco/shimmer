@@ -72,6 +72,9 @@ interface ImageDao {
     @Query("SELECT id FROM folders WHERE uri = :uri LIMIT 1")
     suspend fun getFolderId(uri: String): Long?
 
+    @Query("SELECT lastScannedAt FROM folders WHERE id = :id")
+    suspend fun getFolderLastScanned(id: Long): String?
+
     @Query("UPDATE folders SET isEnabled = :isEnabled WHERE id = :id")
     suspend fun updateFolderEnabled(id: Long, isEnabled: Boolean)
 
@@ -94,14 +97,12 @@ interface ImageDao {
     suspend fun deleteInvalidImages(folderId: Long, validUris: List<String>)
 
     /**
-     * Finds the next folder in the round-robin cycle that has at least one image.
+     * Finds the next folder in the round-robin cycle.
      */
     @Query("""
-        SELECT f.* FROM folders f
-        INNER JOIN images i ON f.id = i.folderId
-        WHERE f.isEnabled = 1
-        GROUP BY f.id
-        ORDER BY f.lastPickedAt ASC, f.id ASC
+        SELECT * FROM folders
+        WHERE isEnabled = 1
+        ORDER BY lastPickedAt ASC, id ASC
         LIMIT 1
     """)
     suspend fun getNextRoundRobinFolder(): FolderEntity?
