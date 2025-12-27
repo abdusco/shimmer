@@ -194,9 +194,9 @@ private fun ImageSourcesSection(
                 val carouselState = rememberCarouselState { imageFolders.size }
                 HorizontalMultiBrowseCarousel(
                     state = carouselState,
-                    preferredItemWidth = 160.dp,
+                    preferredItemWidth = 180.dp,
                     itemSpacing = 8.dp,
-                    modifier = Modifier.fillMaxWidth().height(160.dp)
+                    modifier = Modifier.fillMaxWidth().height(180.dp)
                 ) { index ->
                     val folder = imageFolders[index]
                     FolderThumbnailLarge(
