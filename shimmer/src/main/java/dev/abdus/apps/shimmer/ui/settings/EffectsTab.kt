@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.ChromaticAberrationSettings
 import dev.abdus.apps.shimmer.DuotoneSettings
 import dev.abdus.apps.shimmer.GrainSettings
@@ -56,13 +57,8 @@ fun EffectsTab(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = PADDING_X,
-            top = PADDING_Y,
-            end = PADDING_X,
-            bottom = PADDING_Y,
-        ),
-        verticalArrangement = Arrangement.spacedBy(PADDING_X),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
             ImageEffectsSettingsSection(

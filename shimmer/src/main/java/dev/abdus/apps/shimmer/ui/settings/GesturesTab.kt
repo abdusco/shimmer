@@ -60,12 +60,12 @@ fun GesturesTab(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = PADDING_X,
-            top = PADDING_Y,
-            end = PADDING_X,
-            bottom = PADDING_Y,
+            start = 24.dp,
+            top = 24.dp,
+            end = 24.dp,
+            bottom = 24.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(PADDING_X),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
             // Use a Card or Surface with a subtler look

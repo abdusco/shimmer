@@ -71,12 +71,12 @@ fun SourcesTab(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = PADDING_X,
-            top = PADDING_Y,
-            end = PADDING_X,
-            bottom = PADDING_Y,
+            start = 24.dp,
+            top = 24.dp,
+            end = 24.dp,
+            bottom = 24.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(PADDING_X),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
             CurrentWallpaperCard(
@@ -176,12 +176,12 @@ private fun ImageSourcesSection(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = PADDING_Y),
+                .padding(vertical = 24.dp),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = PADDING_X),
+                    .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -195,7 +195,7 @@ private fun ImageSourcesSection(
             if (imageFolders.isEmpty()) {
                 Box(modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = PADDING_X)
+                    .padding(horizontal = 24.dp)
                     .height(200.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Folder, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -208,7 +208,7 @@ private fun ImageSourcesSection(
                     state = carouselState,
                     preferredItemWidth = 160.dp,
                     itemSpacing = 8.dp,
-                    contentPadding = PaddingValues(horizontal = PADDING_X),
+                    contentPadding = PaddingValues(horizontal = 24.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(160.dp)

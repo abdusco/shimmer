@@ -32,8 +32,8 @@ fun ImageEffectsSettingsSection(
 ) {
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
         Column(
-            modifier = Modifier.padding(horizontal = PADDING_X, vertical = PADDING_Y),
-            verticalArrangement = Arrangement.spacedBy(PADDING_Y),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

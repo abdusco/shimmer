@@ -1,5 +1,6 @@
 package dev.abdus.apps.shimmer.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,7 +37,7 @@ fun ImageCycleSettingsSection(
     val sliderIndex = options.indexOfFirst { it.millis == intervalMillis }.takeIf { it >= 0 } ?: 0
     val selectedOption = options.getOrElse(sliderIndex) { options.first() }
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
-        Column(modifier = Modifier.padding(vertical = PADDING_Y, horizontal = PADDING_X), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.SwapHoriz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
@@ -49,7 +50,7 @@ fun ImageCycleSettingsSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            androidx.compose.animation.AnimatedVisibility(visible = enabled) {
+            AnimatedVisibility(visible = enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Timer, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)

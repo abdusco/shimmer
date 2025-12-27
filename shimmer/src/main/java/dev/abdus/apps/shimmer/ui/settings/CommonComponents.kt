@@ -30,9 +30,6 @@ import androidx.core.graphics.toColorInt
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-val PADDING_X = 24.dp
-val PADDING_Y = 24.dp
-
 
 /**
  * Debounces value changes - only executes the callback after [delayMillis] of inactivity.
