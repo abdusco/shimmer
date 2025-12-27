@@ -118,7 +118,7 @@ data class TouchData(
 
 enum class GestureAction {
     TOGGLE_BLUR,
-    FAVORITE,
+    ADD_TO_FAVORITES,
     RANDOM_DUOTONE,
     NEXT_IMAGE,
     NONE,

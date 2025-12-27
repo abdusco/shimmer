@@ -6,16 +6,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,34 +33,17 @@ fun EventsSettingsSection(
     onBlurTimeoutEnabledChange: (Boolean) -> Unit,
     onBlurTimeoutMillisChange: (Long) -> Unit,
 ) {
-    Surface(
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(16.dp)
-    ) {
+    ElevatedCard(shape = RoundedCornerShape(16.dp)) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Bolt,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-                Text(
-                    text = "Events",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            Text(
-                text = "Configure how the wallpaper responds to screen lock and unlock events",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            SectionHeader(
+                title = "Events",
+                description = "Configure how the wallpaper responds to screen lock and unlock events",
+                iconVector = Icons.Rounded.Bolt,
             )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -75,7 +57,6 @@ fun EventsSettingsSection(
                     Icon(
                         imageVector = Icons.Outlined.Lock,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
@@ -126,7 +107,6 @@ private fun BlurTimeoutSetting(
                 Icon(
                     imageVector = Icons.Outlined.Timer,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Column {

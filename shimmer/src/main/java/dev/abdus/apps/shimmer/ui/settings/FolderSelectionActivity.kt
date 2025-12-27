@@ -30,11 +30,12 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
@@ -138,7 +140,7 @@ class FolderSelectionActivity : ComponentActivity() {
                     onRefreshAll = viewModel::refreshAll,
                     onOpenFolderExternally = { uri ->
                         Actions.openFolderInFileManager(this, uri)
-                    }
+                    },
                 )
             }
         }
@@ -173,7 +175,7 @@ class FolderSelectionViewModel(
     ): FolderSelectionUiState = withContext(Dispatchers.Default) {
         val effectiveFavUri = favoritesUri ?: FavoritesFolderResolver.getDefaultFavoritesUri()
         val favUriStr = effectiveFavUri.toString()
-        
+
         val effectiveSharedUri = sharedUri ?: SharedFolderResolver.getDefaultSharedUri()
         val sharedUriStr = effectiveSharedUri.toString()
 
@@ -192,7 +194,7 @@ class FolderSelectionViewModel(
                 imageCount = meta.imageCount,
                 enabled = meta.isEnabled,
                 isLocal = meta.isLocal,
-                isScanning = meta.isScanning
+                isScanning = meta.isScanning,
             )
         }
 
@@ -283,36 +285,45 @@ fun FolderSelectionScreen(
                         DropdownMenu(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false },
-                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            shape = RoundedCornerShape(16.dp),
                         ) {
                             DropdownMenuItem(
                                 text = { Text("Refresh all") },
-                                onClick = { 
+                                onClick = {
                                     onRefreshAll()
-                                    menuExpanded = false 
+                                    menuExpanded = false
                                 },
-                                leadingIcon = { 
+                                leadingIcon = {
                                     if (state.isRefreshing) {
                                         CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                                     } else {
                                         Icon(Icons.Default.Refresh, null)
                                     }
                                 },
-                                enabled = !state.isRefreshing
+                                enabled = !state.isRefreshing,
                             )
                         }
                     }
-                }
+                },
             )
         },
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item { SectionHeader("Special folders", "System managed image collections") }
-            
+            item {
+                SectionHeader(
+                    title = "Collections",
+                    description = "Special folders for curated images",
+                    iconVector = Icons.Default.Stars,
+                )
+            }
+
             state.favoritesFolder?.let { fav ->
                 item {
                     FolderCard(
@@ -324,20 +335,20 @@ fun FolderSelectionScreen(
                                 DropdownMenuItem(
                                     text = { Text("Open in File Manager") },
                                     onClick = { onOpenFolderExternally(Uri.parse(fav.uri)); closeMenu() },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 )
                             }
                             DropdownMenuItem(
                                 text = { Text("Change location") },
                                 onClick = { onPickFavoritesClick(); closeMenu() },
-                                leadingIcon = { Icon(Icons.Default.Edit, null) }
+                                leadingIcon = { Icon(Icons.Default.Edit, null) },
                             )
                             DropdownMenuItem(
                                 text = { Text("Force rescan") },
                                 onClick = { onRefreshFolder(fav.uri); closeMenu() },
-                                leadingIcon = { Icon(Icons.Default.Refresh, null) }
+                                leadingIcon = { Icon(Icons.Default.Refresh, null) },
                             )
-                        }
+                        },
                     )
                 }
             }
@@ -353,44 +364,51 @@ fun FolderSelectionScreen(
                                 DropdownMenuItem(
                                     text = { Text("Open in File Manager") },
                                     onClick = { onOpenFolderExternally(Uri.parse(shared.uri)); closeMenu() },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 )
                             }
                             DropdownMenuItem(
                                 text = { Text("Change location") },
                                 onClick = { onPickSharedClick(); closeMenu() },
-                                leadingIcon = { Icon(Icons.Default.Edit, null) }
+                                leadingIcon = { Icon(Icons.Default.Edit, null) },
                             )
                             DropdownMenuItem(
                                 text = { Text("Force rescan") },
                                 onClick = { onRefreshFolder(shared.uri); closeMenu() },
-                                leadingIcon = { Icon(Icons.Default.Refresh, null) }
+                                leadingIcon = { Icon(Icons.Default.Refresh, null) },
                             )
-                        }
+                        },
                     )
                 }
             }
 
             item { Spacer(Modifier.height(12.dp)) }
             item {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    SectionHeader("Local image folders", "Select folders containing images")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Button(onClick = onAddFolderClick) {
-                        Icon(Icons.Default.Add, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Add")
-                    }
-                }
+                SectionHeader(
+                    title = "Local image folders",
+                    description = "Select folders containing images",
+                    iconVector = Icons.Default.Folder,
+                    actionSlot = {
+                        Button(onClick = onAddFolderClick) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Add")
+                        }
+                    },
+                )
             }
 
             if (state.isLoading) {
                 item {
-                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
@@ -407,13 +425,13 @@ fun FolderSelectionScreen(
                                 DropdownMenuItem(
                                     text = { Text("Open in File Manager") },
                                     onClick = { onOpenFolderExternally(folder.uri.toUri()); closeMenu() },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
                                 )
                             }
                             DropdownMenuItem(
                                 text = { Text("Force rescan") },
                                 onClick = { onRefreshFolder(folder.uri); closeMenu() },
-                                leadingIcon = { Icon(Icons.Default.Refresh, null) }
+                                leadingIcon = { Icon(Icons.Default.Refresh, null) },
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -422,10 +440,10 @@ fun FolderSelectionScreen(
                                 leadingIcon = { Icon(Icons.Default.Delete, null) },
                                 colors = MenuDefaults.itemColors(
                                     textColor = MaterialTheme.colorScheme.error,
-                                    leadingIconColor = MaterialTheme.colorScheme.error
-                                )
+                                    leadingIconColor = MaterialTheme.colorScheme.error,
+                                ),
                             )
-                        }
+                        },
                     )
                 }
             }
@@ -434,22 +452,17 @@ fun FolderSelectionScreen(
 }
 
 @Composable
-private fun SectionHeader(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
 private fun EmptyStateCard() {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Icon(Icons.Default.Folder, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("No folders selected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -477,11 +490,20 @@ private fun FolderCard(
     }
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = modifier.fillMaxWidth().clickable { onCardClick() }, 
-        shape = RoundedCornerShape(12.dp)
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onCardClick() },
+        shape = RoundedCornerShape(16.dp),
     ) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Surface(Modifier.size(96.dp), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Box(Modifier.fillMaxSize()) {
                     if (folder.thumbnailUri != null) {
@@ -495,7 +517,7 @@ private fun FolderCard(
                             } else {
                                 filter
                             },
-                            alpha = if (folder.isScanning) 0.5f else 1f
+                            alpha = if (folder.isScanning) 0.5f else 1f,
                         )
                     } else {
                         Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -509,7 +531,7 @@ private fun FolderCard(
                                 .size(24.dp)
                                 .align(Alignment.Center),
                             strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
@@ -545,7 +567,7 @@ private fun FolderCard(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                         modifier = Modifier.padding(horizontal = 8.dp),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(16.dp),
                     ) {
                         menuContent { menuExpanded = false }
                     }

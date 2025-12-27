@@ -318,7 +318,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     transitionScheduler.pauseForInteraction()
                 }
                 GestureAction.RANDOM_DUOTONE -> applyNextDuotone()
-                GestureAction.FAVORITE -> addCurrentImageToFavorites()
+                GestureAction.ADD_TO_FAVORITES -> addCurrentImageToFavorites()
                 GestureAction.NONE -> {}
             }
         }

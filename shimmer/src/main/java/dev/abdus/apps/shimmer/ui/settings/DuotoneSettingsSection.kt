@@ -5,15 +5,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,58 +45,39 @@ fun DuotoneSettings(
     state: DuotoneSettings,
     onSettingsChange: (DuotoneSettings) -> Unit,
 ) {
-    Surface(
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(16.dp)
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.icon_filter),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
+            SectionHeader(
+                title = "Duotone effect",
+                description = "Apply a two-color gradient effect that maps image colors to light and dark tones",
+                iconPainter = painterResource(R.drawable.icon_filter),
+                actionSlot = {
+                    Switch(
+                        checked = state.enabled,
+                        onCheckedChange = { onSettingsChange(state.copy(enabled = it)) },
                     )
-                    Text(
-                        text = "Duotone effect",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-                Switch(
-                    checked = state.enabled,
-                    onCheckedChange = { onSettingsChange(state.copy(enabled = it)) }
-                )
-            }
-            Text(
-                text = "Apply a two-color gradient effect that maps image colors to light and dark tones",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
+
             AnimatedVisibility(visible = state.enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "Apply when unblurred",
-                            style = MaterialTheme.typography.bodyMedium
+                            text = "Always on",
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                         Switch(
                             checked = state.alwaysOn,
-                            onCheckedChange = { onSettingsChange(state.copy(alwaysOn = it)) }
+                            onCheckedChange = { onSettingsChange(state.copy(alwaysOn = it)) },
                         )
                     }
                     ColorHexField(
@@ -101,7 +86,7 @@ fun DuotoneSettings(
                         onValueChange = { hex ->
                             parseColorHex(hex)?.let { onSettingsChange(state.copy(lightColor = it)) }
                         },
-                        previewColor = colorIntToComposeColor(state.lightColor)
+                        previewColor = colorIntToComposeColor(state.lightColor),
                     )
                     ColorHexField(
                         label = "Dark color (#RRGGBB)",
@@ -109,22 +94,29 @@ fun DuotoneSettings(
                         onValueChange = { hex ->
                             parseColorHex(hex)?.let { onSettingsChange(state.copy(darkColor = it)) }
                         },
-                        previewColor = colorIntToComposeColor(state.darkColor)
+                        previewColor = colorIntToComposeColor(state.darkColor),
                     )
-                    DuotoneBlendModeDropdown(
-                        selectedBlendMode = state.blendMode,
-                        onBlendModeSelected = { onSettingsChange(state.copy(blendMode = it)) }
-                    )
-                    DuotonePresetDropdown(onPresetSelected = { preset ->
-                        val index = DUOTONE_PRESETS.indexOf(preset)
-                        onSettingsChange(
-                            state.copy(
-                                lightColor = preset.lightColor,
-                                darkColor = preset.darkColor,
-                                presetIndex = index
-                            )
+                    Row {
+                        DuotonePresetDropdown(
+                            onPresetSelected = { preset ->
+                                val index = DUOTONE_PRESETS.indexOf(preset)
+                                onSettingsChange(
+                                    state.copy(
+                                        lightColor = preset.lightColor,
+                                        darkColor = preset.darkColor,
+                                        presetIndex = index,
+                                    ),
+                                )
+                            },
                         )
-                    })
+
+                        Spacer(modifier = Modifier.size(8f.dp).weight(1f))
+
+                        DuotoneBlendModeDropdown(
+                            selectedBlendMode = state.blendMode,
+                            onBlendModeSelected = { onSettingsChange(state.copy(blendMode = it)) },
+                        )
+                    }
                 }
             }
         }
@@ -140,18 +132,26 @@ private fun DuotoneBlendModeDropdown(
     val modes = remember {
         listOf(
             DuotoneBlendMode.NORMAL to "Normal",
-            DuotoneBlendMode.SCREEN to "Screen"
+            DuotoneBlendMode.SCREEN to "Screen",
         )
     }
     val selectedName = modes.find { it.first == selectedBlendMode }?.second ?: "Normal"
 
     Box {
         OutlinedButton(onClick = { expanded = true }) {
+            Icon(
+                painter = painterResource(R.drawable.icon_blend_mode),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.size(8.dp))
             Text(text = "Blend mode: $selectedName")
         }
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.padding(horizontal = 8.dp),
+            shape = RoundedCornerShape(16.dp),
         ) {
             modes.forEach { pair ->
                 DropdownMenuItem(
@@ -159,7 +159,7 @@ private fun DuotoneBlendModeDropdown(
                     onClick = {
                         expanded = false
                         onBlendModeSelected(pair.first)
-                    }
+                    },
                 )
             }
         }
@@ -173,16 +173,23 @@ private fun DuotonePresetDropdown(
     var expanded by remember { mutableStateOf(false) }
     Box {
         Button(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Filled.Palette,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+            )
+            Spacer(modifier = Modifier.size(8.dp))
             Text(text = "Choose preset")
         }
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            modifier = Modifier.padding(horizontal = 8.dp),
+            onDismissRequest = { expanded = false },
         ) {
             Column(
                 modifier = Modifier
                     .size(width = 280.dp, height = 400.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(rememberScrollState()),
             ) {
                 DUOTONE_PRESETS.forEach { preset ->
                     DropdownMenuItem(
@@ -190,7 +197,7 @@ private fun DuotonePresetDropdown(
                         onClick = {
                             expanded = false
                             onPresetSelected(preset)
-                        }
+                        },
                     )
                 }
             }
@@ -202,7 +209,7 @@ private fun DuotonePresetDropdown(
 private fun DuotonePresetOptionRow(preset: DuotonePreset) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row {
             PresetColorSwatch(colorIntToComposeColor(preset.darkColor))
@@ -217,6 +224,6 @@ private fun PresetColorSwatch(color: Color) {
     Surface(
         modifier = Modifier.size(24.dp),
         color = color,
-        shadowElevation = 0.dp
+        shadowElevation = 0.dp,
     ) {}
 }

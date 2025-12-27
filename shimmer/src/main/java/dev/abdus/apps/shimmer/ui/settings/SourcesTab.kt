@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.Button
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -70,13 +70,8 @@ fun SourcesTab(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 24.dp,
-            top = 24.dp,
-            end = 24.dp,
-            bottom = 24.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
             CurrentWallpaperCard(
@@ -115,14 +110,14 @@ private fun CurrentWallpaperCard(
 ) {
     val displayName = wallpaperName ?: "No wallpaper"
 
-    Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        onClick = onViewImage,
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(360.dp)
-                .clickable(enabled = wallpaperUri != null) {
-                    onViewImage()
-                },
+                .height(360.dp),
         ) {
             AnimatedContent(
                 targetState = wallpaperUri,
@@ -171,26 +166,19 @@ private fun ImageSourcesSection(
     onFolderClick: (Long, String) -> Unit,
     onOpenFolderSelection: () -> Unit,
 ) {
-    Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
+    ElevatedCard(shape = RoundedCornerShape(16.dp)) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 24.dp),
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                    Text("Image sources", style = MaterialTheme.typography.titleMedium)
+            SectionHeader(
+                title = "Image Sources",
+                description = "Manage the folders from which images are sourced for the wallpaper",
+                iconVector = Icons.Default.Folder,
+                actionSlot = {
+                    Button(onClick = onOpenFolderSelection) { Text("Manage") }
                 }
-                Button(onClick = onOpenFolderSelection) { Text("Manage") }
-            }
+            )
 
             if (imageFolders.isEmpty()) {
                 Box(modifier = Modifier
@@ -208,10 +196,7 @@ private fun ImageSourcesSection(
                     state = carouselState,
                     preferredItemWidth = 160.dp,
                     itemSpacing = 8.dp,
-                    contentPadding = PaddingValues(horizontal = 24.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
+                    modifier = Modifier.fillMaxWidth().height(160.dp)
                 ) { index ->
                     val folder = imageFolders[index]
                     FolderThumbnailLarge(
@@ -236,8 +221,7 @@ private fun FolderThumbnailLarge(
     }
 
     Surface(
-        modifier = modifier
-            .clickable { onClick() },
+        modifier = modifier.clickable { onClick() },
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         if (folder.thumbnailUri != null) {

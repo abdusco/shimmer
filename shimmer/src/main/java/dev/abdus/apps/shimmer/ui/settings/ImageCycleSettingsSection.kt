@@ -6,16 +6,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,24 +35,24 @@ fun ImageCycleSettingsSection(
     val options = TRANSITION_INTERVAL_OPTIONS
     val sliderIndex = options.indexOfFirst { it.millis == intervalMillis }.takeIf { it >= 0 } ?: 0
     val selectedOption = options.getOrElse(sliderIndex) { options.first() }
-    Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(16.dp)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.SwapHoriz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    Text("Cycle images automatically", style = MaterialTheme.typography.titleMedium)
+    ElevatedCard(shape = RoundedCornerShape(16.dp)) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            SectionHeader(
+                title = "Image cycling",
+                description = "Automatically cycle through images at regular intervals",
+                iconVector = Icons.Outlined.SwapHoriz,
+                actionSlot = {
+                    Switch(checked = enabled, onCheckedChange = onImageCycleEnabledChange)
                 }
-                Switch(checked = enabled, onCheckedChange = onImageCycleEnabledChange)
-            }
-            Text(
-                "Automatically cycle through images from your selected folders at regular intervals",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
             AnimatedVisibility(visible = enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Timer, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Outlined.Timer, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Cycle every", style = MaterialTheme.typography.bodyMedium)
                     }
                     Slider(
@@ -75,7 +74,7 @@ fun ImageCycleSettingsSection(
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Outlined.Lock, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Cycle when screen unlocks", style = MaterialTheme.typography.bodyMedium)
                 }
                 Switch(checked = cycleImageOnUnlock, onCheckedChange = onCycleImageOnUnlockChange)
