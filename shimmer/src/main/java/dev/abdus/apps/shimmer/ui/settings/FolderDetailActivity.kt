@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -79,7 +80,7 @@ class FolderDetailActivity : ComponentActivity() {
                     onImageClick = { uri ->
                         Actions.broadcastSetWallpaper(this, uri)
                         Toast.makeText(this, "Wallpaper updated", Toast.LENGTH_SHORT).show()
-                    }
+                    },
                 )
             }
         }
@@ -100,7 +101,7 @@ class FolderDetailActivity : ComponentActivity() {
 
 class FolderDetailViewModel(
     repository: ImageFolderRepository,
-    folderId: Long
+    folderId: Long,
 ) : ViewModel() {
     val images: StateFlow<List<ImageEntry>> = repository.getImagesForFolderFlow(folderId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -108,7 +109,7 @@ class FolderDetailViewModel(
 
 class FolderDetailViewModelFactory(
     private val repository: ImageFolderRepository,
-    private val folderId: Long
+    private val folderId: Long,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return FolderDetailViewModel(repository, folderId) as T
@@ -121,7 +122,7 @@ fun FolderDetailScreen(
     title: String,
     viewModel: FolderDetailViewModel,
     onBackClick: () -> Unit,
-    onImageClick: (Uri) -> Unit
+    onImageClick: (Uri) -> Unit,
 ) {
     val images by viewModel.images.collectAsState()
 
@@ -133,35 +134,35 @@ fun FolderDetailScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                }
+                },
             )
-        }
+        },
     ) { padding ->
-        LazyVerticalStaggeredGrid(
-            columns = StaggeredGridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalItemSpacing = 8.dp
-        ) {
-            items(images, key = { it.uri }, contentType = { "image" }) { entry ->
-                ImageItem(entry = entry, onClick = { onImageClick(entry.uri.toUri()) })
+        Column {
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Fixed(2),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalItemSpacing = 16.dp,
+            ) {
+                items(images, key = { it.uri }, contentType = { "image" }) { entry ->
+                    ImageItem(entry = entry, onClick = { onImageClick(entry.uri.toUri()) })
+                }
             }
 
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                ) {
-                    Text(
-                        "Total images: ${images.size}", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        textAlign = TextAlign.Center,
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            ) {
+                Text(
+                    "Total images: ${images.size}", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center,
+                )
             }
         }
     }
@@ -183,7 +184,7 @@ private fun ImageItem(entry: ImageEntry, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(0.dp)
-            .clickable { onClick() }
+            .clickable { onClick() },
     ) {
         Box(
             modifier = Modifier
@@ -194,9 +195,9 @@ private fun ImageItem(entry: ImageEntry, onClick: () -> Unit) {
                     } else {
                         // Provide a min-height so the grid doesn't collapse
                         Modifier.heightIn(min = 120.dp)
-                    }
+                    },
                 )
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
