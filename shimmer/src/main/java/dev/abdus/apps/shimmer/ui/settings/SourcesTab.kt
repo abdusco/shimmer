@@ -19,17 +19,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -68,7 +69,7 @@ fun SourcesTab(
         }
 
         item {
-            FolderThumbnailSlider(
+            ImageSourcesSection(
                 imageFolders = state.imageFolders,
                 onFolderClick = actions.onNavigateToFolderDetail,
                 onOpenFolderSelection = actions.onNavigateToFolderSelection,
@@ -145,8 +146,9 @@ private fun CurrentWallpaperCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FolderThumbnailSlider(
+private fun ImageSourcesSection(
     imageFolders: List<ImageFolderUiModel>,
     onFolderClick: (Long, String) -> Unit,
     onOpenFolderSelection: () -> Unit,
@@ -156,9 +158,15 @@ private fun FolderThumbnailSlider(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = PADDING_Y, horizontal = PADDING_X),
+                .padding(vertical = PADDING_Y),
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = PADDING_X),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                     Text("Image sources", style = MaterialTheme.typography.titleMedium)
@@ -169,6 +177,7 @@ private fun FolderThumbnailSlider(
             if (imageFolders.isEmpty()) {
                 Box(modifier = Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = PADDING_X)
                     .height(200.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Folder, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -176,13 +185,22 @@ private fun FolderThumbnailSlider(
                     }
                 }
             } else {
-                LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-                    items(imageFolders, key = { it.uri }) { folder ->
-                        FolderThumbnailLarge(
-                            folder = folder,
-                            onClick = { onFolderClick(folder.id, folder.displayName) },
-                        )
-                    }
+                val carouselState = rememberCarouselState { imageFolders.size }
+                HorizontalMultiBrowseCarousel(
+                    state = carouselState,
+                    preferredItemWidth = 160.dp,
+                    itemSpacing = 8.dp,
+                    contentPadding = PaddingValues(horizontal = PADDING_X),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                ) { index ->
+                    val folder = imageFolders[index]
+                    FolderThumbnailLarge(
+                        folder = folder,
+                        onClick = { onFolderClick(folder.id, folder.displayName) },
+                        modifier = Modifier.maskClip(MaterialTheme.shapes.large)
+                    )
                 }
             }
         }
@@ -201,9 +219,7 @@ private fun FolderThumbnailLarge(
 
     Surface(
         modifier = modifier
-            .size(160.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         if (folder.thumbnailUri != null) {
