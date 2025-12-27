@@ -69,12 +69,12 @@ class ImageFolderRepository(context: Context) {
         Log.d(TAG, "Metadata flow updated: ${list.size} folders")
         list.associate {
             it.folderUri to FolderMetadata(
-                it.folderId,
-                it.imageCount,
-                it.firstImageUri?.toUri(),
-                it.isEnabled,
-                it.folderUri.toUri().isLocalFolder(),
-                scanning.contains(it.folderId),
+                folderId = it.folderId,
+                imageCount = it.imageCount,
+                thumbnailUri = it.thumbnailUri?.toUri(),
+                isEnabled = it.isEnabled,
+                isLocal = it.folderUri.toUri().isLocalFolder(),
+                isScanning = scanning.contains(it.folderId),
             )
         }
     }

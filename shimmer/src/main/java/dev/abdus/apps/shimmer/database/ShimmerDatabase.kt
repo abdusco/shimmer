@@ -55,7 +55,7 @@ data class FolderMetadata(
     val folderUri: String,
     val isEnabled: Boolean,
     val imageCount: Int,
-    val firstImageUri: String?
+    val thumbnailUri: String?
 )
 
 data class ImageEntry(
@@ -148,15 +148,13 @@ interface ImageDao {
 
     @Query("""
         SELECT 
-            f.id as folderId,
-            f.uri as folderUri, 
-            f.isEnabled as isEnabled,
-            COUNT(i.id) as imageCount, 
-            MIN(i.uri) as firstImageUri 
-        FROM folders f 
-        LEFT JOIN images i ON f.id = i.folderId 
-        GROUP BY f.id
-    """)
+            f.id AS folderId,
+            f.uri AS folderUri, 
+            f.isEnabled AS isEnabled,
+            (SELECT COUNT(*) FROM images WHERE folderId = f.id) AS imageCount,
+            (SELECT uri FROM images WHERE folderId = f.id ORDER BY id DESC LIMIT 1) AS thumbnailUri
+        FROM folders f;
+""")
     fun getFoldersMetadataFlow(): Flow<List<FolderMetadata>>
 }
 
