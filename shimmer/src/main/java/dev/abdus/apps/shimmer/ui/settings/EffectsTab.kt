@@ -45,7 +45,6 @@ fun EffectsTab(
     state: EffectsState,
     onAction: (EffectsAction) -> Unit,
 ) {
-    // Local state for blur slider to provide instant UI feedback and allow debouncing
     var localBlurAmount by remember(state.blurAmount) { mutableFloatStateOf(state.blurAmount) }
 
     // Debounce blur changes (300ms delay after user stops dragging)

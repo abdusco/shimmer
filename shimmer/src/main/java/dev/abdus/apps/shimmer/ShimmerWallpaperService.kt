@@ -137,10 +137,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 if (key == null) applyBlurState(immediate = true)
 
                 if (key == null ||
-                                key == WallpaperPreferences.KEY_TRANSITION_ENABLED ||
-                                key == WallpaperPreferences.KEY_TRANSITION_INTERVAL
+                                key == WallpaperPreferences.KEY_IMAGE_CYCLE_ENABLED ||
+                                key == WallpaperPreferences.KEY_IMAGE_CYCLE_INTERVAL
                 ) {
-                    transitionScheduler.updateEnabled(preferences.isTransitionEnabled())
+                    transitionScheduler.updateEnabled(preferences.isImageCycleEnabled())
                 }
             }
         }
@@ -390,7 +390,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
                             applyBlurState(immediate = false)
 
-                            if (preferences.isChangeImageOnUnlockEnabled()) {
+                            if (preferences.isCycleImageOnUnlockEnabled()) {
                                 requestImageChange()
                             }
                         }

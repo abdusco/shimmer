@@ -151,13 +151,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 grainSettings = preferences.getGrainSettings(),
                 duotoneSettings = preferences.getDuotoneSettings(),
                 chromaticAberration = preferences.getChromaticAberrationSettings(),
-                imageCycleIntervalMillis = preferences.getTransitionIntervalMillis(),
-                imageCycleEnabled = preferences.isTransitionEnabled(),
+                imageCycleIntervalMillis = preferences.getImageCycleIntervalMillis(),
+                imageCycleEnabled = preferences.isImageCycleEnabled(),
                 effectTransitionDurationMillis = preferences.getEffectTransitionDurationMillis(),
                 blurOnScreenLock = preferences.isBlurOnScreenLockEnabled(),
                 blurTimeoutEnabled = preferences.isBlurTimeoutEnabled(),
                 blurTimeoutMillis = preferences.getBlurTimeoutMillis(),
-                cycleImageOnUnlock = preferences.isChangeImageOnUnlockEnabled(),
+                cycleImageOnUnlock = preferences.isCycleImageOnUnlockEnabled(),
                 tripleTapAction = preferences.getGestureAction(TapEvent.TRIPLE_TAP),
                 twoFingerDoubleTapAction = preferences.getGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP),
                 threeFingerDoubleTapAction = preferences.getGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP),
@@ -178,7 +178,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         imageCount = meta.imageCount,
                         enabled = meta.isEnabled,
                         isLocal = meta.isLocal,
-                        isScanning = meta.isScanning
+                        isScanning = meta.isScanning,
                     )
                 }
                 _uiState.update { it.copy(imageFolders = folders) }
@@ -207,11 +207,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 WallpaperPreferences.KEY_GRAIN_SETTINGS -> current.copy(grainSettings = preferences.getGrainSettings())
                 WallpaperPreferences.KEY_DUOTONE_SETTINGS -> current.copy(duotoneSettings = preferences.getDuotoneSettings())
                 WallpaperPreferences.KEY_CHROMATIC_ABERRATION_SETTINGS -> current.copy(chromaticAberration = preferences.getChromaticAberrationSettings())
-                WallpaperPreferences.KEY_TRANSITION_INTERVAL -> current.copy(imageCycleIntervalMillis = preferences.getTransitionIntervalMillis())
-                WallpaperPreferences.KEY_TRANSITION_ENABLED -> current.copy(imageCycleEnabled = preferences.isTransitionEnabled())
+                WallpaperPreferences.KEY_IMAGE_CYCLE_INTERVAL -> current.copy(imageCycleIntervalMillis = preferences.getImageCycleIntervalMillis())
+                WallpaperPreferences.KEY_IMAGE_CYCLE_ENABLED -> current.copy(imageCycleEnabled = preferences.isImageCycleEnabled())
+                WallpaperPreferences.KEY_CYCLE_IMAGE_ON_UNLOCK -> current.copy(cycleImageOnUnlock = preferences.isCycleImageOnUnlockEnabled())
                 WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION -> current.copy(effectTransitionDurationMillis = preferences.getEffectTransitionDurationMillis())
                 WallpaperPreferences.KEY_BLUR_ON_SCREEN_LOCK -> current.copy(blurOnScreenLock = preferences.isBlurOnScreenLockEnabled())
-                WallpaperPreferences.KEY_CHANGE_IMAGE_ON_UNLOCK -> current.copy(cycleImageOnUnlock = preferences.isChangeImageOnUnlockEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED -> current.copy(blurTimeoutEnabled = preferences.isBlurTimeoutEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS -> current.copy(blurTimeoutMillis = preferences.getBlurTimeoutMillis())
                 WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION -> current.copy(tripleTapAction = preferences.getGestureAction(TapEvent.TRIPLE_TAP))

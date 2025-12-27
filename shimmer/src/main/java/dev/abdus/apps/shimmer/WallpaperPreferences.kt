@@ -69,11 +69,11 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_BLUR_AMOUNT = "wallpaper_blur_amount"
         const val KEY_DIM_AMOUNT = "wallpaper_dim_amount"
         const val KEY_DUOTONE_SETTINGS = "wallpaper_duotone_settings"
-        const val KEY_TRANSITION_INTERVAL = "wallpaper_transition_interval"
-        const val KEY_TRANSITION_ENABLED = "wallpaper_transition_enabled"
+        const val KEY_IMAGE_CYCLE_INTERVAL = "wallpaper_image_cycle_interval"
+        const val KEY_IMAGE_CYCLE_ENABLED = "wallpaper_image_cycle_enabled"
         const val KEY_EFFECT_TRANSITION_DURATION = "wallpaper_effect_transition_duration"
         const val KEY_BLUR_ON_SCREEN_LOCK = "wallpaper_blur_on_screen_lock"
-        const val KEY_CHANGE_IMAGE_ON_UNLOCK = "wallpaper_change_image_on_unlock"
+        const val KEY_CYCLE_IMAGE_ON_UNLOCK = "wallpaper_image_cycle_on_unlock"
         const val KEY_BLUR_TIMEOUT_ENABLED = "wallpaper_blur_timeout_enabled"
         const val KEY_BLUR_TIMEOUT_MILLIS = "wallpaper_blur_timeout_millis"
         const val KEY_UNBLUR_ON_UNLOCK = "wallpaper_unblur_on_unlock"
@@ -301,21 +301,21 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         )
     }
 
-    fun getTransitionIntervalMillis(): Long =
-        prefs.getLong(KEY_TRANSITION_INTERVAL, DEFAULT_TRANSITION_INTERVAL_MILLIS)
+    fun getImageCycleIntervalMillis(): Long =
+        prefs.getLong(KEY_IMAGE_CYCLE_INTERVAL, DEFAULT_TRANSITION_INTERVAL_MILLIS)
 
     fun setImageCycleIntervalMillis(durationMillis: Long) {
         prefs.edit {
-            putLong(KEY_TRANSITION_INTERVAL, durationMillis.coerceAtLeast(0L))
+            putLong(KEY_IMAGE_CYCLE_INTERVAL, durationMillis.coerceAtLeast(0L))
         }
     }
 
-    fun isTransitionEnabled(): Boolean =
-        prefs.getBoolean(KEY_TRANSITION_ENABLED, true)
+    fun isImageCycleEnabled(): Boolean =
+        prefs.getBoolean(KEY_IMAGE_CYCLE_ENABLED, true)
 
     fun setImageCycleEnabled(enabled: Boolean) {
         prefs.edit {
-            putBoolean(KEY_TRANSITION_ENABLED, enabled)
+            putBoolean(KEY_IMAGE_CYCLE_ENABLED, enabled)
         }
     }
 
@@ -345,12 +345,12 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 
-    fun isChangeImageOnUnlockEnabled(): Boolean =
-        prefs.getBoolean(KEY_CHANGE_IMAGE_ON_UNLOCK, false)
+    fun isCycleImageOnUnlockEnabled(): Boolean =
+        prefs.getBoolean(KEY_CYCLE_IMAGE_ON_UNLOCK, false)
 
     fun setCycleImageOnUnlock(enabled: Boolean) {
         prefs.edit {
-            putBoolean(KEY_CHANGE_IMAGE_ON_UNLOCK, enabled)
+            putBoolean(KEY_CYCLE_IMAGE_ON_UNLOCK, enabled)
         }
     }
 

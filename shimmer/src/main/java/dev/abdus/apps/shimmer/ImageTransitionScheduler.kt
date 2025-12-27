@@ -66,7 +66,7 @@ class ImageTransitionScheduler(
         job = scope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
-                val interval = preferences.getTransitionIntervalMillis()
+                val interval = preferences.getImageCycleIntervalMillis()
                 
                 // Calculate actual elapsed time, accounting for pauses
                 val elapsed = if (isPaused) {
