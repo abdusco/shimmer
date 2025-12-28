@@ -39,9 +39,7 @@ import dev.abdus.apps.shimmer.R
 import dev.abdus.apps.shimmer.TapGesture
 
 data class GesturesState(
-    val tripleTapAction: GestureAction,
-    val twoFingerDoubleTapAction: GestureAction,
-    val threeFingerDoubleTapAction: GestureAction,
+    val actions: Map<TapGesture, GestureAction>,
 )
 
 sealed interface GesturesAction {
@@ -82,7 +80,7 @@ private fun TouchGesturesSection(state: GesturesState, onAction: (GesturesAction
 
             GestureActionRow(
                 title = "Triple tap (1 finger)",
-                action = state.tripleTapAction,
+                action = state.actions[TapGesture.TRIPLE_TAP] ?: GestureAction.NONE,
                 onActionChange = { onAction(GesturesAction.SetGestureAction(TapGesture.TRIPLE_TAP, it)) },
                 iconPainter = painterResource(id = R.drawable.icon_one_finger),
             )
@@ -90,14 +88,14 @@ private fun TouchGesturesSection(state: GesturesState, onAction: (GesturesAction
             GestureActionRow(
                 title = "Double tap (2 fingers)",
                 iconPainter = painterResource(id = R.drawable.icon_two_fingers),
-                action = state.twoFingerDoubleTapAction,
+                action = state.actions[TapGesture.TWO_FINGER_DOUBLE_TAP] ?: GestureAction.NONE,
                 onActionChange = { onAction(GesturesAction.SetGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP, it)) },
             )
 
             GestureActionRow(
                 title = "Double tap (3 fingers)",
                 iconPainter = painterResource(id = R.drawable.icon_three_fingers),
-                action = state.threeFingerDoubleTapAction,
+                action = state.actions[TapGesture.THREE_FINGER_DOUBLE_TAP] ?: GestureAction.NONE,
                 onActionChange = { onAction(GesturesAction.SetGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP, it)) },
             )
         }

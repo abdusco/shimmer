@@ -36,9 +36,7 @@ data class SettingsUiState(
     val currentWallpaperUri: Uri? = null,
     val currentWallpaperName: String? = null,
     val imageFolders: List<ImageFolderUiModel> = emptyList(),
-    val tripleTapAction: GestureAction,
-    val twoFingerDoubleTapAction: GestureAction,
-    val threeFingerDoubleTapAction: GestureAction,
+    val gestureActions: Map<TapGesture, GestureAction>,
 ) {
     companion object {
         fun fromPreferences(preferences: WallpaperPreferences) = SettingsUiState(
@@ -53,9 +51,7 @@ data class SettingsUiState(
             blurOnScreenLock = preferences.isBlurOnScreenLockEnabled(),
             blurTimeoutEnabled = preferences.isBlurTimeoutEnabled(),
             blurTimeoutMillis = preferences.getBlurTimeoutMillis(),
-            tripleTapAction = preferences.getGestureAction(TapGesture.TRIPLE_TAP),
-            twoFingerDoubleTapAction = preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP),
-            threeFingerDoubleTapAction = preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP),
+            gestureActions = preferences.getGestureActions(),
         )
     }
 
@@ -82,9 +78,7 @@ data class SettingsUiState(
 
     val gestures: GesturesState
         get() = GesturesState(
-            tripleTapAction = tripleTapAction,
-            twoFingerDoubleTapAction = twoFingerDoubleTapAction,
-            threeFingerDoubleTapAction = threeFingerDoubleTapAction,
+            actions = gestureActions
         )
 }
 
@@ -192,9 +186,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 WallpaperPreferences.KEY_BLUR_ON_SCREEN_LOCK -> current.copy(blurOnScreenLock = preferences.isBlurOnScreenLockEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED -> current.copy(blurTimeoutEnabled = preferences.isBlurTimeoutEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS -> current.copy(blurTimeoutMillis = preferences.getBlurTimeoutMillis())
-                WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION -> current.copy(tripleTapAction = preferences.getGestureAction(TapGesture.TRIPLE_TAP))
-                WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION -> current.copy(twoFingerDoubleTapAction = preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP))
-                WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION -> current.copy(threeFingerDoubleTapAction = preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP))
+                WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION,
+                WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION,
+                WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION -> current.copy(
+                    gestureActions = preferences.getGestureActions()
+                )
                 WallpaperPreferences.KEY_LAST_SELECTED_TAB -> current.copy(selectedTab = SettingsTab.entries.getOrElse(preferences.getLastSelectedTab()) { SettingsTab.SOURCES })
                 else -> current
             }

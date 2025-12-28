@@ -303,11 +303,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun refreshGestureActionCache() {
-            gestureActionMap = mapOf(
-                TapGesture.TRIPLE_TAP to preferences.getGestureAction(TapGesture.TRIPLE_TAP),
-                TapGesture.TWO_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP),
-                TapGesture.THREE_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP),
-            )
+            gestureActionMap = preferences.getGestureActions()
         }
 
         private fun handleGesture(gesture: TapGesture) {
