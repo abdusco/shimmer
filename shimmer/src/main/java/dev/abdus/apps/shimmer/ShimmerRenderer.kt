@@ -48,10 +48,20 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         GLES30.glClearColor(0f, 0f, 0f, 1f)
 
         try {
+            if (::program.isInitialized) {
+                program.release()
+            }
             program = ShimmerProgram()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize shaders", e)
             return
+        }
+
+        // Restore current image texture if it was already set
+        animationController.currentRenderState.let { state ->
+            if (!state.imageSet.original.isRecycled) {
+                currentImage.load(state.imageSet)
+            }
         }
 
         pendingImageSet?.let { setImage(it); pendingImageSet = null }

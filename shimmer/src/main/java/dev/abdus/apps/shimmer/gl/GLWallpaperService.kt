@@ -35,6 +35,12 @@ open class GLWallpaperService : WallpaperService() {
         fun onSurfaceDestroyed() {}
     }
 
+    enum class EglStatus {
+        OK,
+        CONTEXT_LOST,
+        ERROR
+    }
+
     open inner class GLEngine : Engine() {
         private var glThread: GLThread? = null
         private var renderer: Renderer? = null
@@ -47,10 +53,6 @@ open class GLWallpaperService : WallpaperService() {
                 glThread?.onPause()
             }
             super.onVisibilityChanged(visible)
-        }
-
-        override fun onCreate(surfaceHolder: SurfaceHolder) {
-            super.onCreate(surfaceHolder)
         }
 
         override fun onDestroy() {
@@ -76,7 +78,7 @@ open class GLWallpaperService : WallpaperService() {
         fun setRenderer(renderer: Renderer) {
             checkRenderThreadState()
             this.renderer = renderer
-            glThread = GLThread(renderer, eglContextClientVersion)
+            glThread = GLThread(this@GLWallpaperService, renderer, eglContextClientVersion)
             glThread?.start()
         }
 
@@ -138,7 +140,7 @@ private class EglHelper(private val eglContextClientVersion: Int) {
             EGL14.EGL_DEPTH_SIZE, 0,
             EGL14.EGL_STENCIL_SIZE, 0,
             EGL14.EGL_RENDERABLE_TYPE, if (eglContextClientVersion == 3) 64 else 4,
-            EGL14.EGL_NONE
+            EGL14.EGL_NONE,
         )
 
         val configs = arrayOfNulls<EGLConfig>(1)
@@ -155,7 +157,7 @@ private class EglHelper(private val eglContextClientVersion: Int) {
 
         val contextAttribs = intArrayOf(
             EGL14.EGL_CONTEXT_CLIENT_VERSION, eglContextClientVersion,
-            EGL14.EGL_NONE
+            EGL14.EGL_NONE,
         )
 
         val context = EGL14.eglCreateContext(
@@ -163,7 +165,7 @@ private class EglHelper(private val eglContextClientVersion: Int) {
             eglConfig!!,
             EGL14.EGL_NO_CONTEXT,
             contextAttribs,
-            0
+            0,
         )
 
         if (context == EGL14.EGL_NO_CONTEXT) {
@@ -179,7 +181,7 @@ private class EglHelper(private val eglContextClientVersion: Int) {
                 eglDisplay,
                 EGL14.EGL_NO_SURFACE,
                 EGL14.EGL_NO_SURFACE,
-                EGL14.EGL_NO_CONTEXT
+                EGL14.EGL_NO_CONTEXT,
             )
             destroySurface()
         }
@@ -189,7 +191,7 @@ private class EglHelper(private val eglContextClientVersion: Int) {
             eglConfig,
             holder.surface,
             intArrayOf(EGL14.EGL_NONE),
-            0
+            0,
         )
 
         if (surface == null || surface == EGL14.EGL_NO_SURFACE) {
@@ -215,16 +217,20 @@ private class EglHelper(private val eglContextClientVersion: Int) {
         return true
     }
 
-    fun swap(): Boolean {
-        val surface = eglSurface ?: return false
-        if (surface == EGL14.EGL_NO_SURFACE) return false
+    fun swap(): GLWallpaperService.EglStatus {
+        val surface = eglSurface ?: return GLWallpaperService.EglStatus.ERROR
+        if (surface == EGL14.EGL_NO_SURFACE) return GLWallpaperService.EglStatus.ERROR
 
         // With eglSwapInterval(1), this will block until VSync
         if (!EGL14.eglSwapBuffers(eglDisplay, surface)) {
             val error = EGL14.eglGetError()
-            return error != EGL14.EGL_CONTEXT_LOST
+            return if (error == EGL14.EGL_CONTEXT_LOST) {
+                GLWallpaperService.EglStatus.CONTEXT_LOST
+            } else {
+                GLWallpaperService.EglStatus.ERROR
+            }
         }
-        return true
+        return GLWallpaperService.EglStatus.OK
     }
 
     fun destroySurface() {
@@ -233,7 +239,7 @@ private class EglHelper(private val eglContextClientVersion: Int) {
                 eglDisplay,
                 EGL14.EGL_NO_SURFACE,
                 EGL14.EGL_NO_SURFACE,
-                EGL14.EGL_NO_CONTEXT
+                EGL14.EGL_NO_CONTEXT,
             )
             EGL14.eglDestroySurface(eglDisplay, eglSurface)
             eglSurface = null
@@ -252,20 +258,30 @@ private class EglHelper(private val eglContextClientVersion: Int) {
             eglDisplay = null
         }
     }
+
+    fun finishContext() {
+        destroySurface()
+        if (eglContext != null) {
+            EGL14.eglDestroyContext(eglDisplay, eglContext)
+            eglContext = null
+        }
+    }
 }
 
 /**
  * GL rendering thread using modern EGL14 APIs with VSync.
  */
 private class GLThread(
+    private val context: android.content.Context,
     private val renderer: GLWallpaperService.Renderer,
-    private val eglContextClientVersion: Int
+    private val eglContextClientVersion: Int,
 ) : Thread() {
-
     companion object {
-        private const val TARGET_FPS = 60
-        private val TARGET_FRAME_NANOS = 1_000_000_000L / TARGET_FPS // nanoseconds per frame
+        private const val TAG = "GLThread"
     }
+
+    private var targetFps = 60
+    private var targetFrameNanos = 1_000_000_000L / targetFps
 
     private val threadManager = GLThreadManager()
     private var holder: SurfaceHolder? = null
@@ -302,6 +318,18 @@ private class GLThread(
 
     init {
         name = "GLThread $id"
+        updateRefreshRate()
+    }
+
+    private fun updateRefreshRate() {
+        val windowManager = context.getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager
+
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay
+        val refreshRate = display?.refreshRate?.toInt() ?: 60
+        targetFps = refreshRate.coerceIn(30, 144)
+        targetFrameNanos = 1_000_000_000L / targetFps
+        Log.d(TAG, "Target refresh rate: $targetFps Hz")
     }
 
     override fun run() {
@@ -400,7 +428,7 @@ private class GLThread(
 
                 if (changed) {
                     if (!eglHelper!!.createSurface(holder!!)) {
-                        Log.e("GLThread", "Failed to create EGL surface")
+                        Log.e(TAG, "Failed to create EGL surface")
                         continue
                     }
                     tellRendererSurfaceChanged = true
@@ -420,14 +448,25 @@ private class GLThread(
                     frameStartNanos = System.nanoTime()
 
                     renderer.onDrawFrame()
-                    // eglSwapBuffers will block until VSync when eglSwapInterval(1) is set
-                    eglHelper!!.swap()
+
+                    val status = eglHelper!!.swap()
+                    if (status == GLWallpaperService.EglStatus.CONTEXT_LOST) {
+                        Log.w(TAG, "EGL context lost, resetting context")
+                        renderer.onSurfaceDestroyed()
+                        synchronized(threadManager) {
+                            haveEgl = false
+                            eglHelper!!.finishContext()
+                            threadManager.releaseEglSurface(this)
+                        }
+                        // Continue to next loop iteration which will re-init EGL
+                        continue
+                    }
 
                     val frameDuration = System.nanoTime() - frameStartNanos
-                    if (frameDuration > TARGET_FRAME_NANOS * 2) {
+                    if (frameDuration > targetFrameNanos * 2) {
                         droppedFrames++
                         if (droppedFrames % 60 == 0) {
-                            Log.w("GLThread", "Dropped frames: $droppedFrames, last frame: ${frameDuration / 1_000_000}ms")
+                            Log.w(TAG, "Dropped frames: $droppedFrames, last frame: ${frameDuration / 1_000_000}ms")
                         }
                     }
                 }
@@ -486,7 +525,7 @@ private class GLThread(
                 try {
                     (threadManager as Object).wait()
                 } catch (e: InterruptedException) {
-                    Thread.currentThread().interrupt()
+                    currentThread().interrupt()
                 }
             }
         }
@@ -525,7 +564,7 @@ private class GLThread(
         try {
             join()
         } catch (ex: InterruptedException) {
-            Thread.currentThread().interrupt()
+            currentThread().interrupt()
         }
     }
 
@@ -537,7 +576,7 @@ private class GLThread(
                     (threadManager as Object).notifyAll()
                 }
             } else {
-                android.util.Log.w("GLThread", "Event queue full, dropping event")
+                Log.w(TAG, "Event queue full, dropping event")
             }
         }
     }
