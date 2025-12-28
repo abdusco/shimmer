@@ -42,7 +42,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val favoritesRepository = FavoritesRepository(this@ShimmerWallpaperService, preferences, folderRepository)
         private val imageLoader = ImageLoader(contentResolver, resources)
         private val cycleScheduler =
-                ImageCycleScheduler(scope, preferences) {
+                ImageCycleScheduler(scope, { preferences.getImageCycleIntervalMillis() }) {
                     Log.d(TAG, "ImageCycleScheduler triggered image cycle")
                     requestImageCycle()
                 }
@@ -315,7 +315,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 GestureAction.TOGGLE_BLUR -> {
                     sessionBlurEnabled = !sessionBlurEnabled
                     applyBlurState(immediate = false)
-                    cycleScheduler.pauseForInteraction()
+                    cycleScheduler.pauseTemporarily()
                 }
                 GestureAction.RANDOM_DUOTONE -> applyNextDuotone()
                 GestureAction.ADD_TO_FAVORITES -> addCurrentImageToFavorites()
@@ -326,18 +326,16 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onVisibilityChanged(visible: Boolean) {
             super.onVisibilityChanged(visible)
             engineVisible = visible
+
+            cycleScheduler.setVisible(visible)
             if (visible) {
-                cycleScheduler.onWallpaperVisible()
                 applyBlurState(immediate = false)
-                cycleScheduler.start()
                 queueEvent { renderer?.onVisibilityChanged() }
-            } else {
-                cycleScheduler.onWallpaperHidden()
             }
         }
 
         override fun onOffsetsChanged(x: Float, y: Float, xs: Float, ys: Float, xp: Int, yp: Int) {
-            cycleScheduler.pauseForInteraction()
+            cycleScheduler.pauseTemporarily()
             renderer?.setParallaxOffset(x)
         }
 
@@ -433,7 +431,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             preferences.unregisterListener(preferenceListener)
             try { unregisterReceiver(shortcutReceiver) } catch (_: Exception) {}
             try { unregisterReceiver(screenUnlockReceiver) } catch (_: Exception) {}
-            cycleScheduler.cancel()
+            cycleScheduler.stop()
             scope.cancel()
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
             super.onDestroy()

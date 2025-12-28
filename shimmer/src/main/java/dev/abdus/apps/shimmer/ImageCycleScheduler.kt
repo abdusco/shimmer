@@ -7,127 +7,98 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.max
 
 class ImageCycleScheduler(
     private val scope: CoroutineScope,
-    private val preferences: WallpaperPreferences,
+    private val getIntervalMs: () -> Long,
     private val onCycleImage: () -> Unit
 ) {
     private var job: Job? = null
-    private var isEnabled = false
-    private var isWallpaperVisible = true
-    
-    // Track when the current interval started
-    private var intervalStartTime = 0L
-    
-    // Track accumulated pause time during user interaction
-    private var accumulatedPauseMillis = 0L
-    private var pauseStartTime = 0L
-    private var isPaused = false
+    private var isRunning = false
+    private var isVisible = false
+
+    private var cycleStartTime = 0L
+    private var pausedAt = 0L
+    private var totalPausedDuration = 0L
+    private var pauseJob: Job? = null
 
     fun updateEnabled(enabled: Boolean) {
-        isEnabled = enabled
-        if (isEnabled) start() else stop()
-    }
-    
-    fun onWallpaperVisible() {
-        isWallpaperVisible = true
-        if (isEnabled) {
-            start() // Resume if we were running
-        }
-    }
-    
-    fun onWallpaperHidden() {
-        isWallpaperVisible = false
-        // When going invisible, pause but preserve state
-        pauseTimer()
+        if (enabled) start() else stop()
     }
 
     fun start() {
-        stop()
-        if (!isEnabled || !isWallpaperVisible) return
-        
-        // If this is a fresh start (not a resume), reset timing
-        if (intervalStartTime == 0L) {
-            resetTimer()
-        }
+        if (isRunning) return
+
+        isRunning = true
+        if (cycleStartTime == 0L) resetTimer()
 
         job = scope.launch {
-            while (isActive) {
-                val now = System.currentTimeMillis()
-                val interval = preferences.getImageCycleIntervalMillis()
-                
-                // Calculate actual elapsed time, accounting for pauses
-                val elapsed = if (isPaused) {
-                    // While paused, don't advance elapsed time
-                    (pauseStartTime - intervalStartTime) - accumulatedPauseMillis
-                } else {
-                    (now - intervalStartTime) - accumulatedPauseMillis
-                }
-                
+            while (isActive && isRunning) {
+                val elapsed = getElapsedTime()
+                val interval = getIntervalMs()
                 val remaining = interval - elapsed
-                
-                if (remaining <= 0 && !isPaused && isWallpaperVisible) {
-                    // Time to change!
-                    withContext(Dispatchers.Main) {
-                        onCycleImage()
+
+                if (remaining <= 0 && pausedAt == 0L) {
+                    if (isVisible) {
+                        withContext(Dispatchers.Main) {
+                            onCycleImage()
+                        }
+                        resetTimer()
                     }
-                    // Auto-reset timer after successful transition
-                    resetTimer()
-                    delay(1000L) // Small delay before next check
+                    delay(1000L)
                 } else {
-                    // Wait and check again
-                    delay(max(1000L, remaining.coerceAtMost(5000L)))
+                    delay(remaining.coerceIn(500L, 5000L))
                 }
+            }
+            job = null
+        }
+    }
+
+    fun setVisible(visible: Boolean) {
+        isVisible = visible
+    }
+
+    fun pauseTemporarily(durationMs: Long = 2000L) {
+        pauseJob?.cancel()
+        pausedAt = System.currentTimeMillis()
+
+        pauseJob = scope.launch {
+            delay(durationMs)
+            if (pausedAt != 0L) {
+                totalPausedDuration += System.currentTimeMillis() - pausedAt
+                pausedAt = 0L
             }
         }
     }
 
-    fun pauseForInteraction() {
-        if (!isPaused) {
-            isPaused = true
-            pauseStartTime = System.currentTimeMillis()
-        }
-        
-        scope.launch {
-            delay(2000L)
-            resumeTimer()
-        }
-    }
-    
-    private fun pauseTimer() {
-        if (!isPaused) {
-            isPaused = true
-            pauseStartTime = System.currentTimeMillis()
-        }
-    }
-    
-    private fun resumeTimer() {
-        if (isPaused) {
-            val pauseDuration = System.currentTimeMillis() - pauseStartTime
-            accumulatedPauseMillis += pauseDuration
-            isPaused = false
-        }
-    }
-
-    fun resetTimer() {
-        intervalStartTime = System.currentTimeMillis()
-        accumulatedPauseMillis = 0L
-        isPaused = false
-        pauseStartTime = 0L
-    }
-
     fun stop() {
+        isRunning = false
         job?.cancel()
         job = null
     }
 
-    fun cancel() {
+    fun reset() {
         stop()
-        intervalStartTime = 0L
-        accumulatedPauseMillis = 0L
-        isPaused = false
-        pauseStartTime = 0L
+        pauseJob?.cancel()
+        cycleStartTime = 0L
+        totalPausedDuration = 0L
+        pausedAt = 0L
+    }
+
+    private fun getElapsedTime(): Long {
+        val now = System.currentTimeMillis()
+        val totalElapsed = now - cycleStartTime
+        val effectivePause = if (pausedAt != 0L) {
+            now - pausedAt
+        } else {
+            0L
+        }
+        return totalElapsed - totalPausedDuration - effectivePause
+    }
+
+    fun resetTimer() {
+        cycleStartTime = System.currentTimeMillis()
+        totalPausedDuration = 0L
+        pausedAt = 0L
     }
 }
