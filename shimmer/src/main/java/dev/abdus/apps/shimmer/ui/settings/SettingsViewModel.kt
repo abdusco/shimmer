@@ -8,10 +8,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.abdus.apps.shimmer.Actions
 import dev.abdus.apps.shimmer.ChromaticAberrationSettings
-import dev.abdus.apps.shimmer.DuotoneBlendMode
 import dev.abdus.apps.shimmer.DuotoneSettings
 import dev.abdus.apps.shimmer.GestureAction
 import dev.abdus.apps.shimmer.GrainSettings
+import dev.abdus.apps.shimmer.ImageCycleSettings
 import dev.abdus.apps.shimmer.ImageFolderRepository
 import dev.abdus.apps.shimmer.TapGesture
 import dev.abdus.apps.shimmer.WallpaperPreferences
@@ -22,49 +22,49 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
-    val selectedTab: SettingsTab = SettingsTab.SOURCES,
-    val blurAmount: Float = WallpaperPreferences.DEFAULT_BLUR_AMOUNT,
-    val dimAmount: Float = WallpaperPreferences.DEFAULT_DIM_AMOUNT,
-    val grainSettings: GrainSettings = GrainSettings(
-        WallpaperPreferences.DEFAULT_GRAIN_ENABLED,
-        WallpaperPreferences.DEFAULT_GRAIN_AMOUNT,
-        WallpaperPreferences.DEFAULT_GRAIN_SCALE,
-    ),
-    val duotoneSettings: DuotoneSettings = DuotoneSettings(
-        WallpaperPreferences.DEFAULT_DUOTONE_ENABLED,
-        WallpaperPreferences.DEFAULT_DUOTONE_ALWAYS_ON,
-        WallpaperPreferences.DEFAULT_DUOTONE_LIGHT,
-        WallpaperPreferences.DEFAULT_DUOTONE_DARK,
-        -1,
-        DuotoneBlendMode.NORMAL,
-    ),
-    val chromaticAberration: ChromaticAberrationSettings = ChromaticAberrationSettings(
-        WallpaperPreferences.DEFAULT_CHROMATIC_ABERRATION_ENABLED,
-        WallpaperPreferences.DEFAULT_CHROMATIC_ABERRATION_INTENSITY,
-        WallpaperPreferences.DEFAULT_CHROMATIC_ABERRATION_FADE_DURATION,
-    ),
-    val imageCycleIntervalMillis: Long = WallpaperPreferences.DEFAULT_TRANSITION_INTERVAL_MILLIS,
-    val imageCycleEnabled: Boolean = true,
-    val effectTransitionDurationMillis: Long = WallpaperPreferences.DEFAULT_EFFECT_TRANSITION_DURATION_MILLIS,
-    val blurOnScreenLock: Boolean = false,
-    val blurTimeoutEnabled: Boolean = false,
-    val blurTimeoutMillis: Long = WallpaperPreferences.DEFAULT_BLUR_TIMEOUT_MILLIS,
-    val cycleImageOnUnlock: Boolean = false,
+    val selectedTab: SettingsTab,
+    val blurAmount: Float,
+    val dimAmount: Float,
+    val grainSettings: GrainSettings,
+    val duotoneSettings: DuotoneSettings,
+    val chromaticAberration: ChromaticAberrationSettings,
+    val imageCycleSettings: ImageCycleSettings,
+    val effectTransitionDurationMillis: Long,
+    val blurOnScreenLock: Boolean,
+    val blurTimeoutEnabled: Boolean,
+    val blurTimeoutMillis: Long,
     val currentWallpaperUri: Uri? = null,
     val currentWallpaperName: String? = null,
     val imageFolders: List<ImageFolderUiModel> = emptyList(),
-    val tripleTapAction: GestureAction = WallpaperPreferences.DEFAULT_TRIPLE_TAP_ACTION,
-    val twoFingerDoubleTapAction: GestureAction = WallpaperPreferences.DEFAULT_TWO_FINGER_DOUBLE_TAP_ACTION,
-    val threeFingerDoubleTapAction: GestureAction = WallpaperPreferences.DEFAULT_THREE_FINGER_DOUBLE_TAP_ACTION,
+    val tripleTapAction: GestureAction,
+    val twoFingerDoubleTapAction: GestureAction,
+    val threeFingerDoubleTapAction: GestureAction,
 ) {
+    companion object {
+        fun fromPreferences(preferences: WallpaperPreferences) = SettingsUiState(
+            selectedTab = SettingsTab.entries.getOrElse(preferences.getLastSelectedTab()) { SettingsTab.SOURCES },
+            blurAmount = preferences.getBlurAmount(),
+            dimAmount = preferences.getDimAmount(),
+            grainSettings = preferences.getGrainSettings(),
+            duotoneSettings = preferences.getDuotoneSettings(),
+            chromaticAberration = preferences.getChromaticAberrationSettings(),
+            imageCycleSettings = preferences.getImageCycleSettings(),
+            effectTransitionDurationMillis = preferences.getEffectTransitionDurationMillis(),
+            blurOnScreenLock = preferences.isBlurOnScreenLockEnabled(),
+            blurTimeoutEnabled = preferences.isBlurTimeoutEnabled(),
+            blurTimeoutMillis = preferences.getBlurTimeoutMillis(),
+            tripleTapAction = preferences.getGestureAction(TapGesture.TRIPLE_TAP),
+            twoFingerDoubleTapAction = preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP),
+            threeFingerDoubleTapAction = preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP),
+        )
+    }
+
     val sources: SourcesState
         get() = SourcesState(
             currentWallpaperUri = currentWallpaperUri,
             currentWallpaperName = currentWallpaperName,
             imageFolders = imageFolders,
-            imageCycleEnabled = imageCycleEnabled,
-            imageCycleIntervalMillis = imageCycleIntervalMillis,
-            cycleImageOnUnlock = cycleImageOnUnlock,
+            imageCycleSettings = imageCycleSettings,
         )
 
     val effects: EffectsState
@@ -93,7 +93,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val repository = ImageFolderRepository(application)
     private val preferences = WallpaperPreferences.create(application)
 
-    private val _uiState = MutableStateFlow(SettingsUiState())
+    private val _uiState = MutableStateFlow(SettingsUiState.fromPreferences(preferences))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -102,8 +102,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     init {
         preferences.registerListener(prefsListener)
-        loadInitialState()
         observeRepository()
+    }
+
+    fun handleSettingsAction(action: SettingsAction) {
+        when (action) {
+            is SettingsAction.TabSelected -> preferences.setLastSelectedTab(action.tab.ordinal)
+        }
     }
 
     fun handleSourcesAction(action: SourcesAction) {
@@ -111,58 +116,33 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             SourcesAction.ViewCurrentWallpaper -> viewCurrentWallpaper()
             is SourcesAction.NavigateToFolderDetail -> navigateToFolderDetail(action.folderId, action.folderName)
             SourcesAction.NavigateToFolderSelection -> navigateToFolderSelection()
-            is SourcesAction.SetImageCycleEnabled -> setImageCycleEnabled(action.enabled)
-            is SourcesAction.SetImageCycleInterval -> setImageCycleIntervalMillis(action.intervalMillis)
-            is SourcesAction.SetCycleImageOnUnlock -> setCycleImageOnUnlock(action.enabled)
+            is SourcesAction.UpdateImageCycle -> preferences.setImageCycleSettings(action.settings)
         }
     }
 
     fun handleEffectsAction(action: EffectsAction) {
         when (action) {
-            is EffectsAction.SetBlurAmount -> setBlurAmount(action.amount)
-            is EffectsAction.SetDimAmount -> setDimAmount(action.amount)
-            is EffectsAction.SetEffectTransitionDuration -> setEffectTransitionDurationMillis(action.durationMillis)
+            is EffectsAction.SetBlurAmount -> preferences.setBlurAmount(action.amount)
+            is EffectsAction.SetDimAmount -> preferences.setDimAmount(action.amount)
+            is EffectsAction.SetEffectTransitionDuration -> preferences.setEffectTransitionDurationMillis(action.durationMillis)
             is EffectsAction.UpdateDuotone -> preferences.setDuotoneSettings(action.settings)
             is EffectsAction.UpdateGrain -> preferences.setGrainSettings(action.settings)
             is EffectsAction.UpdateChromaticAberration -> preferences.setChromaticAberrationSettings(action.settings)
-            is EffectsAction.SetBlurOnScreenLock -> setBlurOnScreenLock(action.enabled)
-            is EffectsAction.SetBlurTimeoutEnabled -> setBlurTimeoutEnabled(action.enabled)
-            is EffectsAction.SetBlurTimeoutMillis -> setBlurTimeoutMillis(action.millis)
+            is EffectsAction.SetBlurOnScreenLock -> preferences.setBlurOnScreenLock(action.enabled)
+            is EffectsAction.SetBlurTimeoutEnabled -> preferences.setBlurTimeoutEnabled(action.enabled)
+            is EffectsAction.SetBlurTimeoutMillis -> preferences.setBlurTimeoutMillis(action.millis)
         }
     }
 
     fun handleGesturesAction(action: GesturesAction) {
         when (action) {
-            is GesturesAction.SetGestureAction -> setGestureAction(action.event, action.action)
+            is GesturesAction.SetGestureAction -> preferences.setGestureAction(action.event, action.action)
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         preferences.unregisterListener(prefsListener)
-    }
-
-    private fun loadInitialState() {
-        _uiState.update { current ->
-            current.copy(
-                selectedTab = SettingsTab.entries.getOrElse(preferences.getLastSelectedTab()) { SettingsTab.SOURCES },
-                blurAmount = preferences.getBlurAmount(),
-                dimAmount = preferences.getDimAmount(),
-                grainSettings = preferences.getGrainSettings(),
-                duotoneSettings = preferences.getDuotoneSettings(),
-                chromaticAberration = preferences.getChromaticAberrationSettings(),
-                imageCycleIntervalMillis = preferences.getImageCycleIntervalMillis(),
-                imageCycleEnabled = preferences.isImageCycleEnabled(),
-                effectTransitionDurationMillis = preferences.getEffectTransitionDurationMillis(),
-                blurOnScreenLock = preferences.isBlurOnScreenLockEnabled(),
-                blurTimeoutEnabled = preferences.isBlurTimeoutEnabled(),
-                blurTimeoutMillis = preferences.getBlurTimeoutMillis(),
-                cycleImageOnUnlock = preferences.isCycleImageOnUnlockEnabled(),
-                tripleTapAction = preferences.getGestureAction(TapGesture.TRIPLE_TAP),
-                twoFingerDoubleTapAction = preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP),
-                threeFingerDoubleTapAction = preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP),
-            )
-        }
     }
 
     private fun observeRepository() {
@@ -207,9 +187,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 WallpaperPreferences.KEY_GRAIN_SETTINGS -> current.copy(grainSettings = preferences.getGrainSettings())
                 WallpaperPreferences.KEY_DUOTONE_SETTINGS -> current.copy(duotoneSettings = preferences.getDuotoneSettings())
                 WallpaperPreferences.KEY_CHROMATIC_ABERRATION_SETTINGS -> current.copy(chromaticAberration = preferences.getChromaticAberrationSettings())
-                WallpaperPreferences.KEY_IMAGE_CYCLE_INTERVAL -> current.copy(imageCycleIntervalMillis = preferences.getImageCycleIntervalMillis())
-                WallpaperPreferences.KEY_IMAGE_CYCLE_ENABLED -> current.copy(imageCycleEnabled = preferences.isImageCycleEnabled())
-                WallpaperPreferences.KEY_CYCLE_IMAGE_ON_UNLOCK -> current.copy(cycleImageOnUnlock = preferences.isCycleImageOnUnlockEnabled())
+                WallpaperPreferences.KEY_IMAGE_CYCLE_SETTINGS -> current.copy(imageCycleSettings = preferences.getImageCycleSettings())
                 WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION -> current.copy(effectTransitionDurationMillis = preferences.getEffectTransitionDurationMillis())
                 WallpaperPreferences.KEY_BLUR_ON_SCREEN_LOCK -> current.copy(blurOnScreenLock = preferences.isBlurOnScreenLockEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED -> current.copy(blurTimeoutEnabled = preferences.isBlurTimeoutEnabled())
@@ -222,24 +200,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
-
-    fun setTab(tab: SettingsTab) {
-        preferences.setLastSelectedTab(tab.ordinal)
-    }
-
-    fun setBlurAmount(amount: Float) = preferences.setBlurAmount(amount)
-    fun setDimAmount(amount: Float) = preferences.setDimAmount(amount)
-
-    fun setImageCycleEnabled(enabled: Boolean) = preferences.setImageCycleEnabled(enabled)
-    fun setImageCycleIntervalMillis(millis: Long) = preferences.setImageCycleIntervalMillis(millis)
-    fun setCycleImageOnUnlock(enabled: Boolean) = preferences.setCycleImageOnUnlock(enabled)
-
-    fun setEffectTransitionDurationMillis(millis: Long) = preferences.setEffectTransitionDurationMillis(millis)
-    fun setBlurOnScreenLock(enabled: Boolean) = preferences.setBlurOnScreenLock(enabled)
-    fun setBlurTimeoutEnabled(enabled: Boolean) = preferences.setBlurTimeoutEnabled(enabled)
-    fun setBlurTimeoutMillis(millis: Long) = preferences.setBlurTimeoutMillis(millis)
-
-    fun setGestureAction(event: TapGesture, action: GestureAction) = preferences.setGestureAction(event, action)
 
     fun viewCurrentWallpaper() {
         uiState.value.currentWallpaperUri?.let { uri ->

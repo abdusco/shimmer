@@ -21,19 +21,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.abdus.apps.shimmer.ImageCycleSettings
 import kotlin.math.roundToInt
 
 @Composable
 fun ImageCycleSettingsSection(
-    enabled: Boolean,
-    intervalMillis: Long,
-    cycleImageOnUnlock: Boolean,
-    onImageCycleEnabledChange: (Boolean) -> Unit,
-    onImageCycleIntervalChange: (Long) -> Unit,
-    onCycleImageOnUnlockChange: (Boolean) -> Unit,
+    settings: ImageCycleSettings,
+    onUpdate: (ImageCycleSettings) -> Unit,
 ) {
     val options = TRANSITION_INTERVAL_OPTIONS
-    val sliderIndex = options.indexOfFirst { it.millis == intervalMillis }.takeIf { it >= 0 } ?: 0
+    val sliderIndex = options.indexOfFirst { it.millis == settings.intervalMillis }.takeIf { it >= 0 } ?: 0
     val selectedOption = options.getOrElse(sliderIndex) { options.first() }
     ElevatedCard(shape = RoundedCornerShape(16.dp)) {
         Column(
@@ -45,11 +42,14 @@ fun ImageCycleSettingsSection(
                 description = "Automatically cycle through images at regular intervals",
                 iconVector = Icons.Outlined.SwapHoriz,
                 actionSlot = {
-                    Switch(checked = enabled, onCheckedChange = onImageCycleEnabledChange)
+                    Switch(
+                        checked = settings.enabled,
+                        onCheckedChange = { onUpdate(settings.copy(enabled = it)) }
+                    )
                 }
             )
 
-            AnimatedVisibility(visible = enabled) {
+            AnimatedVisibility(visible = settings.enabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Timer, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -59,7 +59,7 @@ fun ImageCycleSettingsSection(
                         value = sliderIndex.toFloat(),
                         onValueChange = { raw ->
                             val nextIndex = raw.roundToInt().coerceIn(0, options.lastIndex)
-                            onImageCycleIntervalChange(options[nextIndex].millis)
+                            onUpdate(settings.copy(intervalMillis = options[nextIndex].millis))
                         },
                         valueRange = 0f..options.lastIndex.toFloat(),
                         steps = (options.size - 2).coerceAtLeast(0),
@@ -77,7 +77,10 @@ fun ImageCycleSettingsSection(
                     Icon(Icons.Outlined.Lock, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Cycle when screen unlocks", style = MaterialTheme.typography.bodyMedium)
                 }
-                Switch(checked = cycleImageOnUnlock, onCheckedChange = onCycleImageOnUnlockChange)
+                Switch(
+                    checked = settings.cycleOnUnlock,
+                    onCheckedChange = { onUpdate(settings.copy(cycleOnUnlock = it)) }
+                )
             }
         }
     }

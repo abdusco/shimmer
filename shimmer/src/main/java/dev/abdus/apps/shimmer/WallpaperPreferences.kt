@@ -61,6 +61,13 @@ data class ImageFolder(
     val enabled: Boolean = true,
 )
 
+@Serializable
+data class ImageCycleSettings(
+    val enabled: Boolean,
+    val intervalMillis: Long,
+    val cycleOnUnlock: Boolean,
+)
+
 class WallpaperPreferences(private val prefs: SharedPreferences) {
 
     companion object {
@@ -69,11 +76,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_BLUR_AMOUNT = "wallpaper_blur_amount"
         const val KEY_DIM_AMOUNT = "wallpaper_dim_amount"
         const val KEY_DUOTONE_SETTINGS = "wallpaper_duotone_settings"
-        const val KEY_IMAGE_CYCLE_INTERVAL = "wallpaper_image_cycle_interval"
-        const val KEY_IMAGE_CYCLE_ENABLED = "wallpaper_image_cycle_enabled"
+        const val KEY_IMAGE_CYCLE_SETTINGS = "wallpaper_image_cycle_settings"
         const val KEY_EFFECT_TRANSITION_DURATION = "wallpaper_effect_transition_duration"
         const val KEY_BLUR_ON_SCREEN_LOCK = "wallpaper_blur_on_screen_lock"
-        const val KEY_CYCLE_IMAGE_ON_UNLOCK = "wallpaper_image_cycle_on_unlock"
         const val KEY_BLUR_TIMEOUT_ENABLED = "wallpaper_blur_timeout_enabled"
         const val KEY_BLUR_TIMEOUT_MILLIS = "wallpaper_blur_timeout_millis"
         const val KEY_UNBLUR_ON_UNLOCK = "wallpaper_unblur_on_unlock"
@@ -92,7 +97,9 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val DEFAULT_DUOTONE_LIGHT = 0xFFFFD000.toInt()
         const val DEFAULT_DUOTONE_DARK = 0xFF696969.toInt()
         const val DEFAULT_DUOTONE_ALWAYS_ON = false
+        const val DEFAULT_IMAGE_CYCLE_ENABLED = true
         const val DEFAULT_TRANSITION_INTERVAL_MILLIS = 30_000L
+        const val DEFAULT_CYCLE_IMAGE_ON_UNLOCK = false
         const val DEFAULT_EFFECT_TRANSITION_DURATION_MILLIS = 1500L
         const val DEFAULT_BLUR_TIMEOUT_MILLIS = 30_000L
         const val MIN_BLUR_TIMEOUT_MILLIS = 5_000L
@@ -301,23 +308,37 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         )
     }
 
-    fun getImageCycleIntervalMillis(): Long =
-        prefs.getLong(KEY_IMAGE_CYCLE_INTERVAL, DEFAULT_TRANSITION_INTERVAL_MILLIS)
-
-    fun setImageCycleIntervalMillis(durationMillis: Long) {
-        prefs.edit {
-            putLong(KEY_IMAGE_CYCLE_INTERVAL, durationMillis.coerceAtLeast(0L))
+    /**
+     * Get image cycle settings as a single object.
+     */
+    fun getImageCycleSettings(): ImageCycleSettings {
+        val json = prefs.getString(KEY_IMAGE_CYCLE_SETTINGS, null)
+        return if (json != null) {
+            try {
+                Json.decodeFromString<ImageCycleSettings>(json)
+            } catch (e: Exception) {
+                getDefaultImageCycleSettings()
+            }
+        } else {
+            getDefaultImageCycleSettings()
         }
     }
 
-    fun isImageCycleEnabled(): Boolean =
-        prefs.getBoolean(KEY_IMAGE_CYCLE_ENABLED, true)
-
-    fun setImageCycleEnabled(enabled: Boolean) {
+    /**
+     * Set image cycle settings as a single atomic operation.
+     */
+    fun setImageCycleSettings(settings: ImageCycleSettings) {
+        val json = Json.encodeToString(settings)
         prefs.edit {
-            putBoolean(KEY_IMAGE_CYCLE_ENABLED, enabled)
+            putString(KEY_IMAGE_CYCLE_SETTINGS, json)
         }
     }
+
+    private fun getDefaultImageCycleSettings() = ImageCycleSettings(
+        enabled = DEFAULT_IMAGE_CYCLE_ENABLED,
+        intervalMillis = DEFAULT_TRANSITION_INTERVAL_MILLIS,
+        cycleOnUnlock = DEFAULT_CYCLE_IMAGE_ON_UNLOCK,
+    )
 
     fun getEffectTransitionDurationMillis(): Long =
         prefs.getLong(KEY_EFFECT_TRANSITION_DURATION, DEFAULT_EFFECT_TRANSITION_DURATION_MILLIS)
@@ -342,15 +363,6 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
     fun setBlurOnScreenLock(enabled: Boolean) {
         prefs.edit {
             putBoolean(KEY_BLUR_ON_SCREEN_LOCK, enabled)
-        }
-    }
-
-    fun isCycleImageOnUnlockEnabled(): Boolean =
-        prefs.getBoolean(KEY_CYCLE_IMAGE_ON_UNLOCK, false)
-
-    fun setCycleImageOnUnlock(enabled: Boolean) {
-        prefs.edit {
-            putBoolean(KEY_CYCLE_IMAGE_ON_UNLOCK, enabled)
         }
     }
 

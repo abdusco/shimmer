@@ -75,7 +75,9 @@ private fun SettingsScreen(
                 SettingsTab.entries.forEach { tab ->
                     NavigationBarItem(
                         selected = state.selectedTab == tab,
-                        onClick = { viewModel.setTab(tab) },
+                        onClick = {
+                            viewModel.handleSettingsAction(SettingsAction.TabSelected(tab))
+                        },
                         label = { Text(tab.label) },
                         icon = { Icon(tab.icon, contentDescription = null) }
                     )

@@ -43,23 +43,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import dev.abdus.apps.shimmer.ImageCycleSettings
 
 data class SourcesState(
     val currentWallpaperUri: Uri?,
     val currentWallpaperName: String?,
     val imageFolders: List<ImageFolderUiModel>,
-    val imageCycleEnabled: Boolean,
-    val imageCycleIntervalMillis: Long,
-    val cycleImageOnUnlock: Boolean,
+    val imageCycleSettings: ImageCycleSettings,
 )
 
 sealed interface SourcesAction {
     data object ViewCurrentWallpaper : SourcesAction
     data class NavigateToFolderDetail(val folderId: Long, val folderName: String) : SourcesAction
     data object NavigateToFolderSelection : SourcesAction
-    data class SetImageCycleEnabled(val enabled: Boolean) : SourcesAction
-    data class SetImageCycleInterval(val intervalMillis: Long) : SourcesAction
-    data class SetCycleImageOnUnlock(val enabled: Boolean) : SourcesAction
+    data class UpdateImageCycle(val settings: ImageCycleSettings) : SourcesAction
 }
 
 @Composable
@@ -91,12 +88,8 @@ fun SourcesTab(
 
         item {
             ImageCycleSettingsSection(
-                enabled = state.imageCycleEnabled,
-                intervalMillis = state.imageCycleIntervalMillis,
-                cycleImageOnUnlock = state.cycleImageOnUnlock,
-                onImageCycleEnabledChange = { onAction(SourcesAction.SetImageCycleEnabled(it)) },
-                onImageCycleIntervalChange = { onAction(SourcesAction.SetImageCycleInterval(it)) },
-                onCycleImageOnUnlockChange = { onAction(SourcesAction.SetCycleImageOnUnlock(it)) },
+                settings = state.imageCycleSettings,
+                onUpdate = { onAction(SourcesAction.UpdateImageCycle(it)) },
             )
         }
     }

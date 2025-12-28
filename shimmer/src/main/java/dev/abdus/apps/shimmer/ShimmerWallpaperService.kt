@@ -42,7 +42,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val favoritesRepository = FavoritesRepository(this@ShimmerWallpaperService, preferences, folderRepository)
         private val imageLoader = ImageLoader(contentResolver, resources)
         private val cycleScheduler =
-            ImageCycleScheduler(scope, { preferences.getImageCycleIntervalMillis() }) {
+            ImageCycleScheduler(scope, { preferences.getImageCycleSettings().intervalMillis }) {
                 Log.d(TAG, "ImageCycleScheduler triggered image cycle")
                 requestImageCycle()
             }
@@ -140,10 +140,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
 
                 if (syncEverything ||
-                    key == WallpaperPreferences.KEY_IMAGE_CYCLE_ENABLED ||
-                    key == WallpaperPreferences.KEY_IMAGE_CYCLE_INTERVAL
+                    key == WallpaperPreferences.KEY_IMAGE_CYCLE_SETTINGS
                 ) {
-                    cycleScheduler.updateEnabled(preferences.isImageCycleEnabled())
+                    cycleScheduler.updateEnabled(preferences.getImageCycleSettings().enabled)
                 }
             }
         }
@@ -394,7 +393,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
                         applyBlurState(immediate = false)
 
-                        if (preferences.isCycleImageOnUnlockEnabled()) {
+                        if (preferences.getImageCycleSettings().cycleOnUnlock) {
                             requestImageCycle()
                         }
                     }
