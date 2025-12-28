@@ -7,7 +7,7 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import kotlin.math.abs
 
-enum class TapEvent {
+enum class TapGesture {
     TRIPLE_TAP,              // 1 finger, 3 taps
     TWO_FINGER_DOUBLE_TAP,   // 2 fingers, 2 taps
     THREE_FINGER_DOUBLE_TAP, // 3 fingers, 2 taps
@@ -34,7 +34,7 @@ class TapGestureDetector(context: Context) {
 
     private val startPointers = mutableMapOf<Int, PointF>()
 
-    fun onTouchEvent(event: MotionEvent): TapEvent {
+    fun onTouchEvent(event: MotionEvent): TapGesture {
         val action = event.actionMasked
         val pointerIndex = event.actionIndex
 
@@ -73,7 +73,7 @@ class TapGestureDetector(context: Context) {
                     handleTapCompleted(maxPointersInCurrentTap)
                 } else {
                     tapCount = 0
-                    TapEvent.NONE
+                    TapGesture.NONE
                 }
 
                 lastTapTime = now
@@ -88,7 +88,7 @@ class TapGestureDetector(context: Context) {
             }
         }
 
-        return TapEvent.NONE
+        return TapGesture.NONE
     }
 
     private fun trackPointer(event: MotionEvent, index: Int) {
@@ -100,7 +100,7 @@ class TapGestureDetector(context: Context) {
         }
     }
 
-    private fun handleTapCompleted(fingerCount: Int): TapEvent {
+    private fun handleTapCompleted(fingerCount: Int): TapGesture {
         // Check if the finger count changed mid-sequence
         if (fingerCount != lastTapFingerCount) {
             tapCount = 1
@@ -114,26 +114,26 @@ class TapGestureDetector(context: Context) {
             // --- Added: Three-finger double tap ---
             fingerCount == 3 && tapCount == 2 -> {
                 reset()
-                TapEvent.THREE_FINGER_DOUBLE_TAP
+                TapGesture.THREE_FINGER_DOUBLE_TAP
             }
 
             fingerCount == 2 && tapCount == 2 -> {
                 reset()
-                TapEvent.TWO_FINGER_DOUBLE_TAP
+                TapGesture.TWO_FINGER_DOUBLE_TAP
             }
 
             fingerCount == 1 && tapCount == 3 -> {
                 reset()
-                TapEvent.TRIPLE_TAP
+                TapGesture.TRIPLE_TAP
             }
 
             // Adjust the abort threshold to allow 3 fingers
             fingerCount > 3 || tapCount > 3 -> {
                 tapCount = 0
-                TapEvent.NONE
+                TapGesture.NONE
             }
 
-            else -> TapEvent.NONE
+            else -> TapGesture.NONE
         }
     }
 

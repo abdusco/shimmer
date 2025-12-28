@@ -392,22 +392,22 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 
-    fun getGestureAction(event: TapEvent): GestureAction {
+    fun getGestureAction(event: TapGesture): GestureAction {
         val (key, default) = when (event) {
-            TapEvent.TRIPLE_TAP -> KEY_GESTURE_TRIPLE_TAP_ACTION to DEFAULT_TRIPLE_TAP_ACTION
-            TapEvent.TWO_FINGER_DOUBLE_TAP -> KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION to DEFAULT_TWO_FINGER_DOUBLE_TAP_ACTION
-            TapEvent.THREE_FINGER_DOUBLE_TAP -> KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION to DEFAULT_THREE_FINGER_DOUBLE_TAP_ACTION
-            TapEvent.NONE -> return GestureAction.NONE
+            TapGesture.TRIPLE_TAP -> KEY_GESTURE_TRIPLE_TAP_ACTION to DEFAULT_TRIPLE_TAP_ACTION
+            TapGesture.TWO_FINGER_DOUBLE_TAP -> KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION to DEFAULT_TWO_FINGER_DOUBLE_TAP_ACTION
+            TapGesture.THREE_FINGER_DOUBLE_TAP -> KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION to DEFAULT_THREE_FINGER_DOUBLE_TAP_ACTION
+            TapGesture.NONE -> return GestureAction.NONE
         }
         return getGestureActionByKey(key, default)
     }
 
-    fun setGestureAction(event: TapEvent, action: GestureAction) {
+    fun setGestureAction(event: TapGesture, action: GestureAction) {
         val key = when (event) {
-            TapEvent.TRIPLE_TAP -> KEY_GESTURE_TRIPLE_TAP_ACTION
-            TapEvent.TWO_FINGER_DOUBLE_TAP -> KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION
-            TapEvent.THREE_FINGER_DOUBLE_TAP -> KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION
-            TapEvent.NONE -> return
+            TapGesture.TRIPLE_TAP -> KEY_GESTURE_TRIPLE_TAP_ACTION
+            TapGesture.TWO_FINGER_DOUBLE_TAP -> KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION
+            TapGesture.THREE_FINGER_DOUBLE_TAP -> KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION
+            TapGesture.NONE -> return
         }
         prefs.edit {
             putString(key, action.name)

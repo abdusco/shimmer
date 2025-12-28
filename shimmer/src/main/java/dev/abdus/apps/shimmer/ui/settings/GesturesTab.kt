@@ -36,7 +36,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import dev.abdus.apps.shimmer.GestureAction
 import dev.abdus.apps.shimmer.R
-import dev.abdus.apps.shimmer.TapEvent
+import dev.abdus.apps.shimmer.TapGesture
 
 data class GesturesState(
     val tripleTapAction: GestureAction,
@@ -45,7 +45,7 @@ data class GesturesState(
 )
 
 sealed interface GesturesAction {
-    data class SetGestureAction(val event: TapEvent, val action: GestureAction) : GesturesAction
+    data class SetGestureAction(val event: TapGesture, val action: GestureAction) : GesturesAction
 }
 
 @Composable
@@ -83,7 +83,7 @@ private fun TouchGesturesSection(state: GesturesState, onAction: (GesturesAction
             GestureActionRow(
                 title = "Triple tap (1 finger)",
                 action = state.tripleTapAction,
-                onActionChange = { onAction(GesturesAction.SetGestureAction(TapEvent.TRIPLE_TAP, it)) },
+                onActionChange = { onAction(GesturesAction.SetGestureAction(TapGesture.TRIPLE_TAP, it)) },
                 iconPainter = painterResource(id = R.drawable.icon_one_finger),
             )
 
@@ -91,14 +91,14 @@ private fun TouchGesturesSection(state: GesturesState, onAction: (GesturesAction
                 title = "Double tap (2 fingers)",
                 iconPainter = painterResource(id = R.drawable.icon_two_fingers),
                 action = state.twoFingerDoubleTapAction,
-                onActionChange = { onAction(GesturesAction.SetGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP, it)) },
+                onActionChange = { onAction(GesturesAction.SetGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP, it)) },
             )
 
             GestureActionRow(
                 title = "Double tap (3 fingers)",
                 iconPainter = painterResource(id = R.drawable.icon_three_fingers),
                 action = state.threeFingerDoubleTapAction,
-                onActionChange = { onAction(GesturesAction.SetGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP, it)) },
+                onActionChange = { onAction(GesturesAction.SetGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP, it)) },
             )
         }
     }

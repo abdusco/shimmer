@@ -61,7 +61,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private var surfaceDimensions = SurfaceDimensions(0, 0)
 
-        private var gestureActionMap: Map<TapEvent, GestureAction> = emptyMap()
+        private var gestureActionMap: Map<TapGesture, GestureAction> = emptyMap()
 
         private val blurTimeoutHandler = Handler(Looper.getMainLooper())
         private val blurTimeoutRunnable = Runnable {
@@ -282,10 +282,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 surfaceDimensions.height
             )
 
-            val tapEvent = tapGestureDetector.onTouchEvent(event)
-            if (tapEvent != TapEvent.NONE) {
-                val action = gestureActionMap[tapEvent] ?: GestureAction.NONE
-                handleGestureAction(action, tapEvent)
+            val gesture = tapGestureDetector.onTouchEvent(event)
+            if (gesture != TapGesture.NONE) {
+                handleGesture(gesture)
             }
 
             if (preferences.isBlurTimeoutEnabled()) {
@@ -303,13 +302,14 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun refreshGestureActionCache() {
             gestureActionMap = mapOf(
-                TapEvent.TRIPLE_TAP to preferences.getGestureAction(TapEvent.TRIPLE_TAP),
-                TapEvent.TWO_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP),
-                TapEvent.THREE_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP)
+                TapGesture.TRIPLE_TAP to preferences.getGestureAction(TapGesture.TRIPLE_TAP),
+                TapGesture.TWO_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP),
+                TapGesture.THREE_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP)
             )
         }
 
-        private fun handleGestureAction(action: GestureAction, tapEvent: TapEvent) {
+        private fun handleGesture(gesture: TapGesture) {
+            val action = gestureActionMap[gesture] ?: GestureAction.NONE
             when (action) {
                 GestureAction.NEXT_IMAGE -> requestImageCycle()
                 GestureAction.TOGGLE_BLUR -> {

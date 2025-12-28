@@ -13,7 +13,7 @@ import dev.abdus.apps.shimmer.DuotoneSettings
 import dev.abdus.apps.shimmer.GestureAction
 import dev.abdus.apps.shimmer.GrainSettings
 import dev.abdus.apps.shimmer.ImageFolderRepository
-import dev.abdus.apps.shimmer.TapEvent
+import dev.abdus.apps.shimmer.TapGesture
 import dev.abdus.apps.shimmer.WallpaperPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -158,9 +158,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 blurTimeoutEnabled = preferences.isBlurTimeoutEnabled(),
                 blurTimeoutMillis = preferences.getBlurTimeoutMillis(),
                 cycleImageOnUnlock = preferences.isCycleImageOnUnlockEnabled(),
-                tripleTapAction = preferences.getGestureAction(TapEvent.TRIPLE_TAP),
-                twoFingerDoubleTapAction = preferences.getGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP),
-                threeFingerDoubleTapAction = preferences.getGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP),
+                tripleTapAction = preferences.getGestureAction(TapGesture.TRIPLE_TAP),
+                twoFingerDoubleTapAction = preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP),
+                threeFingerDoubleTapAction = preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP),
             )
         }
     }
@@ -214,9 +214,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 WallpaperPreferences.KEY_BLUR_ON_SCREEN_LOCK -> current.copy(blurOnScreenLock = preferences.isBlurOnScreenLockEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED -> current.copy(blurTimeoutEnabled = preferences.isBlurTimeoutEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS -> current.copy(blurTimeoutMillis = preferences.getBlurTimeoutMillis())
-                WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION -> current.copy(tripleTapAction = preferences.getGestureAction(TapEvent.TRIPLE_TAP))
-                WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION -> current.copy(twoFingerDoubleTapAction = preferences.getGestureAction(TapEvent.TWO_FINGER_DOUBLE_TAP))
-                WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION -> current.copy(threeFingerDoubleTapAction = preferences.getGestureAction(TapEvent.THREE_FINGER_DOUBLE_TAP))
+                WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION -> current.copy(tripleTapAction = preferences.getGestureAction(TapGesture.TRIPLE_TAP))
+                WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION -> current.copy(twoFingerDoubleTapAction = preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP))
+                WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION -> current.copy(threeFingerDoubleTapAction = preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP))
                 WallpaperPreferences.KEY_LAST_SELECTED_TAB -> current.copy(selectedTab = SettingsTab.entries.getOrElse(preferences.getLastSelectedTab()) { SettingsTab.SOURCES })
                 else -> current
             }
@@ -239,7 +239,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setBlurTimeoutEnabled(enabled: Boolean) = preferences.setBlurTimeoutEnabled(enabled)
     fun setBlurTimeoutMillis(millis: Long) = preferences.setBlurTimeoutMillis(millis)
 
-    fun setGestureAction(event: TapEvent, action: GestureAction) = preferences.setGestureAction(event, action)
+    fun setGestureAction(event: TapGesture, action: GestureAction) = preferences.setGestureAction(event, action)
 
     fun viewCurrentWallpaper() {
         uiState.value.currentWallpaperUri?.let { uri ->
