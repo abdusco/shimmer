@@ -17,7 +17,7 @@ class Actions {
         const val ACTION_REFRESH_FOLDERS = "dev.abdus.apps.shimmer.action.REFRESH_FOLDERS"
         const val ACTION_ADD_TO_FAVORITES = "dev.abdus.apps.shimmer.action.ADD_TO_FAVORITES"
         const val ACTION_FAVORITE_ADDED = "dev.abdus.apps.shimmer.action.FAVORITE_ADDED"
-        const val ACTION_SET_SPECIFIC_IMAGE = "dev.abdus.apps.shimmer.action.SET_SPECIFIC_IMAGE"
+        const val ACTION_SET_IMAGE = "dev.abdus.apps.shimmer.action.SET_IMAGE"
 
         const val EXTRA_FAVORITE_URI = "favorite_uri"
         const val EXTRA_FAVORITE_DISPLAY_NAME = "favorite_display_name"
@@ -66,7 +66,7 @@ class Actions {
         }
 
         fun broadcastSetWallpaper(context: Context, uri: Uri) {
-            val intent = Intent(ACTION_SET_SPECIFIC_IMAGE).apply {
+            val intent = Intent(ACTION_SET_IMAGE).apply {
                 putExtra(EXTRA_IMAGE_URI, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -112,7 +112,7 @@ class Actions {
                 addAction(ACTION_ENABLE_BLUR)
                 addAction(ACTION_REFRESH_FOLDERS)
                 addAction(ACTION_ADD_TO_FAVORITES)
-                addAction(ACTION_SET_SPECIFIC_IMAGE)
+                addAction(ACTION_SET_IMAGE)
             }
             androidx.core.content.ContextCompat.registerReceiver(
                 context,

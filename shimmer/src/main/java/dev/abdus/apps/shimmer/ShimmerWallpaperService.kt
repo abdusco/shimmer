@@ -357,7 +357,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             Actions.ACTION_SET_BLUR_PERCENT -> {
                                 intent.let {
                                     Actions.BlurPercentAction.fromIntent(it)?.let { action ->
-                                        preferences.setBlurAmount(action.percent ?: 0.5f)
+                                        preferences.setBlurAmount(action.percent)
                                     }
                                 }
                             }
@@ -365,7 +365,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                                 sessionBlurEnabled = true
                                 applyBlurState(false)
                             }
-                            Actions.ACTION_SET_SPECIFIC_IMAGE -> {
+                            Actions.ACTION_SET_IMAGE -> {
                                 val uri = intent.getParcelableExtra<Uri>(Actions.EXTRA_IMAGE_URI)
                                 if (uri != null) {
                                     scope.launch {
