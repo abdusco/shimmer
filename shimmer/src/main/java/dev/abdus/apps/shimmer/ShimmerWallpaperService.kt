@@ -42,10 +42,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val favoritesRepository = FavoritesRepository(this@ShimmerWallpaperService, preferences, folderRepository)
         private val imageLoader = ImageLoader(contentResolver, resources)
         private val cycleScheduler =
-                ImageCycleScheduler(scope, { preferences.getImageCycleIntervalMillis() }) {
-                    Log.d(TAG, "ImageCycleScheduler triggered image cycle")
-                    requestImageCycle()
-                }
+            ImageCycleScheduler(scope, { preferences.getImageCycleIntervalMillis() }) {
+                Log.d(TAG, "ImageCycleScheduler triggered image cycle")
+                requestImageCycle()
+            }
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
         private val touchEffectController = TouchEffectController(
             onTouchPointsChanged = { touchPoints ->
@@ -73,9 +73,9 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
 
         private val preferenceListener =
-                SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                    syncRendererSettings(key)
-                }
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                syncRendererSettings(key)
+            }
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
@@ -102,6 +102,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val r = renderer ?: return
             if (!rendererReady) return
 
+            val syncEverything = key == null
+
             if (key == WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION ||
                 key == WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION ||
                 key == WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION
@@ -116,29 +118,30 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
 
             queueEvent {
-                if (key == null ||
-                                key == WallpaperPreferences.KEY_DIM_AMOUNT ||
-                                key == WallpaperPreferences.KEY_DUOTONE_SETTINGS ||
-                                key == WallpaperPreferences.KEY_GRAIN_SETTINGS ||
-                                key == WallpaperPreferences.KEY_CHROMATIC_ABERRATION_SETTINGS ||
-                                key == WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION
+                if (syncEverything ||
+                    key == WallpaperPreferences.KEY_DIM_AMOUNT ||
+                    key == WallpaperPreferences.KEY_DUOTONE_SETTINGS ||
+                    key == WallpaperPreferences.KEY_GRAIN_SETTINGS ||
+                    key == WallpaperPreferences.KEY_CHROMATIC_ABERRATION_SETTINGS ||
+                    key == WallpaperPreferences.KEY_EFFECT_TRANSITION_DURATION
                 ) {
-
                     r.updateSettings(
-                            blurAmount = preferences.getBlurAmount(),
-                            dimAmount = preferences.getDimAmount(),
-                            duotone = preferences.getDuotoneSettings(),
-                            grain = preferences.getGrainSettings(),
-                            chromatic = preferences.getChromaticAberrationSettings(),
-                            transitionDuration = preferences.getEffectTransitionDurationMillis()
+                        blurAmount = preferences.getBlurAmount(),
+                        dimAmount = preferences.getDimAmount(),
+                        duotone = preferences.getDuotoneSettings(),
+                        grain = preferences.getGrainSettings(),
+                        chromatic = preferences.getChromaticAberrationSettings(),
+                        transitionDuration = preferences.getEffectTransitionDurationMillis(),
                     )
                 }
 
-                if (key == null) applyBlurState(immediate = true)
+                if (syncEverything) {
+                    applyBlurState(immediate = true)
+                }
 
-                if (key == null ||
-                                key == WallpaperPreferences.KEY_IMAGE_CYCLE_ENABLED ||
-                                key == WallpaperPreferences.KEY_IMAGE_CYCLE_INTERVAL
+                if (syncEverything ||
+                    key == WallpaperPreferences.KEY_IMAGE_CYCLE_ENABLED ||
+                    key == WallpaperPreferences.KEY_IMAGE_CYCLE_INTERVAL
                 ) {
                     cycleScheduler.updateEnabled(preferences.isImageCycleEnabled())
                 }
@@ -149,12 +152,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
             val r = renderer ?: return
             val blurOnLock = preferences.isBlurOnScreenLockEnabled()
             val isOnLockScreen =
-                    (getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager)
-                            ?.isKeyguardLocked
-                            ?: false
+                (getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+                    ?.isKeyguardLocked
+                    ?: false
             val isScreenOn =
-                    (getSystemService(POWER_SERVICE) as? android.os.PowerManager)?.isInteractive
-                            ?: true
+                (getSystemService(POWER_SERVICE) as? android.os.PowerManager)?.isInteractive
+                    ?: true
 
             val shouldForceBlur = blurOnLock && (isOnLockScreen || !isScreenOn)
             val effectiveBlur = shouldForceBlur || sessionBlurEnabled
@@ -164,8 +167,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
             if (!effectiveBlur && preferences.isBlurTimeoutEnabled()) {
                 blurTimeoutHandler.postDelayed(
-                        blurTimeoutRunnable,
-                        preferences.getBlurTimeoutMillis()
+                    blurTimeoutRunnable,
+                    preferences.getBlurTimeoutMillis(),
                 )
             }
         }
@@ -279,7 +282,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             touchEffectController.onTouchEvent(
                 event,
                 surfaceDimensions.width,
-                surfaceDimensions.height
+                surfaceDimensions.height,
             )
 
             val gesture = tapGestureDetector.onTouchEvent(event)
@@ -292,7 +295,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 if (!sessionBlurEnabled) {
                     blurTimeoutHandler.postDelayed(
                         blurTimeoutRunnable,
-                        preferences.getBlurTimeoutMillis()
+                        preferences.getBlurTimeoutMillis(),
                     )
                 }
             }
@@ -304,7 +307,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             gestureActionMap = mapOf(
                 TapGesture.TRIPLE_TAP to preferences.getGestureAction(TapGesture.TRIPLE_TAP),
                 TapGesture.TWO_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapGesture.TWO_FINGER_DOUBLE_TAP),
-                TapGesture.THREE_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP)
+                TapGesture.THREE_FINGER_DOUBLE_TAP to preferences.getGestureAction(TapGesture.THREE_FINGER_DOUBLE_TAP),
             )
         }
 
@@ -317,6 +320,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     applyBlurState(immediate = false)
                     cycleScheduler.pauseTemporarily()
                 }
+
                 GestureAction.RANDOM_DUOTONE -> applyNextDuotone()
                 GestureAction.ADD_TO_FAVORITES -> addCurrentImageToFavorites()
                 GestureAction.NONE -> {}
@@ -345,55 +349,57 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private val shortcutReceiver =
-                object : BroadcastReceiver() {
-                    override fun onReceive(context: Context, intent: Intent) {
-                        when (intent.action) {
-                            Actions.ACTION_NEXT_IMAGE -> requestImageCycle()
-                            Actions.ACTION_NEXT_DUOTONE -> applyNextDuotone()
-                            Actions.ACTION_REFRESH_FOLDERS -> folderRepository.refreshAllFolders()
-                            Actions.ACTION_ADD_TO_FAVORITES -> addCurrentImageToFavorites()
-                            Actions.ACTION_SET_BLUR_PERCENT -> {
-                                intent.let {
-                                    Actions.BlurPercentAction.fromIntent(it)?.let { action ->
-                                        preferences.setBlurAmount(action.percent)
-                                    }
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    when (intent.action) {
+                        Actions.ACTION_NEXT_IMAGE -> requestImageCycle()
+                        Actions.ACTION_NEXT_DUOTONE -> applyNextDuotone()
+                        Actions.ACTION_REFRESH_FOLDERS -> folderRepository.refreshAllFolders()
+                        Actions.ACTION_ADD_TO_FAVORITES -> addCurrentImageToFavorites()
+                        Actions.ACTION_SET_BLUR_PERCENT -> {
+                            intent.let {
+                                Actions.BlurPercentAction.fromIntent(it)?.let { action ->
+                                    preferences.setBlurAmount(action.percent)
                                 }
                             }
-                            Actions.ACTION_ENABLE_BLUR -> {
-                                sessionBlurEnabled = true
-                                applyBlurState(false)
-                            }
-                            Actions.ACTION_SET_IMAGE -> {
-                                val uri = intent.getParcelableExtra<Uri>(Actions.EXTRA_IMAGE_URI)
-                                if (uri != null) {
-                                    scope.launch {
-                                        folderRepository.updateImageLastShown(uri)
-                                        loadImage(uri)
-                                    }
+                        }
+
+                        Actions.ACTION_ENABLE_BLUR -> {
+                            sessionBlurEnabled = true
+                            applyBlurState(false)
+                        }
+
+                        Actions.ACTION_SET_IMAGE -> {
+                            val uri = intent.getParcelableExtra<Uri>(Actions.EXTRA_IMAGE_URI)
+                            if (uri != null) {
+                                scope.launch {
+                                    folderRepository.updateImageLastShown(uri)
+                                    loadImage(uri)
                                 }
                             }
                         }
                     }
                 }
+            }
 
         private val screenUnlockReceiver =
-                object : BroadcastReceiver() {
-                    override fun onReceive(context: Context, intent: Intent) {
-                        if (intent.action == Intent.ACTION_USER_PRESENT) {
-                            if (preferences.isBlurOnScreenLockEnabled() &&
-                                            !preferences.isUnblurOnUnlockEnabled()
-                            ) {
-                                sessionBlurEnabled = true
-                            }
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (intent.action == Intent.ACTION_USER_PRESENT) {
+                        if (preferences.isBlurOnScreenLockEnabled() &&
+                            !preferences.isUnblurOnUnlockEnabled()
+                        ) {
+                            sessionBlurEnabled = true
+                        }
 
-                            applyBlurState(immediate = false)
+                        applyBlurState(immediate = false)
 
-                            if (preferences.isCycleImageOnUnlockEnabled()) {
-                                requestImageCycle()
-                            }
+                        if (preferences.isCycleImageOnUnlockEnabled()) {
+                            requestImageCycle()
                         }
                     }
                 }
+            }
 
         private fun applyNextDuotone() {
             val nextIndex = (preferences.getDuotonePresetIndex() + 1) % DUOTONE_PRESETS.size
@@ -429,8 +435,14 @@ class ShimmerWallpaperService : GLWallpaperService() {
         override fun onDestroy() {
             touchEffectController.cleanup()
             preferences.unregisterListener(preferenceListener)
-            try { unregisterReceiver(shortcutReceiver) } catch (_: Exception) {}
-            try { unregisterReceiver(screenUnlockReceiver) } catch (_: Exception) {}
+            try {
+                unregisterReceiver(shortcutReceiver)
+            } catch (_: Exception) {
+            }
+            try {
+                unregisterReceiver(screenUnlockReceiver)
+            } catch (_: Exception) {
+            }
             cycleScheduler.stop()
             scope.cancel()
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
