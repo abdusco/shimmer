@@ -2,93 +2,63 @@
 
 # Shimmer
 
-A live wallpaper for Android that displays your photos with smooth GPU-based effects.
+A modern live wallpaper for Android that transforms your photos with smooth GPU-based effects and transitions.
 
 ## Features
 
-- **Image Management**
-  - Load images from local folders on your device
-  - Support for multiple image folders with random selection
-  - Automatic slideshow with configurable timing intervals
-  - Smooth crossfade transitions between images
-  - Images pan smoothly as you swipe between home screens with parallax effect
-
-- **Performance**
-  - All image effects are GPU-accelerated using OpenGL ES 3.0
-  - VSync synchronization for smooth 60fps rendering
-  - Minimal battery impact with on-demand rendering
+- **Dynamic Images**: Load photos from local folders with support for non-repeating random selection and automatic slideshows.
+- **Smooth Transitions**: Crossfade animations and parallax scrolling that responds to your home screen swipes.
+- **Hardware Accelerated**: Uses OpenGL ES 3.0 for high-performance effects with minimal battery impact.
+- **Smart Shuffle**: Shimmer uses a round-robin folder selection and tracks "last shown" timestamps to ensure you see every image in your collection before any repeats occur.
 
 ### Visual Effects
 
-- **Blur**
-  - Adjustable Gaussian blur intensity
-  - Optional automatic blur on screen lock
-  - Configurable blur timeout
+- **Gaussian Blur**: Adjustable intensity with smart timeout and screen-lock triggers.
+- **Film Grain**: Customizable vintage texture for a tactile feel.
+- **Duotone**: Color your images with 25+ presets and multiple blend modes.
+- **Chromatic Aberration**: Interactive RGB distortion that reacts to multi-touch gestures.
+- **Dimming**: Smoothly dim wallpapers to improve icon and widget readability.
 
-- **Dim**
-  - Adjustable dimming overlay for better icon contrast
-  - Smoothly animated transitions
+### Interaction
 
-- **Film Grain**
-  - Vintage film grain texture effect
-  - Adjustable grain amount (intensity)
-  - Adjustable grain scale (fine to coarse)
+- **Gestures**: Customizable triple-tap and multi-finger double-tap actions (Next Image, Toggle Blur, Random Duotone, Add to Favorites).
+- **Sharing**: Support for `ACTION_SEND` and `ACTION_SEND_MULTIPLE`—simply share images from any app to set them as potential wallpapers.
+- **Automation**: Integration with system events like screen unlock and lock.
 
-- **Duotone**
-  - Color tinting with customizable light and dark colors
-  - 25+ predefined color presets
-  - Three blend modes: Normal, Screen
-  - Smooth color interpolation during transitions
+### Special Collections
 
-- **Chromatic Aberration**
-  - Colorful RGB separation distortion effect on touch
-  - Multi-touch support (up to 10 simultaneous touch points)
+- **Favorites**: Quickly save your favorite wallpapers to a dedicated folder via gestures or shortcuts.
+- **Shared**: Send images directly from your Gallery or other apps to Shimmer using the system "Share" menu. These land in a special "Shared" collection for easy access.
 
-### Gestures & Interactions
+## Advanced: Automation & Intents
 
-- **Touch Gestures**
-  - Triple-tap anywhere to toggle blur on/off
-  - Two-finger double-tap to advance to next image
-  - Touch and drag for chromatic aberration effect (if enabled)
+Shimmer supports several broadcast intents, allowing you to control the wallpaper from external apps like **Tasker**, **MacroDroid**, or via ADB.
 
-- **Launcher Shortcuts**
-  - "Next Image": Advance to the next random image
-  - "Random Duotone": Cycle through duotone presets
+### Actions
 
-- **Screen Events**
-  - Optional automatic blur on screen lock
-  - Optional image change on unlock
-  - Pauses slideshow when wallpaper is not visible
+| Action | Description | Extras |
+| :--- | :--- | :--- |
+| `dev.abdus.apps.shimmer.action.NEXT_IMAGE` | Skips to the next random image. | - |
+| `dev.abdus.apps.shimmer.action.RANDOM_DUOTONE` | Cycles to a random duotone preset. | - |
+| `dev.abdus.apps.shimmer.action.SET_BLUR_PERCENT` | Sets the blur level immediately. | `blur_percent` (Float: 0.0 to 1.0) |
+| `dev.abdus.apps.shimmer.action.ENABLE_BLUR` | Forces the wallpaper into blurred state. | - |
+| `dev.abdus.apps.shimmer.action.REFRESH_FOLDERS` | Triggers a fresh scan of image folders. | - |
+| `dev.abdus.apps.shimmer.action.ADD_TO_FAVORITES` | Saves the current image to your favorites folder. | - |
 
-### Advanced Settings
+### Outbound Broadcasts
 
-- **Transition Control**
-  - Configurable slideshow interval
-  - Configurable effect transition duration
-
-- **Blur Behavior**
-  - Blur timeout with configurable duration (5-60 seconds)
-  - Screen lock blur toggle
-
-- **Rendering**
-  - Smooth parallax scrolling with exponential smoothing
+When an image is added to favorites, Shimmer broadcasts:
+`dev.abdus.apps.shimmer.action.FAVORITE_ADDED`
+- `favorite_uri`: The URI of the saved file.
+- `favorite_display_name`: The filename.
 
 ## Requirements
 
-- Android 8.0 (API 26) or higher
-- Storage permissions for accessing image folders
-
-## Technical Details
-
-- Built with Kotlin and Jetpack Compose
-- OpenGL ES 3.0 for GPU-accelerated effects
-- EGL14 APIs with VSync support
-- Custom GLES 3.0 renderer with shader-based effects
-- Efficient blur generation using Gaussian blur with downsampling and other perception optimizations
-
+- Android 8.0 (API 26) or higher.
+- Storage access for your photo folders.
 
 ## License
 
 Copyright (c) 2025 Abdussamet Kocak
 
-This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+Licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-nc-sa/4.0/).
