@@ -9,20 +9,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 
-/**
- * Owns the scheduled task that advances images on a fixed cadence. This keeps
- * the wallpaper engine focused on rendering concerns.
- * 
- * Design principles:
- * - When user interacts (touch/parallax), pause the timer but DON'T reset it
- * - When user manually changes image, RESET the timer completely
- * - When wallpaper becomes invisible, pause but preserve remaining time
- * - When wallpaper becomes visible, resume from where we left off
- */
-class ImageTransitionScheduler(
+class ImageCycleScheduler(
     private val scope: CoroutineScope,
     private val preferences: WallpaperPreferences,
-    private val onAdvanceRequest: () -> Unit
+    private val onCycleImage: () -> Unit
 ) {
     private var job: Job? = null
     private var isEnabled = false
@@ -81,7 +71,7 @@ class ImageTransitionScheduler(
                 if (remaining <= 0 && !isPaused && isWallpaperVisible) {
                     // Time to change!
                     withContext(Dispatchers.Main) {
-                        onAdvanceRequest()
+                        onCycleImage()
                     }
                     // Auto-reset timer after successful transition
                     resetTimer()
@@ -94,27 +84,18 @@ class ImageTransitionScheduler(
         }
     }
 
-    /**
-     * Pause the timer during user interaction (touch/parallax).
-     * This temporarily stops the countdown but preserves progress.
-     * The timer auto-resumes after a short debounce period.
-     */
     fun pauseForInteraction() {
         if (!isPaused) {
             isPaused = true
             pauseStartTime = System.currentTimeMillis()
         }
         
-        // Auto-resume after 2 seconds of no interaction
         scope.launch {
             delay(2000L)
             resumeTimer()
         }
     }
     
-    /**
-     * Pause the timer (used when wallpaper goes invisible).
-     */
     private fun pauseTimer() {
         if (!isPaused) {
             isPaused = true
@@ -122,9 +103,6 @@ class ImageTransitionScheduler(
         }
     }
     
-    /**
-     * Resume the timer after a pause.
-     */
     private fun resumeTimer() {
         if (isPaused) {
             val pauseDuration = System.currentTimeMillis() - pauseStartTime
@@ -133,12 +111,6 @@ class ImageTransitionScheduler(
         }
     }
 
-    /**
-     * Reset the timer completely. Called when:
-     * - User manually changes the image
-     * - Automatic transition completes
-     * - Scheduler is started fresh
-     */
     fun resetTimer() {
         intervalStartTime = System.currentTimeMillis()
         accumulatedPauseMillis = 0L
@@ -153,7 +125,6 @@ class ImageTransitionScheduler(
 
     fun cancel() {
         stop()
-        // Clear all state
         intervalStartTime = 0L
         accumulatedPauseMillis = 0L
         isPaused = false

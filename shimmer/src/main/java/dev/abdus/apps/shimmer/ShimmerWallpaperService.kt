@@ -41,10 +41,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
         private val favoritesRepository = FavoritesRepository(this@ShimmerWallpaperService, preferences, folderRepository)
         private val imageLoader = ImageLoader(contentResolver, resources)
-        private val transitionScheduler =
-                ImageTransitionScheduler(scope, preferences) {
-                    Log.d(TAG, "TransitionScheduler triggered image advance")
-                    requestImageChange()
+        private val cycleScheduler =
+                ImageCycleScheduler(scope, preferences) {
+                    Log.d(TAG, "ImageCycleScheduler triggered image cycle")
+                    requestImageCycle()
                 }
         private val tapGestureDetector = TapGestureDetector(this@ShimmerWallpaperService)
         private val touchEffectController = TouchEffectController(
@@ -94,7 +94,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             folderRepository.setOnCurrentImageInvalidatedListener({ currentImageUri }) {
                 Log.d(TAG, "Current image is no longer valid, forcing switch")
-                requestImageChange()
+                requestImageCycle()
             }
         }
 
@@ -140,7 +140,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                                 key == WallpaperPreferences.KEY_IMAGE_CYCLE_ENABLED ||
                                 key == WallpaperPreferences.KEY_IMAGE_CYCLE_INTERVAL
                 ) {
-                    transitionScheduler.updateEnabled(preferences.isImageCycleEnabled())
+                    cycleScheduler.updateEnabled(preferences.isImageCycleEnabled())
                 }
             }
         }
@@ -189,7 +189,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 }
 
                 if (uriToLoad != null) loadImage(uriToLoad) else loadDefaultImage()
-                transitionScheduler.start()
+                cycleScheduler.start()
             }
         }
 
@@ -257,7 +257,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             }
         }
 
-        private fun requestImageChange() {
+        private fun requestImageCycle() {
             if (renderer?.isAnimating() == true) {
                 scope.launch {
                     val next = folderRepository.nextImageUri()
@@ -270,7 +270,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 val nextUri = folderRepository.nextImageUri()
                 if (nextUri != null) {
                     loadImage(nextUri)
-                    transitionScheduler.resetTimer()
+                    cycleScheduler.resetTimer()
                 }
             }
         }
@@ -311,11 +311,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private fun handleGestureAction(action: GestureAction, tapEvent: TapEvent) {
             when (action) {
-                GestureAction.NEXT_IMAGE -> requestImageChange()
+                GestureAction.NEXT_IMAGE -> requestImageCycle()
                 GestureAction.TOGGLE_BLUR -> {
                     sessionBlurEnabled = !sessionBlurEnabled
                     applyBlurState(immediate = false)
-                    transitionScheduler.pauseForInteraction()
+                    cycleScheduler.pauseForInteraction()
                 }
                 GestureAction.RANDOM_DUOTONE -> applyNextDuotone()
                 GestureAction.ADD_TO_FAVORITES -> addCurrentImageToFavorites()
@@ -327,17 +327,17 @@ class ShimmerWallpaperService : GLWallpaperService() {
             super.onVisibilityChanged(visible)
             engineVisible = visible
             if (visible) {
-                transitionScheduler.onWallpaperVisible()
+                cycleScheduler.onWallpaperVisible()
                 applyBlurState(immediate = false)
-                transitionScheduler.start()
+                cycleScheduler.start()
                 queueEvent { renderer?.onVisibilityChanged() }
             } else {
-                transitionScheduler.onWallpaperHidden()
+                cycleScheduler.onWallpaperHidden()
             }
         }
 
         override fun onOffsetsChanged(x: Float, y: Float, xs: Float, ys: Float, xp: Int, yp: Int) {
-            transitionScheduler.pauseForInteraction()
+            cycleScheduler.pauseForInteraction()
             renderer?.setParallaxOffset(x)
         }
 
@@ -350,7 +350,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {
                         when (intent.action) {
-                            Actions.ACTION_NEXT_IMAGE -> requestImageChange()
+                            Actions.ACTION_NEXT_IMAGE -> requestImageCycle()
                             Actions.ACTION_NEXT_DUOTONE -> applyNextDuotone()
                             Actions.ACTION_REFRESH_FOLDERS -> folderRepository.refreshAllFolders()
                             Actions.ACTION_ADD_TO_FAVORITES -> addCurrentImageToFavorites()
@@ -391,7 +391,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                             applyBlurState(immediate = false)
 
                             if (preferences.isCycleImageOnUnlockEnabled()) {
-                                requestImageChange()
+                                requestImageCycle()
                             }
                         }
                     }
@@ -433,7 +433,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
             preferences.unregisterListener(preferenceListener)
             try { unregisterReceiver(shortcutReceiver) } catch (_: Exception) {}
             try { unregisterReceiver(screenUnlockReceiver) } catch (_: Exception) {}
-            transitionScheduler.cancel()
+            cycleScheduler.cancel()
             scope.cancel()
             blurTimeoutHandler.removeCallbacks(blurTimeoutRunnable)
             super.onDestroy()
