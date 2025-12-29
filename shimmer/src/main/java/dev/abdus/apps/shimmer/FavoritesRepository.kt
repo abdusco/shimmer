@@ -23,6 +23,7 @@ class FavoritesRepository(
     private val resolver get() = context.contentResolver
 
     suspend fun saveFavorite(sourceUri: Uri): Result<FavoriteSaveResult> = runCatching {
+        val originalImage = folderRepository.getImageByUri(sourceUri)
         val metadata = extractMetadata(sourceUri)
         val result = preferences.getFavoritesFolderUri()
             ?.let { saveToFolder(it, sourceUri, metadata) }
@@ -31,9 +32,14 @@ class FavoritesRepository(
         // Boost the original image's rank in our library
         folderRepository.incrementFavoriteRank(sourceUri)
         
-        // Refresh the favorites folder in the DB to pick up the new file
+        // Register the new favorite file in the DB immediately without a full folder scan
         val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences)
-        folderRepository.refreshFolder(favoritesUri)
+        folderRepository.addSingleImageToFolder(
+            folderUri = favoritesUri,
+            imageUri = result.uri,
+            width = originalImage?.width,
+            height = originalImage?.height
+        )
         
         result
     }

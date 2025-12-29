@@ -151,6 +151,9 @@ interface ImageDao {
     @Query("UPDATE images SET favoriteRank = favoriteRank + 1 WHERE uri = :uri")
     suspend fun incrementFavoriteRank(uri: Uri)
 
+    @Query("SELECT * FROM images WHERE uri = :uri LIMIT 1")
+    suspend fun getImageByUri(uri: Uri): ImageEntity?
+
     @Query("""
         SELECT COUNT(*) > 0 FROM images i 
         INNER JOIN folders f ON i.folderId = f.id 

@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ShimmerWallpaperService : GLWallpaperService() {
     companion object {
@@ -415,6 +416,13 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 if (result.isSuccess) {
                     val saved = result.getOrNull()!!
                     Actions.broadcastFavoriteAdded(this@ShimmerWallpaperService, result = saved)
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            this@ShimmerWallpaperService,
+                            getString(R.string.toast_favorite_saved, saved.displayName),
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 } else {
                     Log.w(TAG, "addCurrentImageToFavorites: failed for $currentImageUri", result.exceptionOrNull())
                 }

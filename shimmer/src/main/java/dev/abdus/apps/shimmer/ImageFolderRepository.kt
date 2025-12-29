@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,6 +33,7 @@ import java.util.TimeZone
 
 class ImageFolderRepository(context: Context) {
     private val appContext = context.applicationContext
+    private val prefs = WallpaperPreferences.create(appContext)
     private val db = ShimmerDatabase.getInstance(appContext)
     private val dao = db.imageDao()
     private val scanner = FolderScanner(appContext)
@@ -77,6 +79,8 @@ class ImageFolderRepository(context: Context) {
                 isScanning = scanning.contains(it.folderId),
             )
         }
+    }.onStart {
+        registerSpecialFolders()
     }
 
     fun setOnCurrentImageInvalidatedListener(
@@ -100,23 +104,21 @@ class ImageFolderRepository(context: Context) {
 
     init {
         Log.d(TAG, "Initializing Repository")
-        val prefs = WallpaperPreferences.create(appContext)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == WallpaperPreferences.KEY_FAVORITES_FOLDER_URI || key == WallpaperPreferences.KEY_SHARED_FOLDER_URI) {
                 Log.d(TAG, "Special folder configuration changed ($key), syncing")
-                scope.launch { syncSpecialFolders() }
+                scope.launch { registerSpecialFolders() }
             }
         }
         prefs.registerListener(listener)
     }
 
-    suspend fun syncSpecialFolders() = withContext(Dispatchers.IO) {
-        val preferences = WallpaperPreferences.create(appContext)
+    suspend fun registerSpecialFolders() = withContext(Dispatchers.IO) {
         runCatching {
-            val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(preferences)
+            val favoritesUri = FavoritesFolderResolver.getEffectiveFavoritesUri(prefs)
             val defaultFavUri = FavoritesFolderResolver.getDefaultFavoritesUri()
 
-            val sharedUri = SharedFolderResolver.getEffectiveSharedUri(preferences)
+            val sharedUri = SharedFolderResolver.getEffectiveSharedUri(prefs)
             val defaultSharedUri = SharedFolderResolver.getDefaultSharedUri()
 
             val timestamp = isoNow()
@@ -219,7 +221,7 @@ class ImageFolderRepository(context: Context) {
 
     suspend fun nextImageUri(): Uri? = withContext(Dispatchers.IO) {
         // Ensure special folders are registered
-        syncSpecialFolders()
+        registerSpecialFolders()
 
         val maxAttempts = dao.getEnabledFoldersCountFlow().first()
         var attempts = 0
@@ -270,6 +272,44 @@ class ImageFolderRepository(context: Context) {
     suspend fun incrementFavoriteRank(uri: Uri) = withContext(Dispatchers.IO) {
         Log.d(TAG, "Incrementing favorite rank for $uri")
         dao.incrementFavoriteRank(uri)
+    }
+
+    suspend fun getImageByUri(uri: Uri): ImageEntity? = withContext(Dispatchers.IO) {
+        dao.getImageByUri(uri)
+    }
+
+    suspend fun addSingleImageToFolder(folderUri: Uri, imageUri: Uri, width: Int? = null, height: Int? = null) = withContext(Dispatchers.IO) {
+        Log.d(TAG, "Adding single image to folder: $folderUri -> $imageUri")
+        var folderId = dao.getFolderId(folderUri)
+
+        if (folderId == null) {
+            // Try syncing special folders in case it's one of them
+            registerSpecialFolders()
+            folderId = dao.getFolderId(folderUri)
+        }
+
+        if (folderId == null) {
+            Log.e(TAG, "Folder $folderUri not found in DB even after sync")
+            return@withContext
+        }
+
+        val timestamp = isoNow()
+        val entity = ImageEntity(
+            folderId = folderId,
+            uri = imageUri,
+            createdAt = timestamp,
+            width = width,
+            height = height,
+        )
+
+        runCatching {
+            db.withTransaction {
+                dao.insertImages(listOf(entity))
+                dao.updateFolderLastScanned(folderId, timestamp)
+            }
+        }.onFailure {
+            Log.e(TAG, "Failed to add single image to folder $folderUri", it)
+        }
     }
 
     suspend fun getCurrentImageUri(): Uri? = withContext(Dispatchers.IO) {

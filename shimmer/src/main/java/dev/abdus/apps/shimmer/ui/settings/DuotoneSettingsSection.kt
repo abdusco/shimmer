@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -96,8 +97,12 @@ fun DuotoneSettings(
                         },
                         previewColor = colorIntToComposeColor(state.darkColor),
                     )
-                    Row {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         DuotonePresetDropdown(
+                            modifier = Modifier.weight(1f),
                             onPresetSelected = { preset ->
                                 val index = DUOTONE_PRESETS.indexOf(preset)
                                 onSettingsChange(
@@ -110,9 +115,8 @@ fun DuotoneSettings(
                             },
                         )
 
-                        Spacer(modifier = Modifier.size(8f.dp).weight(1f))
-
                         DuotoneBlendModeDropdown(
+                            modifier = Modifier.weight(1f),
                             selectedBlendMode = state.blendMode,
                             onBlendModeSelected = { onSettingsChange(state.copy(blendMode = it)) },
                         )
@@ -125,6 +129,7 @@ fun DuotoneSettings(
 
 @Composable
 private fun DuotoneBlendModeDropdown(
+    modifier: Modifier = Modifier,
     selectedBlendMode: DuotoneBlendMode,
     onBlendModeSelected: (DuotoneBlendMode) -> Unit,
 ) {
@@ -137,15 +142,22 @@ private fun DuotoneBlendModeDropdown(
     }
     val selectedName = modes.find { it.first == selectedBlendMode }?.second ?: "Normal"
 
-    Box {
-        OutlinedButton(onClick = { expanded = true }) {
+    Box(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Icon(
                 painter = painterResource(R.drawable.icon_blend_mode),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.size(8.dp))
-            Text(text = "Blend mode: $selectedName")
+            Text(
+                text = "Blend: $selectedName",
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
         }
         DropdownMenu(
             expanded = expanded,
@@ -155,11 +167,27 @@ private fun DuotoneBlendModeDropdown(
         ) {
             modes.forEach { pair ->
                 DropdownMenuItem(
-                    text = { Text(text = pair.second) },
+                    text = {
+                        Text(
+                            text = pair.second,
+                            color = if (pair.first == selectedBlendMode)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
                     onClick = {
                         expanded = false
                         onBlendModeSelected(pair.first)
                     },
+                    leadingIcon = if (pair.first == selectedBlendMode) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    } else null,
                 )
             }
         }
@@ -168,18 +196,26 @@ private fun DuotoneBlendModeDropdown(
 
 @Composable
 private fun DuotonePresetDropdown(
+    modifier: Modifier = Modifier,
     onPresetSelected: (DuotonePreset) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        Button(onClick = { expanded = true }) {
+    Box(modifier = modifier) {
+        Button(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Icon(
                 imageVector = Icons.Filled.Palette,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimary,
             )
             Spacer(modifier = Modifier.size(8.dp))
-            Text(text = "Choose preset")
+            Text(
+                text = "Presets",
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
         }
         DropdownMenu(
             expanded = expanded,
