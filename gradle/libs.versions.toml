@@ -1,6 +1,7 @@
 [versions]
 compileSdk = "36"
 targetSdk = "34"
+minSdk = "26"
 appCompat = "1.7.1"
 composeBom = "2024.10.01"
 composeCompiler = "1.5.12"

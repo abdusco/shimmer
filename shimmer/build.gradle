@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId "dev.abdus.apps.shimmer"
-        minSdkVersion 23
+        minSdkVersion libs.versions.minSdk.get().toInteger()
         targetSdkVersion libs.versions.targetSdk.get()
         versionCode project.hasProperty('version.code') ? project.property('version.code').toInteger() : 1
         versionName project.hasProperty('version.name') ? project.property('version.name') : '1.0.0'
