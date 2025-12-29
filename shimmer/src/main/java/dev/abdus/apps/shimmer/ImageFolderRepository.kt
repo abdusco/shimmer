@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -83,7 +84,9 @@ class ImageFolderRepository(context: Context) {
         onInvalidated: () -> Unit,
     ) {
         scope.launch {
-            dao.getEnabledFoldersCountFlow().collect {
+            dao.getEnabledFoldersCountFlow()
+                .distinctUntilChanged()
+                .collect {
                 val currentUri = uriProvider() ?: return@collect
                 if (!isImageManagedAndEnabled(currentUri)) {
                     Log.d(TAG, "Current image $currentUri invalidated by library change")

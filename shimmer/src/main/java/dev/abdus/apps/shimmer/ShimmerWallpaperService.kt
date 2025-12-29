@@ -56,6 +56,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
         private var cachedImageSet: ImageSet? = null
         private var pendingImageUri: Uri? = null
         private var imageLoadingJob: kotlinx.coroutines.Job? = null
+        private var imageCycleJob: kotlinx.coroutines.Job? = null
         private var currentImageUri: Uri? = null
         private var sessionBlurEnabled = preferences.getBlurAmount() > 0f
 
@@ -268,7 +269,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 return
             }
 
-            scope.launch {
+            if (imageCycleJob?.isActive == true) {
+                return
+            }
+
+            imageCycleJob = scope.launch {
                 val nextUri = folderRepository.nextImageUri()
                 if (nextUri != null) {
                     loadImage(nextUri)
