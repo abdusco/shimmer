@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -65,7 +66,7 @@ class FolderDetailActivity : ComponentActivity() {
             return
         }
 
-        val repo = ImageFolderRepository(this)
+        val repo = ImageFolderRepository(this, lifecycleScope)
         val viewModel = ViewModelProvider(this, FolderDetailViewModelFactory(repo, folderId))[FolderDetailViewModel::class.java]
 
         setContent {

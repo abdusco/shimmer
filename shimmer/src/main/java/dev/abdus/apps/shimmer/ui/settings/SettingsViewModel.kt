@@ -84,7 +84,7 @@ data class SettingsUiState(
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = ImageFolderRepository(application)
+    private val repository = ImageFolderRepository(application, viewModelScope)
     private val preferences = WallpaperPreferences.create(application)
 
     private val _uiState = MutableStateFlow(SettingsUiState.fromPreferences(preferences))

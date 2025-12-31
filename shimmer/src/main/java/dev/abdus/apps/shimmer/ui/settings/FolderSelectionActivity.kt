@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import dev.abdus.apps.shimmer.Actions
@@ -109,7 +110,8 @@ class FolderSelectionActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val prefs = WallpaperPreferences.create(this)
-        val repo = ImageFolderRepository(this)
+        val scope = lifecycleScope // Use lifecycleScope from Activity
+        val repo = ImageFolderRepository(this, scope)
         val viewModel = FolderSelectionViewModel(repo, prefs)
 
         setContent {
@@ -226,7 +228,7 @@ class FolderSelectionViewModel(
     fun refreshAll() {
         viewModelScope.launch {
             _isRefreshing.value = true
-            repository.refreshAllFolders()
+            repository.refreshEnabledFolders()
             delay(500)
             _isRefreshing.value = false
         }

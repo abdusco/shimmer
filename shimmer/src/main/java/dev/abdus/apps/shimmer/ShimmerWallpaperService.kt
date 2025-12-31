@@ -39,7 +39,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private val preferences = WallpaperPreferences.create(this@ShimmerWallpaperService)
-        private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService)
+        private val folderRepository = ImageFolderRepository(this@ShimmerWallpaperService, scope)
         private val favoritesRepository = FavoritesRepository(this@ShimmerWallpaperService, preferences, folderRepository)
         private val imageLoader = ImageLoader(contentResolver, resources)
         private val cycleScheduler =
@@ -94,8 +94,8 @@ class ShimmerWallpaperService : GLWallpaperService() {
             Actions.registerReceivers(this@ShimmerWallpaperService, shortcutReceiver)
             registerReceiver(screenUnlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
 
-            folderRepository.setOnCurrentImageInvalidatedListener({ currentImageUri }) {
-                Log.d(TAG, "Current image is no longer valid, forcing switch")
+            folderRepository.observeImageInvalidation({ currentImageUri }) {
+                Log.d(TAG, "Current image invalidated by library change, forcing switch")
                 requestImageCycle()
             }
         }
@@ -192,7 +192,11 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     folderRepository.nextImageUri()
                 }
 
-                if (uriToLoad != null) loadImage(uriToLoad) else loadDefaultImage()
+                if (uriToLoad != null) {
+                    loadImage(uriToLoad)
+                } else {
+                    loadDefaultImage()
+                }
                 cycleScheduler.start()
             }
         }
@@ -270,15 +274,35 @@ class ShimmerWallpaperService : GLWallpaperService() {
                 return
             }
 
-            if (imageCycleJob?.isActive == true) {
-                return
-            }
+            if (imageCycleJob?.isActive == true) return
 
             imageCycleJob = scope.launch {
-                val nextUri = folderRepository.nextImageUri()
-                if (nextUri != null) {
-                    loadImage(nextUri)
-                    cycleScheduler.resetTimer()
+                var attempts = 0
+                while (attempts < 5) {
+                    val nextUri = folderRepository.nextImageUri()
+                    if (nextUri == null) {
+                        Log.d(TAG, "No images available in DB")
+                        break
+                    }
+
+                    try {
+                        val blurAmount = preferences.getBlurAmount()
+                        val newSet = imageLoader.loadFromUri(nextUri, blurAmount)
+                            ?: throw java.io.FileNotFoundException("Failed to load bitmap")
+
+                        updateActiveImageSet(newSet, nextUri)
+                        cycleScheduler.resetTimer()
+                        return@launch
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Image $nextUri failed to load, marking invalid and retrying", e)
+                        folderRepository.markImageAsInvalid(nextUri)
+                        attempts++
+                    }
+                }
+                
+                if (attempts >= 5) {
+                    Log.w(TAG, "Failed to find a valid image after 5 attempts, loading default")
+                    loadDefaultImage()
                 }
             }
         }
@@ -355,7 +379,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                     when (intent.action) {
                         Actions.ACTION_NEXT_IMAGE -> requestImageCycle()
                         Actions.ACTION_NEXT_DUOTONE -> applyNextDuotone()
-                        Actions.ACTION_REFRESH_FOLDERS -> folderRepository.refreshAllFolders()
+                        Actions.ACTION_REFRESH_FOLDERS -> scope.launch { folderRepository.refreshEnabledFolders() }
                         Actions.ACTION_ADD_TO_FAVORITES -> addCurrentImageToFavorites()
                         Actions.ACTION_SET_BLUR_PERCENT -> {
                             intent.let {

@@ -1,6 +1,5 @@
 package dev.abdus.apps.shimmer
 
-import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
@@ -9,9 +8,6 @@ import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
 import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 data class FavoriteSaveResult(val uri: Uri, val displayName: String)
 
@@ -38,7 +34,8 @@ class FavoritesRepository(
             folderUri = favoritesUri,
             imageUri = result.uri,
             width = originalImage?.width,
-            height = originalImage?.height
+            height = originalImage?.height,
+            fileSize = metadata.size
         )
         
         result
@@ -71,31 +68,24 @@ class FavoritesRepository(
 
         if (!tree.canWrite()) throw IOException("Cannot write to folder")
 
-        // Reuse existing file with same name and size
-        tree.findFile(metadata.name)?.let { existing ->
-            if (metadata.size != null && existing.length() == metadata.size) {
-                return FavoriteSaveResult(existing.uri, existing.name ?: metadata.name)
-            }
-        }
-
-        val finalName = tree.findFile(metadata.name)?.let { metadata.name.withTimestamp() } ?: metadata.name
-        val target = tree.createFile(metadata.mimeType, finalName) ?: throw IOException("Failed to create file")
+        // DocumentFile.createFile typically appends (1) if it exists on standard providers.
+        val target = tree.createFile(metadata.mimeType, metadata.name) ?: throw IOException("Failed to create file")
 
         copyFile(sourceUri, target.uri)
-        return FavoriteSaveResult(target.uri, finalName)
+        return FavoriteSaveResult(target.uri, target.name ?: metadata.name)
     }
 
     private fun saveToMediaStore(sourceUri: Uri, metadata: FileMetadata): FavoriteSaveResult {
-        metadata.size?.let { size ->
-            findExistingFile(metadata.name, size)?.let { return it }
-        }
-
-        val finalName = if (fileExists(metadata.name)) metadata.name.withTimestamp() else metadata.name
-        val targetUri = insertPendingFile(finalName, metadata.mimeType)
+        val targetUri = insertPendingFile(metadata.name, metadata.mimeType)
 
         return try {
             copyFile(sourceUri, targetUri)
             markComplete(targetUri)
+            
+            val finalName = resolver.query(targetUri, arrayOf(MediaStore.Images.Media.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else metadata.name
+            } ?: metadata.name
+
             FavoriteSaveResult(targetUri, finalName)
         } catch (e: Exception) {
             resolver.delete(targetUri, null, null)
@@ -128,48 +118,10 @@ class FavoritesRepository(
         } ?: throw IOException("Cannot open input stream")
     }
 
-    private fun findExistingFile(fileName: String, size: Long): FavoriteSaveResult? {
-        val selection = "${MediaStore.Images.Media.DISPLAY_NAME}=? AND " +
-                       "${MediaStore.Images.Media.RELATIVE_PATH}=? AND " +
-                       "${MediaStore.Images.Media.SIZE}=?"
-        val args = arrayOf(fileName, FavoritesFolderResolver.getDefaultRelativePath(), size.toString())
-
-        return resolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME),
-            selection,
-            args,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                FavoriteSaveResult(
-                    ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(0)),
-                    cursor.getString(1)
-                )
-            } else null
-        }
-    }
-
-    private fun fileExists(fileName: String): Boolean {
-        return resolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Images.Media._ID),
-            "${MediaStore.Images.Media.DISPLAY_NAME}=? AND ${MediaStore.Images.Media.RELATIVE_PATH}=?",
-            arrayOf(fileName, FavoritesFolderResolver.getDefaultRelativePath()),
-            null
-        )?.use { it.moveToFirst() } ?: false
-    }
-
     private fun String.sanitize() = map { c ->
         if (c.isLetterOrDigit() || c in "._-@# ") c else '_'
     }.joinToString("")
 
     private fun String.ensureExtension(ext: String) =
         if (contains('.')) this else "$this.$ext"
-
-    private fun String.withTimestamp(): String {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val (base, ext) = substringBeforeLast('.') to substringAfterLast('.', "")
-        return if (ext.isNotBlank()) "${base}_$timestamp.$ext" else "${base}_$timestamp"
-    }
 }

@@ -62,7 +62,8 @@ data class ImageEntity(
     val createdAt: String? = null,
     val favoriteRank: Int = 0,
     val width: Int? = null,
-    val height: Int? = null
+    val height: Int? = null,
+    val fileSize: Long? = null
 )
 
 data class FolderMetadata(
@@ -77,6 +78,11 @@ data class ImageEntry(
     val uri: Uri,
     val width: Int?,
     val height: Int?
+)
+
+data class ImageUriAndSize(
+    val uri: Uri,
+    val fileSize: Long?
 )
 
 @Dao
@@ -110,6 +116,9 @@ interface ImageDao {
 
     @Query("DELETE FROM images WHERE folderId = :folderId AND uri NOT IN (:validUris)")
     suspend fun deleteInvalidImages(folderId: Long, validUris: List<Uri>)
+
+    @Query("DELETE FROM images WHERE uri = :uri")
+    suspend fun deleteImageByUri(uri: Uri)
 
     /**
      * Finds the next folder in the round-robin cycle.
@@ -161,6 +170,28 @@ interface ImageDao {
     """)
     suspend fun isImageManagedAndEnabled(uri: Uri): Boolean
 
+    @Query("SELECT uri, fileSize FROM images WHERE folderId = :folderId")
+    suspend fun getImageUrisAndSizesForFolder(folderId: Long): List<ImageUriAndSize>
+
+    /**
+     * Finds the next image in the round-robin cycle across all enabled folders.
+     * 1. Prioritizes folders that haven't been picked from recently.
+     * 2. Within a folder, prioritizes images that have never been shown.
+     * 3. Picks randomly among the top candidates.
+     */
+    @Query("""
+        SELECT images.* 
+        FROM images 
+        JOIN folders ON images.folderId = folders.id
+        WHERE folders.isEnabled = 1
+        ORDER BY 
+            folders.lastPickedAt ASC,
+            (images.lastShownAt IS NOT NULL) ASC,
+            RANDOM()
+        LIMIT 1
+    """)
+    suspend fun findNextCycleImage(): ImageEntity?
+
     @Query("SELECT COUNT(*) FROM folders WHERE isEnabled = 1")
     fun getEnabledFoldersCountFlow(): Flow<Int>
 
@@ -176,7 +207,7 @@ interface ImageDao {
     fun getFoldersMetadataFlow(): Flow<List<FolderMetadata>>
 }
 
-@Database(entities = [FolderEntity::class, ImageEntity::class], version = 2, exportSchema = false)
+@Database(entities = [FolderEntity::class, ImageEntity::class], version = 3, exportSchema = false)
 @TypeConverters(UriConverters::class)
 abstract class ShimmerDatabase : RoomDatabase() {
     abstract fun imageDao(): ImageDao

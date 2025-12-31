@@ -45,7 +45,7 @@ class ShareActivity : ComponentActivity() {
     }
 
     private fun saveSharedImages(uris: List<Uri>) {
-        val folderRepo = ImageFolderRepository(this)
+        val folderRepo = ImageFolderRepository(this, lifecycleScope)
         val preferences = WallpaperPreferences.create(this)
         val shareRepo = SharedImagesRepository(this, folderRepo, preferences)
         
