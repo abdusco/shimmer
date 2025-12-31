@@ -6,7 +6,7 @@
     <string name="shortcut_next_image_long_label">Show the next wallpaper image</string>
     <string name="shortcut_random_duotone_short_label">Random Duotone</string>
     <string name="shortcut_random_duotone_long_label">Apply a random duotone preset</string>
-    <string name="shortcut_add_to_favorites_short_label">Add Favorite</string>
+    <string name="shortcut_add_to_favorites_short_label">Add to Favorites</string>
     <string name="shortcut_add_to_favorites_long_label">Save current wallpaper to favorites</string>
     <string name="toast_favorite_saved">Saved to favorites: %1$s</string>
 </resources>
