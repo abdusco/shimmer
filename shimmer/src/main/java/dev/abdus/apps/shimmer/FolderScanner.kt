@@ -46,11 +46,11 @@ private class DocumentScanner(private val context: Context) : ImageScanner {
             Log.e(TAG, "Could not open DocumentFile for $uri")
             return emptyList()
         }
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         return doc.listFiles()
             .filter { it.isFile && (it.type?.startsWith("image/") == true || (it.name ?: "").isImageFile()) }
             .filter { it.exists() && it.canRead() }
             .map { file ->
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 context.contentResolver.openInputStream(file.uri)?.use {
                     BitmapFactory.decodeStream(it, null, options)
                 }
