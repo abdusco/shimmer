@@ -87,9 +87,7 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val KEY_CHROMATIC_ABERRATION_SETTINGS = "wallpaper_chromatic_aberration_settings"
         const val KEY_FAVORITES_FOLDER_URI = "favorites_folder_uri"
         const val KEY_SHARED_FOLDER_URI = "shared_folder_uri"
-        const val KEY_GESTURE_TRIPLE_TAP_ACTION = "gesture_triple_tap_action"
-        const val KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION = "gesture_two_finger_double_tap_action"
-        const val KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION = "gesture_three_finger_double_tap_action"
+        const val KEY_GESTURE_SETTINGS = "wallpaper_gesture_settings"
 
         const val DEFAULT_BLUR_AMOUNT = 0.5f
         const val DEFAULT_DIM_AMOUNT = 0.1f
@@ -110,9 +108,6 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         const val DEFAULT_CHROMATIC_ABERRATION_ENABLED = true
         const val DEFAULT_CHROMATIC_ABERRATION_INTENSITY = 0.5f
         const val DEFAULT_CHROMATIC_ABERRATION_FADE_DURATION = 500L
-        val DEFAULT_TRIPLE_TAP_ACTION = GestureAction.TOGGLE_BLUR
-        val DEFAULT_TWO_FINGER_DOUBLE_TAP_ACTION = GestureAction.NEXT_IMAGE
-        val DEFAULT_THREE_FINGER_DOUBLE_TAP_ACTION = GestureAction.NONE
 
         fun create(context: Context): WallpaperPreferences {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -404,38 +399,33 @@ class WallpaperPreferences(private val prefs: SharedPreferences) {
         }
     }
 
-    fun getGestureActions(): Map<TapGesture, GestureAction> {
-        return TapGesture.entries
-            .filter { it != TapGesture.NONE }
-            .associateWith { event ->
-                val (key, default) = when (event) {
-                    TapGesture.TRIPLE_TAP -> KEY_GESTURE_TRIPLE_TAP_ACTION to DEFAULT_TRIPLE_TAP_ACTION
-                    TapGesture.TWO_FINGER_DOUBLE_TAP -> KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION to DEFAULT_TWO_FINGER_DOUBLE_TAP_ACTION
-                    TapGesture.THREE_FINGER_DOUBLE_TAP -> KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION to DEFAULT_THREE_FINGER_DOUBLE_TAP_ACTION
-                    TapGesture.NONE -> throw IllegalStateException("Should not be here")
-                }
-                getGestureActionByKey(key, default)
+    fun getGestureSettings(): GestureSettings {
+        val json = prefs.getString(KEY_GESTURE_SETTINGS, null)
+        return if (json != null) {
+            try {
+                Json.decodeFromString<GestureSettings>(json)
+            } catch (e: Exception) {
+                GestureSettings()
             }
+        } else {
+            GestureSettings()
+        }
+    }
+
+    fun setGestureSettings(settings: GestureSettings) {
+        prefs.edit {
+            putString(KEY_GESTURE_SETTINGS, Json.encodeToString(settings))
+        }
     }
 
     fun setGestureAction(event: TapGesture, action: GestureAction) {
-        val key = when (event) {
-            TapGesture.TRIPLE_TAP -> KEY_GESTURE_TRIPLE_TAP_ACTION
-            TapGesture.TWO_FINGER_DOUBLE_TAP -> KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION
-            TapGesture.THREE_FINGER_DOUBLE_TAP -> KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION
+        val current = getGestureSettings()
+        val updated = when (event) {
+            TapGesture.TRIPLE_TAP -> current.copy(tripleTapAction = action)
+            TapGesture.TWO_FINGER_DOUBLE_TAP -> current.copy(twoFingerDoubleTapAction = action)
+            TapGesture.THREE_FINGER_DOUBLE_TAP -> current.copy(threeFingerDoubleTapAction = action)
             TapGesture.NONE -> return
         }
-        prefs.edit {
-            putString(key, action.name)
-        }
-    }
-
-    private fun getGestureActionByKey(key: String, default: GestureAction): GestureAction {
-        val value = prefs.getString(key, null) ?: return default
-        return try {
-            GestureAction.valueOf(value)
-        } catch (_: IllegalArgumentException) {
-            default
-        }
+        setGestureSettings(updated)
     }
 }

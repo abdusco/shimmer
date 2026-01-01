@@ -9,11 +9,10 @@ import androidx.lifecycle.viewModelScope
 import dev.abdus.apps.shimmer.Actions
 import dev.abdus.apps.shimmer.ChromaticAberrationSettings
 import dev.abdus.apps.shimmer.DuotoneSettings
-import dev.abdus.apps.shimmer.GestureAction
+import dev.abdus.apps.shimmer.GestureSettings
 import dev.abdus.apps.shimmer.GrainSettings
 import dev.abdus.apps.shimmer.ImageCycleSettings
 import dev.abdus.apps.shimmer.ImageFolderRepository
-import dev.abdus.apps.shimmer.TapGesture
 import dev.abdus.apps.shimmer.WallpaperPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +35,7 @@ data class SettingsUiState(
     val currentWallpaperUri: Uri? = null,
     val currentWallpaperName: String? = null,
     val imageFolders: List<ImageFolderUiModel> = emptyList(),
-    val gestureActions: Map<TapGesture, GestureAction>,
+    val gestureSettings: GestureSettings,
 ) {
     companion object {
         fun fromPreferences(preferences: WallpaperPreferences) = SettingsUiState(
@@ -51,7 +50,7 @@ data class SettingsUiState(
             blurOnScreenLock = preferences.isBlurOnScreenLockEnabled(),
             blurTimeoutEnabled = preferences.isBlurTimeoutEnabled(),
             blurTimeoutMillis = preferences.getBlurTimeoutMillis(),
-            gestureActions = preferences.getGestureActions(),
+            gestureSettings = preferences.getGestureSettings(),
         )
     }
 
@@ -78,7 +77,7 @@ data class SettingsUiState(
 
     val gestures: GesturesState
         get() = GesturesState(
-            actions = gestureActions
+            settings = gestureSettings
         )
 }
 
@@ -186,11 +185,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 WallpaperPreferences.KEY_BLUR_ON_SCREEN_LOCK -> current.copy(blurOnScreenLock = preferences.isBlurOnScreenLockEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_ENABLED -> current.copy(blurTimeoutEnabled = preferences.isBlurTimeoutEnabled())
                 WallpaperPreferences.KEY_BLUR_TIMEOUT_MILLIS -> current.copy(blurTimeoutMillis = preferences.getBlurTimeoutMillis())
-                WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION,
-                WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION,
-                WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION -> current.copy(
-                    gestureActions = preferences.getGestureActions()
-                )
+                WallpaperPreferences.KEY_GESTURE_SETTINGS -> current.copy(gestureSettings = preferences.getGestureSettings())
                 WallpaperPreferences.KEY_LAST_SELECTED_TAB -> current.copy(selectedTab = SettingsTab.entries.getOrElse(preferences.getLastSelectedTab()) { SettingsTab.SOURCES })
                 else -> current
             }

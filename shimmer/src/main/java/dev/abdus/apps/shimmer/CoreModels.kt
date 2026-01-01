@@ -116,10 +116,24 @@ data class TouchData(
     val action: TouchAction,
 )
 
+@Serializable
 enum class GestureAction {
     TOGGLE_BLUR,
     ADD_TO_FAVORITES,
     RANDOM_DUOTONE,
     NEXT_IMAGE,
     NONE,
+}
+
+@Serializable
+data class GestureSettings(
+    val tripleTapAction: GestureAction = GestureAction.TOGGLE_BLUR,
+    val twoFingerDoubleTapAction: GestureAction = GestureAction.NEXT_IMAGE,
+    val threeFingerDoubleTapAction: GestureAction = GestureAction.NONE,
+) {
+    fun toMap(): Map<TapGesture, GestureAction> = mapOf(
+        TapGesture.TRIPLE_TAP to tripleTapAction,
+        TapGesture.TWO_FINGER_DOUBLE_TAP to twoFingerDoubleTapAction,
+        TapGesture.THREE_FINGER_DOUBLE_TAP to threeFingerDoubleTapAction,
+    )
 }

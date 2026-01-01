@@ -106,10 +106,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
 
             val syncEverything = key == null
 
-            if (key == WallpaperPreferences.KEY_GESTURE_TRIPLE_TAP_ACTION ||
-                key == WallpaperPreferences.KEY_GESTURE_TWO_FINGER_DOUBLE_TAP_ACTION ||
-                key == WallpaperPreferences.KEY_GESTURE_THREE_FINGER_DOUBLE_TAP_ACTION
-            ) {
+            if (key == WallpaperPreferences.KEY_GESTURE_SETTINGS) {
                 refreshGestureActionCache()
                 return
             }
@@ -333,11 +330,12 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun refreshGestureActionCache() {
-            gestureActionMap = preferences.getGestureActions()
+            gestureActionMap = preferences.getGestureSettings().toMap()
         }
 
         private fun handleGesture(gesture: TapGesture) {
             val action = gestureActionMap[gesture] ?: GestureAction.NONE
+
             when (action) {
                 GestureAction.NEXT_IMAGE -> requestImageCycle()
                 GestureAction.TOGGLE_BLUR -> {

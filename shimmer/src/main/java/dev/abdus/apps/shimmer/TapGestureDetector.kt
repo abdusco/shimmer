@@ -5,8 +5,10 @@ import android.graphics.PointF
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
+@Serializable
 enum class TapGesture {
     TRIPLE_TAP,              // 1 finger, 3 taps
     TWO_FINGER_DOUBLE_TAP,   // 2 fingers, 2 taps
