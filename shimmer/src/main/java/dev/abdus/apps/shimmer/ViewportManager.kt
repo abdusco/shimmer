@@ -45,11 +45,6 @@ class ViewportManager {
         parallaxAnimator.setTarget(offset)
     }
     
-    fun resetParallax(offset: Float) {
-        parallaxAnimator.reset(offset)
-        projectionDirty = true
-    }
-    
     fun tick(): Boolean {
         val changed = parallaxAnimator.tick()
         if (changed) projectionDirty = true
@@ -73,20 +68,6 @@ class ViewportManager {
         computeProjectionMatrix(previousProjectionMatrix, prevAspect)
         Matrix.multiplyMM(previousMvpMatrix, 0, previousProjectionMatrix, 0, viewMatrix, 0)
         return previousMvpMatrix
-    }
-    
-    private fun getProjectionMatrices(): Pair<FloatArray, FloatArray?> {
-        if (projectionDirty) {
-            computeProjectionMatrix(projectionMatrix, currentImageAspectRatio)
-            projectionDirty = false
-        }
-        
-        val prevMatrix = previousImageAspectRatio?.let { prevAspect ->
-            computeProjectionMatrix(previousProjectionMatrix, prevAspect)
-            previousProjectionMatrix
-        }
-        
-        return projectionMatrix to prevMatrix
     }
     
     private fun computeProjectionMatrix(target: FloatArray, imageAspectRatio: Float) {

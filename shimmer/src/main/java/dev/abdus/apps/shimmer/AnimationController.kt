@@ -54,7 +54,6 @@ class AnimationController(private var durationMillis: Int = 1000) {
                 blendMode = DuotoneBlendMode.NORMAL
             ),
             duotoneAlwaysOn = false,
-            parallaxOffset = 0.5f,
             grain = GrainSettings(), // Film grain off by default
             chromaticAberration = ChromaticAberrationSettings(
                 enabled = true, // From WallpaperPreferences.DEFAULT_CHROMATIC_ABERRATION_ENABLED

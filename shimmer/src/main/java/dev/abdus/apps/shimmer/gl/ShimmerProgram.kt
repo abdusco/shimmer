@@ -57,6 +57,8 @@ class ShimmerProgram {
             #version 300 es
             precision highp float;
 
+            #define MAX_FINGERS 5
+
             uniform sampler2D uTexture0;
             uniform sampler2D uTexture1;
             uniform float uBlurMix;
@@ -69,8 +71,8 @@ class ShimmerProgram {
             uniform float uGrainAmount;
             uniform vec2 uGrainCount;
             uniform int uTouchPointCount;
-            uniform vec3 uTouchPoints[10];
-            uniform float uTouchIntensities[10];
+            uniform vec3 uTouchPoints[MAX_FINGERS];
+            uniform float uTouchIntensities[MAX_FINGERS];
             uniform float uAspectRatio;
             uniform float uTime;
 
@@ -79,7 +81,6 @@ class ShimmerProgram {
             out vec4 fragColor;
 
             #define LUMINOSITY(c) (dot(c, vec3(0.2126, 0.7152, 0.0722)))
-            #define MAX_FINGERS 5
             #define DUOTONE_BLEND_MODE_SCREEN 1
             #define EPSILON 1e-7
             #define MAX_DISTORTION_OFFSET 0.02

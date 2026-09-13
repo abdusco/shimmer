@@ -14,7 +14,6 @@ import kotlinx.serialization.Serializable
  * @property dimAmount Dim overlay amount (0.0 = no dimming, 1.0 = full dimming)
  * @property duotone Duotone color effect configuration
  * @property duotoneAlwaysOn Whether duotone is always visible (true) or only when blurred (false)
- * @property parallaxOffset Parallax scroll position (0.0 = left, 0.5 = center, 1.0 = right)
  * @property grain Film grain overlay settings
  * @property chromaticAberration Chromatic aberration effect settings
  */
@@ -24,7 +23,6 @@ data class RenderState(
     val dimAmount: Float,
     val duotone: Duotone,
     val duotoneAlwaysOn: Boolean,
-    val parallaxOffset: Float,
     val grain: GrainSettings,
     val chromaticAberration: ChromaticAberrationSettings,
 )

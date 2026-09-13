@@ -247,11 +247,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         callbacks.requestRender()
     }
 
-    fun onVisibilityChanged() {
-        // Reset parallax to target without animation
-        // viewportManager.resetParallax(animationController.targetRenderState.parallaxOffset)
-    }
-
     fun setParallaxOffset(offset: Float) {
         pendingParallaxOffset.set(offset)
         callbacks.requestRender()
@@ -263,8 +258,6 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         currentImage.release()
         surfaceCreated = false
     }
-
-    fun isBlurred() = animationController.currentBlurPercent > 0.01f
 
     fun isAnimating() = animationController.blurAmountAnimator.isRunning ||
                        animationController.imageTransitionAnimator.isRunning

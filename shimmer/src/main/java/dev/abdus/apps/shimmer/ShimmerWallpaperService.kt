@@ -357,7 +357,6 @@ class ShimmerWallpaperService : GLWallpaperService() {
             cycleScheduler.setVisible(visible)
             if (visible) {
                 applyBlurState(immediate = false)
-                queueEvent { renderer?.onVisibilityChanged() }
             }
         }
 
