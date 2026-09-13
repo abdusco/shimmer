@@ -42,12 +42,17 @@ class ImageRenderer {
         mvpMatrix: FloatArray,
         blurPercent: Float,
         alpha: Float,
-        duotone: Duotone,
+        duotoneLightColor: Int,
+        duotoneDarkColor: Int,
+        duotoneOpacity: Float,
+        duotoneBlendMode: Int,
         dimAmount: Float,
-        grain: GrainSettings,
-        grainCounts: Pair<Float, Float>,
+        grainAmount: Float,
+        grainCountX: Float,
+        grainCountY: Float,
         touchPoints: FloatArray,
         touchIntensities: FloatArray,
+        touchPointCount: Int,
         aspectRatio: Float,
         timeSeconds: Float,
     ) {
@@ -60,8 +65,10 @@ class ImageRenderer {
         val mix = progress - lo
 
         GLES30.glUseProgram(handles.program)
-        setUniforms(handles, mvpMatrix, duotone, dimAmount, grain, grainCounts,
-                    touchPoints, touchIntensities, aspectRatio, timeSeconds, mix, alpha)
+        setUniforms(handles, mvpMatrix, duotoneLightColor, duotoneDarkColor, duotoneOpacity,
+                    duotoneBlendMode, dimAmount, grainAmount, grainCountX, grainCountY,
+                    touchPoints, touchIntensities, touchPointCount, aspectRatio, timeSeconds,
+                    mix, alpha)
 
         textures.bind(lo, 0)
         GLES30.glUniform1i(handles.uniformTexture0, 0)
@@ -75,12 +82,17 @@ class ImageRenderer {
     private fun setUniforms(
         h: ShaderHandles,
         mvp: FloatArray,
-        duotone: Duotone,
+        duotoneLightColor: Int,
+        duotoneDarkColor: Int,
+        duotoneOpacity: Float,
+        duotoneBlendMode: Int,
         dim: Float,
-        grain: GrainSettings,
-        grainCounts: Pair<Float, Float>,
+        grainAmount: Float,
+        grainCountX: Float,
+        grainCountY: Float,
         touchPoints: FloatArray,
         touchIntensities: FloatArray,
+        touchPointCount: Int,
         aspectRatio: Float,
         timeSeconds: Float,
         blurMix: Float,
@@ -88,21 +100,21 @@ class ImageRenderer {
     ) {
         GLES30.glUniformMatrix4fv(h.uniformMvpMatrix, 1, false, mvp, 0)
         GLES30.glUniform3f(h.uniformDuotoneLight,
-                           Color.red(duotone.lightColor)/255f,
-                           Color.green(duotone.lightColor)/255f,
-                           Color.blue(duotone.lightColor)/255f)
+                           Color.red(duotoneLightColor)/255f,
+                           Color.green(duotoneLightColor)/255f,
+                           Color.blue(duotoneLightColor)/255f)
         GLES30.glUniform3f(h.uniformDuotoneDark,
-                           Color.red(duotone.darkColor)/255f,
-                           Color.green(duotone.darkColor)/255f,
-                           Color.blue(duotone.darkColor)/255f)
-        GLES30.glUniform1f(h.uniformDuotoneOpacity, duotone.opacity)
-        GLES30.glUniform1i(h.uniformDuotoneBlendMode, duotone.blendMode.value)
+                           Color.red(duotoneDarkColor)/255f,
+                           Color.green(duotoneDarkColor)/255f,
+                           Color.blue(duotoneDarkColor)/255f)
+        GLES30.glUniform1f(h.uniformDuotoneOpacity, duotoneOpacity)
+        GLES30.glUniform1i(h.uniformDuotoneBlendMode, duotoneBlendMode)
         GLES30.glUniform1f(h.uniformDimAmount, dim)
-        GLES30.glUniform1f(h.uniformGrainAmount, if (grain.enabled) grain.amount else 0f)
-        GLES30.glUniform2f(h.uniformGrainCount, grainCounts.first, grainCounts.second)
-        GLES30.glUniform1i(h.uniformTouchPointCount, touchIntensities.size)
-        GLES30.glUniform3fv(h.uniformTouchPoints, touchIntensities.size, touchPoints, 0)
-        GLES30.glUniform1fv(h.uniformTouchIntensities, touchIntensities.size, touchIntensities, 0)
+        GLES30.glUniform1f(h.uniformGrainAmount, grainAmount)
+        GLES30.glUniform2f(h.uniformGrainCount, grainCountX, grainCountY)
+        GLES30.glUniform1i(h.uniformTouchPointCount, touchPointCount)
+        GLES30.glUniform3fv(h.uniformTouchPoints, touchPointCount, touchPoints, 0)
+        GLES30.glUniform1fv(h.uniformTouchIntensities, touchPointCount, touchIntensities, 0)
         GLES30.glUniform1f(h.uniformAspectRatio, aspectRatio)
         GLES30.glUniform1f(h.uniformTime, timeSeconds)
         GLES30.glUniform1f(h.uniformBlurMix, blurMix)

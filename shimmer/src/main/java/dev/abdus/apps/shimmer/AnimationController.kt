@@ -5,10 +5,20 @@ import android.view.animation.DecelerateInterpolator
 import androidx.core.graphics.createBitmap
 
 class AnimationController(private var durationMillis: Int = 1000) {
-    var currentRenderState: RenderState
+    var targetRenderState: RenderState
         private set
 
-    var targetRenderState: RenderState
+    // Animated "current" values, updated in place each tick. Kept as primitives rather
+    // than a rebuilt RenderState so a continuously animating frame allocates nothing.
+    var currentBlurPercent = 0f
+        private set
+    var currentDimAmount = 0f
+        private set
+    var currentDuotoneLightColor = 0
+        private set
+    var currentDuotoneDarkColor = 0
+        private set
+    var currentDuotoneOpacity = 0f
         private set
 
     // Animators for individual properties
@@ -17,11 +27,11 @@ class AnimationController(private var durationMillis: Int = 1000) {
     val duotoneOpacityAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
     val imageTransitionAnimator = TickingFloatAnimator(durationMillis, DecelerateInterpolator())
 
-    // Duotone color animators (manual interpolation within tick)
-    private var currentDuotoneLightColor: Int = 0
-    private var targetDuotoneLightColor: Int = 0
-    private var currentDuotoneDarkColor: Int = 0
-    private var targetDuotoneDarkColor: Int = 0
+    // Duotone color animation endpoints (manual interpolation within tick)
+    private var fromDuotoneLightColor: Int = 0
+    private var toDuotoneLightColor: Int = 0
+    private var fromDuotoneDarkColor: Int = 0
+    private var toDuotoneDarkColor: Int = 0
 
     // Callback invoked when image-relevant animations complete
     var onImageAnimationComplete: (() -> Unit)? = null
@@ -52,8 +62,16 @@ class AnimationController(private var durationMillis: Int = 1000) {
                 fadeDurationMillis = 500L // From WallpaperPreferences.DEFAULT_CHROMATIC_ABERRATION_FADE_DURATION
             ),
         )
-        currentRenderState = defaultState
         targetRenderState = defaultState
+        applyStateImmediately(defaultState)
+    }
+
+    private fun applyStateImmediately(state: RenderState) {
+        currentBlurPercent = state.blurPercent
+        currentDimAmount = state.dimAmount
+        currentDuotoneLightColor = state.duotone.lightColor
+        currentDuotoneDarkColor = state.duotone.darkColor
+        currentDuotoneOpacity = state.duotone.opacity
     }
 
     fun setDuration(durationMillis: Int) {
@@ -74,7 +92,7 @@ class AnimationController(private var durationMillis: Int = 1000) {
             val startBlurAmount = if (blurAmountAnimator.isRunning) {
                 blurAmountAnimator.currentValue
             } else {
-                currentRenderState.blurPercent
+                currentBlurPercent
             }
             blurAmountAnimator.start(
                 startValue = startBlurAmount,
@@ -87,7 +105,7 @@ class AnimationController(private var durationMillis: Int = 1000) {
             val startDimAmount = if (dimAmountAnimator.isRunning) {
                 dimAmountAnimator.currentValue
             } else {
-                currentRenderState.dimAmount
+                currentDimAmount
             }
             dimAmountAnimator.start(
                 startValue = startDimAmount,
@@ -97,30 +115,11 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
         // Duotone properties (opacity and colors)
         if (oldTarget.duotone != newTarget.duotone) {
-            val currentDuotoneState = currentRenderState.duotone
-
-            // Determine the starting colors for interpolation
-            val startLightColor = if (duotoneOpacityAnimator.isRunning) {
-                // If an opacity animation is in progress, the current displayed color is interpolated
-                interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, duotoneOpacityAnimator.progress)
-            } else {
-                // Otherwise, it's the current render state's color
-                currentRenderState.duotone.lightColor
-            }
-
-            val startDarkColor = if (duotoneOpacityAnimator.isRunning) {
-                // If an opacity animation is in progress, the current displayed color is interpolated
-                interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, duotoneOpacityAnimator.progress)
-            } else {
-                // Otherwise, it's the current render state's color
-                currentDuotoneState.darkColor
-            }
-
-            // Set the new starting and ending colors for the interpolation
-            currentDuotoneLightColor = startLightColor
-            currentDuotoneDarkColor = startDarkColor
-            targetDuotoneLightColor = newTarget.duotone.lightColor
-            targetDuotoneDarkColor = newTarget.duotone.darkColor
+            // The currently displayed colors become the start of the new interpolation.
+            fromDuotoneLightColor = currentDuotoneLightColor
+            fromDuotoneDarkColor = currentDuotoneDarkColor
+            toDuotoneLightColor = newTarget.duotone.lightColor
+            toDuotoneDarkColor = newTarget.duotone.darkColor
 
             // Start or restart the opacity animator.
             // If it was already running, this effectively "redirects" it to the new target opacity
@@ -128,7 +127,7 @@ class AnimationController(private var durationMillis: Int = 1000) {
             val startOpacity = if (duotoneOpacityAnimator.isRunning) {
                 duotoneOpacityAnimator.currentValue
             } else {
-                currentDuotoneState.opacity
+                currentDuotoneOpacity
             }
 
             duotoneOpacityAnimator.start(
@@ -149,15 +148,17 @@ class AnimationController(private var durationMillis: Int = 1000) {
 
     // Public methods to immediately set state (for initial preference load)
     fun setRenderStateImmediately(newState: RenderState) {
-        currentRenderState = newState
         targetRenderState = newState
+        applyStateImmediately(newState)
     }
 
     fun setDuotoneColorsImmediately(lightColor: Int, darkColor: Int) {
+        fromDuotoneLightColor = lightColor
+        toDuotoneLightColor = lightColor
         currentDuotoneLightColor = lightColor
-        targetDuotoneLightColor = lightColor
+        fromDuotoneDarkColor = darkColor
+        toDuotoneDarkColor = darkColor
         currentDuotoneDarkColor = darkColor
-        targetDuotoneDarkColor = darkColor
     }
 
     fun tick(): Boolean {
@@ -167,34 +168,25 @@ class AnimationController(private var durationMillis: Int = 1000) {
         val duotoneOpacityAnimating = duotoneOpacityAnimator.tick()
         val imageAnimating = imageTransitionAnimator.tick()
 
-        // Linearly interpolate duotone colors if duotoneOpacityAnimator is running
-        val animatedDuotoneLightColor = if (duotoneOpacityAnimating && duotoneOpacityAnimator.progress < 1f) {
-            interpolateColor(currentDuotoneLightColor, targetDuotoneLightColor, duotoneOpacityAnimator.progress)
+        // Update the animated values in place
+        val interpolatingDuotone = duotoneOpacityAnimating && duotoneOpacityAnimator.progress < 1f
+        currentDuotoneLightColor = if (interpolatingDuotone) {
+            interpolateColor(fromDuotoneLightColor, toDuotoneLightColor, duotoneOpacityAnimator.progress)
         } else {
             targetRenderState.duotone.lightColor
         }
-        val animatedDuotoneDarkColor = if (duotoneOpacityAnimating && duotoneOpacityAnimator.progress < 1f) {
-            interpolateColor(currentDuotoneDarkColor, targetDuotoneDarkColor, duotoneOpacityAnimator.progress)
+        currentDuotoneDarkColor = if (interpolatingDuotone) {
+            interpolateColor(fromDuotoneDarkColor, toDuotoneDarkColor, duotoneOpacityAnimator.progress)
         } else {
             targetRenderState.duotone.darkColor
         }
-
-        // Build the current animated state
-        currentRenderState = RenderState(
-            imageSet = targetRenderState.imageSet,
-            blurPercent = if (blurAnimating) blurAmountAnimator.currentValue else targetRenderState.blurPercent,
-            dimAmount = if (dimAnimating) dimAmountAnimator.currentValue else targetRenderState.dimAmount,
-            duotone = Duotone(
-                lightColor = animatedDuotoneLightColor,
-                darkColor = animatedDuotoneDarkColor,
-                opacity = if (duotoneOpacityAnimating) duotoneOpacityAnimator.currentValue else targetRenderState.duotone.opacity,
-                blendMode = targetRenderState.duotone.blendMode
-            ),
-            duotoneAlwaysOn = targetRenderState.duotoneAlwaysOn,
-            parallaxOffset = targetRenderState.parallaxOffset,
-            grain = targetRenderState.grain,
-            chromaticAberration = targetRenderState.chromaticAberration,
-        )
+        currentDuotoneOpacity =
+            if (duotoneOpacityAnimating) duotoneOpacityAnimator.currentValue
+            else targetRenderState.duotone.opacity
+        currentBlurPercent =
+            if (blurAnimating) blurAmountAnimator.currentValue else targetRenderState.blurPercent
+        currentDimAmount =
+            if (dimAnimating) dimAmountAnimator.currentValue else targetRenderState.dimAmount
 
         // Detect when image-relevant animations complete and invoke callback
         val isImageAnimating = blurAnimating || imageAnimating

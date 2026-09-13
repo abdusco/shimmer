@@ -11,8 +11,12 @@ class TouchAnimationController {
     )
     private val activeIdBuffer = IntArray(MAX_TOUCH_POINTS)
     private val upIdBuffer = IntArray(MAX_TOUCH_POINTS)
-    private var touchPointsArray = FloatArray(0)
-    private var touchIntensitiesArray = FloatArray(0)
+
+    /** Packed (x, y, radius) triples; only the first [touchPointCount] entries are valid. */
+    val touchPointsArray = FloatArray(MAX_TOUCH_POINTS * 3)
+    val touchIntensitiesArray = FloatArray(MAX_TOUCH_POINTS)
+    var touchPointCount = 0
+        private set
 
     companion object {
         // Realistically, we don't need more than 5 touches for a good effect.
@@ -103,17 +107,9 @@ class TouchAnimationController {
         return activeTouches.isNotEmpty()
     }
 
-    fun getTouchPointArrays(): Pair<FloatArray, FloatArray> {
+    fun updateTouchPointArrays() {
         val touchCount = activeTouches.size.coerceAtMost(MAX_TOUCH_POINTS)
         val intensity = if (chromaticSettings.enabled) chromaticSettings.intensity else 0f
-
-        val pointsSize = touchCount * 3
-        if (touchPointsArray.size != pointsSize) {
-            touchPointsArray = FloatArray(pointsSize)
-        }
-        if (touchIntensitiesArray.size != touchCount) {
-            touchIntensitiesArray = FloatArray(touchCount)
-        }
 
         for (i in 0 until touchCount) {
             val touch = activeTouches[i]
@@ -124,7 +120,7 @@ class TouchAnimationController {
             touchIntensitiesArray[i] = touch.intensity * intensity
         }
 
-        return touchPointsArray to touchIntensitiesArray
+        touchPointCount = touchCount
     }
 
     private fun createTouchPoint(touch: TouchData): TouchPoint {

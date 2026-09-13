@@ -56,22 +56,23 @@ class ViewportManager {
         return changed
     }
 
-    fun getMvpMatrices(): Pair<FloatArray, FloatArray?> {
+    fun currentMvp(): FloatArray {
         if (projectionDirty && currentImageAspectRatio > 0f) {
             computeProjectionMatrix(projectionMatrix, currentImageAspectRatio)
             Matrix.multiplyMM(mvpMatrix, 0, projectionMatrix, 0, viewMatrix, 0)
             projectionDirty = false
         }
-        
-        val prevMatrix = previousImageAspectRatio?.let { prevAspect ->
-            if (prevAspect > 0f) {
-                computeProjectionMatrix(previousProjectionMatrix, prevAspect)
-                Matrix.multiplyMM(previousMvpMatrix, 0, previousProjectionMatrix, 0, viewMatrix, 0)
-                previousMvpMatrix
-            } else null
-        }
-        
-        return mvpMatrix to prevMatrix
+        return mvpMatrix
+    }
+
+    /** Null unless an image transition is in progress. Only valid to call after [currentMvp]. */
+    fun previousMvp(): FloatArray? {
+        val prevAspect = previousImageAspectRatio ?: return null
+        if (prevAspect <= 0f) return null
+
+        computeProjectionMatrix(previousProjectionMatrix, prevAspect)
+        Matrix.multiplyMM(previousMvpMatrix, 0, previousProjectionMatrix, 0, viewMatrix, 0)
+        return previousMvpMatrix
     }
     
     private fun getProjectionMatrices(): Pair<FloatArray, FloatArray?> {

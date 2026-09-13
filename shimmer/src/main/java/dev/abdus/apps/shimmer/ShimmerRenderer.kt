@@ -58,10 +58,9 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         }
 
         // Restore current image texture if it was already set
-        animationController.currentRenderState.let { state ->
-            if (!state.imageSet.original.isRecycled) {
-                currentImage.load(state.imageSet)
-            }
+        val imageSet = animationController.targetRenderState.imageSet
+        if (!imageSet.original.isRecycled) {
+            currentImage.load(imageSet)
         }
 
         pendingImageSet?.let { setImage(it); pendingImageSet = null }
@@ -91,39 +90,54 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         val isAnimating = animationController.tick()
         val viewportAnimating = viewportManager.tick()
         val touchAnimating = touchAnimator.tick()
-        val state = animationController.currentRenderState
+        val target = animationController.targetRenderState
         val imageAlpha = animationController.imageTransitionAnimator.currentValue
 
-        val (mvp, prevMvp) = viewportManager.getMvpMatrices()
+        val mvp = viewportManager.currentMvp()
 
-        val blurPercent = state.blurPercent.coerceIn(0f, 1f)
-        val effectiveDuotone = state.duotone.copy(
-            opacity = if (state.duotoneAlwaysOn) state.duotone.opacity
-                     else (state.duotone.opacity * blurPercent)
-        )
+        val blurPercent = animationController.currentBlurPercent.coerceIn(0f, 1f)
+        val duotoneOpacity = animationController.currentDuotoneOpacity.let {
+            if (target.duotoneAlwaysOn) it else it * blurPercent
+        }
+        val dimAmount = animationController.currentDimAmount * blurPercent
 
-        val grainCounts = if (state.grain.enabled) {
+        val grain = target.grain
+        var grainCountX = 0f
+        var grainCountY = 0f
+        if (grain.enabled) {
             val grainSizePx = GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX +
-                (GrainSettings.GRAIN_SIZE_MAX_IMAGE_PX - GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX) * state.grain.scale
-            (state.imageSet.width.toFloat() / grainSizePx) to (state.imageSet.height.toFloat() / grainSizePx)
-        } else 0f to 0f
+                (GrainSettings.GRAIN_SIZE_MAX_IMAGE_PX - GrainSettings.GRAIN_SIZE_MIN_IMAGE_PX) * grain.scale
+            grainCountX = target.imageSet.width.toFloat() / grainSizePx
+            grainCountY = target.imageSet.height.toFloat() / grainSizePx
+        }
+        val grainAmount = if (grain.enabled) grain.amount else 0f
 
-        val (touchPointsArray, touchIntensitiesArray) = touchAnimator.getTouchPointArrays()
+        touchAnimator.updateTouchPointArrays()
         val aspectRatio = surfaceDimensions.aspectRatio
         val timeSeconds = SystemClock.elapsedRealtime() / 1000f
 
-        if (imageAlpha < 1f && prevMvp != null) {
-            previousImage.draw(
-                program.handles, prevMvp, blurPercent, 1f,
-                effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-                touchPointsArray, touchIntensitiesArray, aspectRatio, timeSeconds,
-            )
+        if (imageAlpha < 1f) {
+            viewportManager.previousMvp()?.let { prevMvp ->
+                previousImage.draw(
+                    program.handles, prevMvp, blurPercent, 1f,
+                    animationController.currentDuotoneLightColor,
+                    animationController.currentDuotoneDarkColor,
+                    duotoneOpacity, target.duotone.blendMode.value,
+                    dimAmount, grainAmount, grainCountX, grainCountY,
+                    touchAnimator.touchPointsArray, touchAnimator.touchIntensitiesArray,
+                    touchAnimator.touchPointCount, aspectRatio, timeSeconds,
+                )
+            }
         }
 
         currentImage.draw(
             program.handles, mvp, blurPercent, imageAlpha,
-            effectiveDuotone, state.dimAmount * blurPercent, state.grain, grainCounts,
-            touchPointsArray, touchIntensitiesArray, aspectRatio, timeSeconds,
+            animationController.currentDuotoneLightColor,
+            animationController.currentDuotoneDarkColor,
+            duotoneOpacity, target.duotone.blendMode.value,
+            dimAmount, grainAmount, grainCountX, grainCountY,
+            touchAnimator.touchPointsArray, touchAnimator.touchIntensitiesArray,
+            touchAnimator.touchPointCount, aspectRatio, timeSeconds,
         )
 
         if (!animationController.imageTransitionAnimator.isRunning && imageAlpha >= 1f) {
@@ -250,7 +264,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         surfaceCreated = false
     }
 
-    fun isBlurred() = animationController.currentRenderState.blurPercent > 0.01f
+    fun isBlurred() = animationController.currentBlurPercent > 0.01f
 
     fun isAnimating() = animationController.blurAmountAnimator.isRunning ||
                        animationController.imageTransitionAnimator.isRunning
