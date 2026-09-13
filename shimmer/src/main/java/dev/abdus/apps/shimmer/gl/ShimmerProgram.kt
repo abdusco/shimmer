@@ -169,20 +169,20 @@ class ShimmerProgram {
                 return (vec2(n1, n2) - 0.5) * 2.0;
             }
 
-            vec3 applyChromaticAberration(vec2 uv, vec2 offset) {
+            // centerColor is the already duotoned sample at uv, which is what the green
+            // channel resolves to; only the shifted red and blue taps need sampling.
+            vec3 applyChromaticAberration(vec2 uv, vec2 offset, vec3 centerColor) {
                 vec2 jitterVec = getNoiseVector();
                 float noiseStrength = clamp(length(offset) / MAX_DISTORTION_OFFSET, 0.0, 1.0);
                 vec2 jitter = jitterVec * MAX_JITTER_AMPLITUDE * noiseStrength;
 
                 vec3 rawR = sampleBlurred(uv + offset + jitter);
-                vec3 rawG = sampleBlurred(uv);
                 vec3 rawB = sampleBlurred(uv - offset - jitter);
 
                 vec3 r = applyDuotone(rawR, LUMINOSITY(rawR));
-                vec3 g = applyDuotone(rawG, LUMINOSITY(rawG));
                 vec3 b = applyDuotone(rawB, LUMINOSITY(rawB));
 
-                return vec3(r.r, g.g, b.b);
+                return vec3(r.r, centerColor.g, b.b);
             }
 
             void main() {
@@ -192,7 +192,7 @@ class ShimmerProgram {
                 if (uTouchPointCount > 0) {
                     vec2 touchOffset = calculateTouchOffset();
                     if (length(touchOffset) > 0.0001) {
-                        color = applyChromaticAberration(vTexCoords, touchOffset);
+                        color = applyChromaticAberration(vTexCoords, touchOffset, color);
                     }
                 }
 
