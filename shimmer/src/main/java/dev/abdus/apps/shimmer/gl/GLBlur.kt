@@ -146,6 +146,9 @@ private class GLGaussianRenderer : Closeable {
     private var aPositionLoc = -1
     private var aTexCoordsLoc = -1
 
+    // Owned by this renderer's own EGL context, not shared with the wallpaper's.
+    private val quad = QuadMesh()
+
     // Uniform Locations (Blur)
     private var uTexelSize: Int = -1
     private var uDirection: Int = -1
@@ -184,6 +187,8 @@ private class GLGaussianRenderer : Closeable {
         uSampleCount = GLES30.glGetUniformLocation(programBlur, "uSampleCount")
         uOffsets = GLES30.glGetUniformLocation(programBlur, "uOffsets")
         uWeights = GLES30.glGetUniformLocation(programBlur, "uWeights")
+
+        quad.init(aPositionLoc, aTexCoordsLoc)
 
         // 3. Generate GL Objects
         GLES30.glGenFramebuffers(2, framebuffers, 0)
@@ -254,7 +259,7 @@ private class GLGaussianRenderer : Closeable {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[0])
         GLES30.glUniform1i(GLES30.glGetUniformLocation(programCopy, "uTexture"), 0)
 
-        QuadMesh.draw(aPositionLoc, aTexCoordsLoc)
+        quad.draw()
 
         val r = radius.roundToInt()
         if (r < 1) return readPixels(targetW, targetH)
@@ -274,14 +279,14 @@ private class GLGaussianRenderer : Closeable {
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, textures[2], 0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[1])
         GLES30.glUniform2f(uDirection, 1f, 0f)
-        QuadMesh.draw(aPositionLoc, aTexCoordsLoc)
+        quad.draw()
 
         // Pass 2: Vertical (Input: 2, Output: 1)
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, framebuffers[0])
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, textures[1], 0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[2])
         GLES30.glUniform2f(uDirection, 0f, 1f)
-        QuadMesh.draw(aPositionLoc, aTexCoordsLoc)
+        quad.draw()
 
         return readPixels(targetW, targetH)
     }
@@ -330,6 +335,7 @@ private class GLGaussianRenderer : Closeable {
 
     override fun close() {
         // 1. Delete GL objects
+        quad.release()
         GLES30.glDeleteFramebuffers(2, framebuffers, 0)
         GLES30.glDeleteTextures(3, textures, 0)
         GLES30.glDeleteProgram(programBlur)

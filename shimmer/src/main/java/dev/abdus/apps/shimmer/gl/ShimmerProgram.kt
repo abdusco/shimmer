@@ -4,6 +4,7 @@ import android.opengl.GLES30
 
 class ShimmerProgram {
     val handles: ShaderHandles
+    val uniforms: UniformCache
 
     init {
         val vertexShader = ShaderCompiler.compile(GLES30.GL_VERTEX_SHADER, VERTEX_SHADER)
@@ -32,6 +33,13 @@ class ShimmerProgram {
             uniformAspectRatio = GLES30.glGetUniformLocation(program, "uAspectRatio"),
             uniformTime = GLES30.glGetUniformLocation(program, "uTime")
         )
+
+        // Texture units never change, so bind the samplers once instead of per draw.
+        GLES30.glUseProgram(program)
+        GLES30.glUniform1i(handles.uniformTexture0, 0)
+        GLES30.glUniform1i(handles.uniformTexture1, 1)
+
+        uniforms = UniformCache(handles)
     }
 
     fun release() {

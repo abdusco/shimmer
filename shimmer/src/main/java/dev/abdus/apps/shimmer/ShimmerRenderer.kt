@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.os.SystemClock
 import android.util.Log
 import dev.abdus.apps.shimmer.gl.GLWallpaperService
+import dev.abdus.apps.shimmer.gl.QuadMesh
 import dev.abdus.apps.shimmer.gl.ShimmerProgram
 import java.util.concurrent.atomic.AtomicReference
 
@@ -39,6 +40,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     private var surfaceCreated = false
     private var surfaceDimensions = SurfaceDimensions(0, 0)
 
+    private val quad = QuadMesh()
     private lateinit var program: ShimmerProgram
 
     override fun onSurfaceCreated() {
@@ -56,6 +58,8 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
             Log.e(TAG, "Failed to initialize shaders", e)
             return
         }
+
+        quad.init(program.handles.attribPosition, program.handles.attribTexCoords)
 
         // Restore current image texture if it was already set
         val imageSet = animationController.targetRenderState.imageSet
@@ -119,7 +123,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         if (imageAlpha < 1f) {
             viewportManager.previousMvp()?.let { prevMvp ->
                 previousImage.draw(
-                    program.handles, prevMvp, blurPercent, 1f,
+                    program.uniforms, quad, prevMvp, blurPercent, 1f,
                     animationController.currentDuotoneLightColor,
                     animationController.currentDuotoneDarkColor,
                     duotoneOpacity, target.duotone.blendMode.value,
@@ -131,7 +135,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
         }
 
         currentImage.draw(
-            program.handles, mvp, blurPercent, imageAlpha,
+            program.uniforms, quad, mvp, blurPercent, imageAlpha,
             animationController.currentDuotoneLightColor,
             animationController.currentDuotoneDarkColor,
             duotoneOpacity, target.duotone.blendMode.value,
@@ -253,6 +257,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
     }
 
     override fun onSurfaceDestroyed() {
+        quad.release()
         if (::program.isInitialized) program.release()
         previousImage.release()
         currentImage.release()
