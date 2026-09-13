@@ -19,6 +19,11 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
     companion object {
         private const val TAG = "ShimmerRenderer"
+
+        // uTime is a float, which only carries ~7 significant digits. Feeding it raw uptime
+        // would drop the resolution below a frame after a few days of it, quantizing the
+        // noise animation, so wrap it hourly instead.
+        private const val TIME_WRAP_MILLIS = 3_600_000L
     }
 
     private var currentImage = ImageRenderer()
@@ -118,7 +123,7 @@ class ShimmerRenderer(private val callbacks: Callbacks) : GLWallpaperService.Ren
 
         touchAnimator.updateTouchPointArrays()
         val aspectRatio = surfaceDimensions.aspectRatio
-        val timeSeconds = SystemClock.elapsedRealtime() / 1000f
+        val timeSeconds = (SystemClock.elapsedRealtime() % TIME_WRAP_MILLIS) / 1000f
 
         if (imageAlpha < 1f) {
             viewportManager.previousMvp()?.let { prevMvp ->
