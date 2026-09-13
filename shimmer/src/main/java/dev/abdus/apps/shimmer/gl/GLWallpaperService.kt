@@ -333,6 +333,10 @@ private class GLThread(
     }
 
     override fun run() {
+        // Wallpaper rendering runs behind the foreground app/SystemUI; keep it at
+        // background priority so continuous re-renders (e.g. touch effects) don't
+        // steal CPU from foreground UI work like the notification shade.
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
         try {
             guardedRun()
         } catch (e: InterruptedException) {
