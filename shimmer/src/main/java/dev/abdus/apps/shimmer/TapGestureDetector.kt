@@ -27,6 +27,10 @@ class TapGestureDetector(context: Context) {
     }
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+    private val tapSlop = ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
+
+    private val currentTapPosition = PointF()
+    private val sequenceStartPosition = PointF()
 
     private var tapCount = 0
     private var lastTapTime = 0L
@@ -50,6 +54,7 @@ class TapGestureDetector(context: Context) {
                 }
 
                 resetCurrentTapState()
+                currentTapPosition.set(event.getX(pointerIndex), event.getY(pointerIndex))
                 trackPointer(event, pointerIndex)
             }
 
@@ -103,9 +108,15 @@ class TapGestureDetector(context: Context) {
     }
 
     private fun handleTapCompleted(fingerCount: Int): TapGesture {
-        // Check if the finger count changed mid-sequence
-        if (fingerCount != lastTapFingerCount) {
+        val deltaX = currentTapPosition.x - sequenceStartPosition.x
+        val deltaY = currentTapPosition.y - sequenceStartPosition.y
+        val isOutsideTapBuffer = fingerCount == 1 &&
+            deltaX * deltaX + deltaY * deltaY > tapSlop * tapSlop
+
+        // Keep single-finger taps near the first tap, without allowing the sequence to drift.
+        if (tapCount == 0 || fingerCount != lastTapFingerCount || isOutsideTapBuffer) {
             tapCount = 1
+            sequenceStartPosition.set(currentTapPosition.x, currentTapPosition.y)
         } else {
             tapCount++
         }
