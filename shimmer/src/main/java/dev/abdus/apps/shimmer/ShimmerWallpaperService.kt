@@ -430,10 +430,10 @@ class ShimmerWallpaperService : GLWallpaperService() {
         }
 
         private fun addCurrentImageToFavorites() {
-            if (currentImageUri == null) return
+            val imageUri = currentImageUri ?: return
 
             scope.launch {
-                val result = favoritesRepository.saveFavorite(currentImageUri!!)
+                val result = favoritesRepository.saveFavorite(imageUri)
                 if (result.isSuccess) {
                     val saved = result.getOrNull()!!
                     Actions.broadcastFavoriteAdded(this@ShimmerWallpaperService, result = saved)
@@ -445,7 +445,7 @@ class ShimmerWallpaperService : GLWallpaperService() {
                         ).show()
                     }
                 } else {
-                    Log.w(TAG, "addCurrentImageToFavorites: failed for $currentImageUri", result.exceptionOrNull())
+                    Log.w(TAG, "addCurrentImageToFavorites: failed for $imageUri", result.exceptionOrNull())
                 }
             }
         }

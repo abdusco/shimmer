@@ -15,6 +15,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 class UriConverters {
@@ -52,7 +54,7 @@ data class FolderEntity(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("folderId"), Index("lastShownAt"), Index(value = ["uri"], unique = true)]
+    indices = [Index("folderId"), Index("lastShownAt"), Index(value = ["uri"], unique = true), Index(value = ["folderId", "sourceUri"], unique = true)]
 )
 data class ImageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -63,7 +65,8 @@ data class ImageEntity(
     val favoriteRank: Int = 0,
     val width: Int? = null,
     val height: Int? = null,
-    val fileSize: Long? = null
+    val fileSize: Long? = null,
+    val sourceUri: Uri? = null
 )
 
 data class FolderMetadata(
@@ -163,6 +166,12 @@ interface ImageDao {
     @Query("SELECT * FROM images WHERE uri = :uri LIMIT 1")
     suspend fun getImageByUri(uri: Uri): ImageEntity?
 
+    @Query("SELECT * FROM images WHERE folderId = :folderId AND sourceUri = :sourceUri LIMIT 1")
+    suspend fun getImageBySource(folderId: Long, sourceUri: Uri): ImageEntity?
+
+    @Query("UPDATE images SET sourceUri = :sourceUri WHERE uri = :imageUri")
+    suspend fun updateImageSource(imageUri: Uri, sourceUri: Uri)
+
     @Query("""
         SELECT COUNT(*) > 0 FROM images i 
         INNER JOIN folders f ON i.folderId = f.id 
@@ -207,12 +216,19 @@ interface ImageDao {
     fun getFoldersMetadataFlow(): Flow<List<FolderMetadata>>
 }
 
-@Database(entities = [FolderEntity::class, ImageEntity::class], version = 3, exportSchema = false)
+@Database(entities = [FolderEntity::class, ImageEntity::class], version = 4, exportSchema = false)
 @TypeConverters(UriConverters::class)
 abstract class ShimmerDatabase : RoomDatabase() {
     abstract fun imageDao(): ImageDao
 
     companion object {
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN sourceUri TEXT")
+                db.execSQL("CREATE UNIQUE INDEX index_images_folderId_sourceUri ON images (folderId, sourceUri)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: ShimmerDatabase? = null
 
@@ -223,6 +239,7 @@ abstract class ShimmerDatabase : RoomDatabase() {
                     ShimmerDatabase::class.java,
                     "shimmer_database"
                 )
+                .addMigrations(MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

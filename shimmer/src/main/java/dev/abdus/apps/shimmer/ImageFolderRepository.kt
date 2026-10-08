@@ -10,6 +10,7 @@ import androidx.room.withTransaction
 import dev.abdus.apps.shimmer.database.FolderEntity
 import dev.abdus.apps.shimmer.database.ImageEntity
 import dev.abdus.apps.shimmer.database.ImageEntry
+import dev.abdus.apps.shimmer.database.ImageUriAndSize
 import dev.abdus.apps.shimmer.database.ShimmerDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -231,13 +232,24 @@ class ImageFolderRepository(context: Context, private val scope: CoroutineScope)
         dao.getImageByUri(uri)
     }
 
-    suspend fun addSingleImageToFolder(folderUri: Uri, imageUri: Uri, width: Int? = null, height: Int? = null, fileSize: Long? = null) = withContext(Dispatchers.IO) {
+    suspend fun getImageBySource(folderId: Long, sourceUri: Uri): ImageEntity? = withContext(Dispatchers.IO) {
+        dao.getImageBySource(folderId, sourceUri)
+    }
+
+    suspend fun getImageUrisAndSizesForFolder(folderId: Long): List<ImageUriAndSize> = withContext(Dispatchers.IO) {
+        dao.getImageUrisAndSizesForFolder(folderId)
+    }
+
+    suspend fun linkImageToSource(imageUri: Uri, sourceUri: Uri) = withContext(Dispatchers.IO) {
+        dao.updateImageSource(imageUri, sourceUri)
+    }
+
+    suspend fun addSingleImageToFolder(folderUri: Uri, imageUri: Uri, width: Int? = null, height: Int? = null, fileSize: Long? = null, sourceUri: Uri? = null) = withContext(Dispatchers.IO) {
         Log.d(TAG, "Adding single image to folder: $folderUri -> $imageUri")
         val folderId = dao.getFolderId(folderUri)
 
         if (folderId == null) {
-            Log.e(TAG, "Folder $folderUri not found in DB")
-            return@withContext
+            throw IllegalStateException("Folder $folderUri not found in DB")
         }
 
         val timestamp = isoNow()
@@ -248,15 +260,18 @@ class ImageFolderRepository(context: Context, private val scope: CoroutineScope)
             width = width,
             height = height,
             fileSize = fileSize,
+            sourceUri = sourceUri,
         )
 
-        runCatching {
-            db.withTransaction {
-                dao.insertImages(listOf(entity))
-                dao.updateFolderLastScanned(folderId, timestamp)
+        db.withTransaction {
+            dao.insertImages(listOf(entity))
+            if (sourceUri != null) {
+                dao.updateImageSource(imageUri, sourceUri)
+                check(dao.getImageBySource(folderId, sourceUri)?.uri == imageUri) {
+                    "Failed to index favorite source $sourceUri"
+                }
             }
-        }.onFailure {
-            Log.e(TAG, "Failed to add single image to folder $folderUri", it)
+            dao.updateFolderLastScanned(folderId, timestamp)
         }
     }
 
